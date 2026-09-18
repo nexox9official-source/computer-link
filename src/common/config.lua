@@ -1,7 +1,7 @@
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
-  VERSION = "0.2.0",
+  VERSION = "0.2.1",
   PROTOCOL_VERSION = 2,
 
   MAGIC = "COMPUTER_LINK",
@@ -30,6 +30,13 @@ return {
   HACK_DUMP_MESSAGES = 25,
   HACK_MAX_READ_BYTES = 4096,
   HACK_MAX_LIST_ENTRIES = 50,
+
+  -- Seuls ces Computer IDs peuvent lancer des commandes d'intrusion.
+  -- Les autres PC restent des cibles potentielles mais ne peuvent pas attaquer.
+  HACK_OPERATOR_IDS = {
+    [1] = true
+  },
+
   CRASH_RECOVERY_SECONDS = 10,
 
   GITHUB_RAW = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/"
