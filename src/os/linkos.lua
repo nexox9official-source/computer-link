@@ -1087,6 +1087,35 @@ function LinkOS:ghostToggleSpread()
   self:ghostRefresh()
 end
 
+function LinkOS:ghostSpreadTo()
+  local sourceId = self:linksecTarget()
+  if not sourceId then return end
+
+  local raw = self:prompt(
+    "Propagation GhostLink",
+    "Computer ID a contaminer depuis la cible active."
+  )
+  local targetId = tonumber(raw)
+  if not targetId then
+    self:setNotice("ID cible invalide.", self:theme().danger)
+    return
+  end
+
+  local data, err = self.service:ghostRemote(sourceId, "spread", {
+    target_id = targetId
+  })
+
+  if not data then
+    self:setNotice("Propagation impossible: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice(
+    "PC #" .. tostring(targetId) .. " marque GhostLink via PC #" .. tostring(sourceId) .. ".",
+    self:theme().good
+  )
+end
+
 function LinkOS:ghostLoadDevices()
   local targetId = self:linksecTarget()
   if not targetId then return end
