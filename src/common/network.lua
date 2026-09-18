@@ -46,6 +46,7 @@ function network.packet(kind, payload, requestId)
     magic = config.MAGIC,
     protocol_version = config.PROTOCOL_VERSION,
     type = kind,
+    source_id = os.getComputerID(),
     payload = payload or {},
     request_id = requestId,
     sent_at = os.epoch and os.epoch("utc") or os.time()
