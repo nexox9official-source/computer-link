@@ -59,7 +59,8 @@ function LinkOS.new()
   self.app = prefs.get("last_app", "home")
   self.selectedPeer = nil
   self.scanResults = {}
-  self.filePath = "/"
+  self.filePath = "/user"
+  if not fs.exists("/user") then fs.makeDir("/user") end
   self.filePreview = nil
   self.notice = nil
   self.noticeColour = colors.lightGray
@@ -1099,11 +1100,15 @@ function LinkOS:renderFiles(target, l)
     return
   end
 
-  if self.filePath ~= "/" then
+  if self.filePath ~= "/user" then
     draw.text(target, x, y, "[..] Dossier parent", t.accent, t.bg, w)
     self:addButton("file:parent", x, y, w, 1, function()
-      self.filePath = "/" .. fs.getDir(string.sub(self.filePath, 2))
-      if self.filePath == "/" or self.filePath == "//" then self.filePath = "/" end
+      local parent = "/" .. fs.getDir(string.sub(self.filePath, 2))
+      if parent == "/" or parent == "//"
+        or (parent ~= "/user" and string.sub(parent, 1, 6) ~= "/user/") then
+        parent = "/user"
+      end
+      self.filePath = parent
       self:render()
     end)
     y = y + 1
