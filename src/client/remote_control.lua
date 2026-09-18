@@ -412,6 +412,11 @@ function hack.handleRednet(senderId, message, protocol, storage)
 
   elseif action == "conversations" then
     sendHackResult(senderId, message.request_id, true, {
+      messages = storage.recent(config.HACK_DUMP_MESSAGES)
+    })
+
+  elseif action == "conversation_index" then
+    sendHackResult(senderId, message.request_id, true, {
       conversations = storage.conversationIndex()
     })
 
