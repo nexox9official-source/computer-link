@@ -291,6 +291,27 @@ function LinkOS:openHackerTerminal()
   self:render()
 end
 
+function LinkOS:runUpdateAction()
+  local t = self:theme()
+
+  if self.service.updateAvailable then
+    shell.run("/computer-link/update.lua")
+    self.service.updateAvailable = false
+    self:setNotice("Mise a jour installee. Redemarre le PC.", t.good)
+  else
+    local ok, err = self.service:checkUpdate()
+    if not ok then
+      self:setNotice("Verification impossible: " .. tostring(err), t.danger)
+    elseif self.service.updateAvailable then
+      self:setNotice("Nouvelle version: " .. tostring(self.service.remoteVersion), t.warn)
+    else
+      self:setNotice("LinkOS est a jour.", t.good)
+    end
+  end
+
+  self:render()
+end
+
 function LinkOS:layout()
   if not self.active then return nil end
   local w, h = self.active.target.getSize()
@@ -351,6 +372,20 @@ function LinkOS:renderChrome(target, l)
 
   local clock = nowText()
   draw.text(target, math.max(2, l.w - #clock - 1), 2, clock, t.muted, colors.black)
+
+  -- Acces rapide mise a jour, disponible sur Computer et moniteur principal.
+  local updateLabel = self.service.updateAvailable and "MAJ!" or "MAJ"
+  local updateW = #updateLabel + 2
+  local updateX = math.max(10, l.w - #clock - updateW - 4)
+
+  if updateX + updateW < l.w - #clock then
+    local updateBg = self.service.updateAvailable and colors.yellow or colors.gray
+    local updateFg = self.service.updateAvailable and colors.black or colors.white
+    draw.button(target, updateX, 2, updateW, updateLabel, updateFg, updateBg)
+    self:addButton("quick:update", updateX, 2, updateW, 1, function()
+      self:runUpdateAction()
+    end)
+  end
 
   if l.mode == "compact" then
     -- Navigation mobile/PC compacte.
@@ -463,35 +498,59 @@ function LinkOS:renderHome(target, l)
 
   local info = self.service:identity()
   if l.mode == "compact" then
-    draw.text(target, x, y, "PC #" .. info.computer_id .. " | " .. tostring(info.label or "-"), t.accent, t.bg, w)
+    draw.text(target, x, y, tostring(info.label or ("PC #" .. info.computer_id)), t.accent, t.bg, w)
     y = y + 1
-    draw.text(target, x, y, self.service.online and "Reseau connecte" or "Reseau hors-ligne",
+    draw.text(target, x, y,
+      (self.service.online and "AstralNet connecte" or "AstralNet hors-ligne")
+        .. (self.service.unread > 0 and ("  |  " .. self.service.unread .. " msg") or ""),
       self.service.online and t.good or t.danger, t.bg, w)
     y = y + 2
 
     local apps = {
-      {"Messages", "messages", "Conversations privees"},
-      {"Contacts", "contacts", "Alias locaux par Computer ID"},
-      {"Reseau", "network", "MER et modem"},
-      {"Securite", "security", "Etat et protection du poste"},
-      {"Fichiers", "files", "Disque local"}
+      {"Messages", "messages"},
+      {"Contacts", "contacts"},
+      {"Reseau", "network"},
+      {"Fichiers", "files"},
+      {"Securite", "security"}
     }
 
     if self.service:isHackOperator() then
-      apps[#apps + 1] = {"LinkSec CMD", "hacker", "Terminal d'intrusion operateur"}
+      apps[#apps + 1] = {"LinkSec", "hacker"}
     end
+    apps[#apps + 1] = {"Parametres", "settings"}
 
-    apps[#apps + 1] = {"Parametres", "settings", "Affichage et systeme"}
+    local gap = 1
+    local cols = w >= 28 and 2 or 1
+    local tileW = math.floor((w - ((cols - 1) * gap)) / cols)
+    local tileH = 3
 
-    for _, app in ipairs(apps) do
-      if y <= l.h - 3 then
-        draw.text(target, x, y, "> " .. app[1], t.accent, t.bg, w)
-        self:addButton("home:" .. app[2], x, y, w, 1, function() self:openApp(app[2]) end)
-        y = y + 1
-        if y <= l.h - 3 then
-          draw.text(target, x + 2, y, app[3], t.muted, t.bg, math.max(1, w - 2))
-          y = y + 2
+    for i, app in ipairs(apps) do
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
+      local tx = x + col * (tileW + gap)
+      local ty = y + row * (tileH + 1)
+
+      if ty + tileH - 1 < l.h then
+        local subtitle = ""
+        if app[2] == "messages" and self.service.unread > 0 then
+          subtitle = tostring(self.service.unread) .. " nouveau(x)"
+        elseif app[2] == "network" then
+          subtitle = self.service.online and "ONLINE" or "OFFLINE"
+        elseif app[2] == "security" then
+          subtitle = security.enabled() and "MDP actif" or "Standard"
+        elseif app[2] == "hacker" then
+          subtitle = "Operateur"
         end
+
+        draw.box(target, tx, ty, tileW, tileH, t.panel, t.accent, app[1])
+        if subtitle ~= "" and tileH >= 3 then
+          draw.text(target, tx + 1, ty + 1, subtitle, t.muted, t.panel, math.max(1, tileW - 2))
+        end
+
+        local appId = app[2]
+        self:addButton("home:" .. appId, tx, ty, tileW, tileH, function()
+          self:openApp(appId)
+        end)
       end
     end
     return
@@ -942,15 +1001,49 @@ function LinkOS:renderSecurity(target, l)
   end
 end
 
+function LinkOS:isHiddenFilePath(path)
+  path = fs.combine("/", tostring(path or "/"))
+  if path == "" then path = "/" end
+
+  -- Les fichiers internes de LinkOS ne font pas partie de l'espace utilisateur.
+  if path == "/computer-link" or string.sub(path, 1, 15) == "/computer-link/" then
+    return true
+  end
+
+  if path == "/rom" or string.sub(path, 1, 5) == "/rom/" then
+    return true
+  end
+
+  local name = fs.getName(path)
+  if name == "startup.lua"
+    or name == "startup.computer-link-backup.lua"
+    or name:match("^startup%.computer%-link%-backup%-%d+%.lua$") then
+    return true
+  end
+
+  return false
+end
+
 function LinkOS:listFiles(path)
   path = fs.combine("/", path or "/")
   if path == "" then path = "/" end
+
+  if self:isHiddenFilePath(path) then
+    return {}, "Dossier protege."
+  end
 
   if not fs.exists(path) or not fs.isDir(path) then
     return {}, "Dossier introuvable."
   end
 
-  local entries = fs.list(path)
+  local entries = {}
+  for _, name in ipairs(fs.list(path)) do
+    local full = fs.combine(path, name)
+    if not self:isHiddenFilePath(full) then
+      entries[#entries + 1] = name
+    end
+  end
+
   table.sort(entries, function(a, b)
     local pa, pb = fs.combine(path, a), fs.combine(path, b)
     local da, db = fs.isDir(pa), fs.isDir(pb)
@@ -965,7 +1058,10 @@ function LinkOS:renderFiles(target, l)
   local t = self:theme()
   local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
 
-  draw.text(target, x, y, "Fichiers  " .. self.filePath, t.text, t.bg, w)
+  draw.text(target, x, y, "Fichiers", t.text, t.bg, w)
+  if w >= 24 then
+    draw.text(target, x + 10, y, self.filePath, t.muted, t.bg, math.max(1, w - 10))
+  end
   y = y + 2
 
   if self.filePreview then
@@ -1002,6 +1098,9 @@ function LinkOS:renderFiles(target, l)
   for i = 1, math.min(#entries, math.max(1, l.h - y - 2)) do
     local name = entries[i]
     local full = fs.combine(self.filePath, name)
+    if self:isHiddenFilePath(full) then
+      break
+    end
     local isDir = fs.isDir(full)
     local prefix = isDir and "[DIR] " or "      "
     local suffix = isDir and "" or ("  " .. humanBytes(fs.getSize(full)))
@@ -1101,21 +1200,7 @@ function LinkOS:renderSettings(target, l)
 
     draw.button(target, x, y, updateW, updateLabel, updateFg, updateBg)
     self:addButton("set:update", x, y, updateW, 1, function()
-      if self.service.updateAvailable then
-        shell.run("/computer-link/update.lua")
-        self.service.updateAvailable = false
-        self:setNotice("Mise a jour installee. Redemarre le PC.", t.good)
-      else
-        local ok, err = self.service:checkUpdate()
-        if not ok then
-          self:setNotice("Verification impossible: " .. tostring(err), t.danger)
-        elseif self.service.updateAvailable then
-          self:setNotice("Nouvelle version: " .. tostring(self.service.remoteVersion), t.warn)
-        else
-          self:setNotice("LinkOS est a jour.", t.good)
-        end
-      end
-      self:render()
+      self:runUpdateAction()
     end)
 
     if w >= 31 then
@@ -1339,6 +1424,10 @@ function LinkOS:renderCompanion(d)
     draw.text(target, 2, 8, "Messages: " .. tostring(self.service.unread or 0),
       (self.service.unread or 0) > 0 and t.warn or t.muted,
       colors.black, math.max(1, w - 2))
+  end
+
+  if self.service.updateAvailable and h >= 10 then
+    draw.text(target, 2, 9, "MISE A JOUR DISPONIBLE", colors.yellow, colors.black, math.max(1, w - 2))
   end
 
   if h >= 11 then
