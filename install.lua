@@ -63,16 +63,20 @@ local function serverPolicy()
 end
 
 local function canInstallMer()
-  -- An already-provisioned MER may reinstall itself.
-  if currentRole() == "server" then return true end
-
   local policy = serverPolicy()
   if not policy then return false end
 
   if policy.allow_public_mer_install == true then return true end
 
+  local id = os.getComputerID()
+
+  if type(policy.trusted_mer_ids) == "table"
+    and policy.trusted_mer_ids[id] == true then
+    return true
+  end
+
   return type(policy.mer_install_ids) == "table"
-    and policy.mer_install_ids[os.getComputerID()] == true
+    and policy.mer_install_ids[id] == true
 end
 
 local function chooseRole()
@@ -138,6 +142,29 @@ local function loadInstallState()
   return {}
 end
 
+local function roleFiles(manifest, role)
+  local out, seen = {}, {}
+
+  local function add(list)
+    for _, path in ipairs(list or {}) do
+      if not seen[path] then
+        seen[path] = true
+        out[#out + 1] = path
+      end
+    end
+  end
+
+  add(manifest.common_files)
+  if role == "server" then
+    add(manifest.server_files)
+  else
+    add(manifest.client_files)
+  end
+
+  if #out == 0 then add(manifest.files) end
+  return out
+end
+
 header()
 
 if not http or not http.get then
@@ -192,8 +219,10 @@ print()
 
 if not fs.exists(ROOT) then fs.makeDir(ROOT) end
 
-for index, path in ipairs(manifest.files or {}) do
-  write("[" .. index .. "/" .. #manifest.files .. "] " .. path .. " ... ")
+local files = roleFiles(manifest, role)
+
+for index, path in ipairs(files) do
+  write("[" .. index .. "/" .. #files .. "] " .. path .. " ... ")
 
   local content, err = get(BASE .. path)
   if not content then
@@ -220,6 +249,26 @@ for index, path in ipairs(manifest.files or {}) do
 end
 
 writeFile(ROOT .. "/role.txt", role .. "\n")
+
+if role == "client" then
+  for _, path in ipairs({
+    ROOT .. "/src/server",
+    ROOT .. "/src/client/cli.lua",
+    ROOT .. "/uninstall.lua",
+    ROOT .. "/src/client/hack.lua",
+    ROOT .. "/src/client/hacked_state.lua",
+    ROOT .. "/src/os/hacker_console.lua"
+  }) do
+    if fs.exists(path) then pcall(fs.delete, path) end
+  end
+else
+  for _, path in ipairs({
+    ROOT .. "/src/ui",
+    ROOT .. "/src/os"
+  }) do
+    if fs.exists(path) then pcall(fs.delete, path) end
+  end
+end
 
 local previousState = loadInstallState()
 local backup = backupStartup()
