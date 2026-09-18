@@ -2,7 +2,7 @@
 
 Réseau ComputerCraft / CC:Tweaked pour Astralium.
 
-## Version 0.2.1 — réseau par Computer ID
+## Version 0.2.3 — réseau par Computer ID
 
 Computer Link n'utilise plus de "comptes" pour la messagerie. **L'identité réseau principale est directement l'ID du ComputerCraft**.
 
@@ -195,21 +195,44 @@ src/
     client.lua
 ```
 
-## Mise à jour
+## Mise à jour automatique
 
-Sur une installation existante :
+À partir de la **v0.2.3**, chaque Computer vérifie automatiquement GitHub **à chaque démarrage**, aussi bien le MER que les clients.
+
+Au boot :
+
+```text
+COMPUTER LINK
+AUTO UPDATE
+
+Verification des mises a jour...
+Local  : 0.2.3
+Remote : 0.2.4
+
+Nouvelle version detectee.
+Mise a jour automatique...
+```
+
+Si une nouvelle version existe, elle est téléchargée avant le lancement de Computer Link. Si GitHub/HTTP est indisponible, le Computer continue simplement avec sa version locale.
+
+Pour les machines installées avant la v0.2.3, il faut faire **une dernière mise à jour manuelle** afin de récupérer le nouveau boot automatique :
+
+Client :
 
 ```text
 update
-```
-
-puis :
-
-```text
 reboot
 ```
 
-Si l'installation actuelle est encore en protocole 0.1.0, mets à jour **le MER et tous les clients**, car la 0.2.0 utilise le protocole réseau v2.
+MER :
+
+```text
+Ctrl+T
+/computer-link/update.lua
+reboot
+```
+
+Après cette migration, un simple `reboot` suffit pour récupérer automatiquement les futures versions.
 
 ## Suite prévue
 
