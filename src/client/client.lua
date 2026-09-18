@@ -251,6 +251,11 @@ local function help()
   setColour(colors.red)
   print("MODULE INTRUSION (jeu)")
   setColour(colors.white)
+  if hack.isOperator() then
+    print(" Autorisation : OUI (PC #1)")
+  else
+    print(" Autorisation : NON - reserve au PC #1")
+  end
   print(" scan")
   print(" hack <PC_ID>")
   print(" sessions")
@@ -348,9 +353,13 @@ local function uiLoop()
       setColour(colors.red)
       print("Scan radio de proximite...")
       setColour(colors.white)
-      local found = hack.scan(modemName, 2)
+      local found, scanErr = hack.scan(modemName, 2)
 
-      if #found == 0 then
+      if not found then
+        setColour(colors.red)
+        print(tostring(scanErr))
+        setColour(colors.white)
+      elseif #found == 0 then
         print("Aucun PC Computer Link detecte a proximite.")
       else
         for _, pc in ipairs(found) do
