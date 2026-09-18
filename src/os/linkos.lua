@@ -65,7 +65,6 @@ function LinkOS.new()
   self.notice = nil
   self.noticeColour = colors.lightGray
   self.running = true
-  self.exitToCli = false
   self.connectionError = nil
   self.hackerConsole = HackerConsole.new(self.service)
   self.sessionLocked = security.enabled()
@@ -1708,14 +1707,6 @@ function LinkOS:run()
     function() self:daemonLoop() end
   )
 
-  if self.exitToCli and fs.exists("/computer-link/src/client/cli.lua") then
-    term.redirect(self.native)
-    term.setBackgroundColor(colors.black)
-    term.setTextColor(colors.white)
-    term.clear()
-    term.setCursorPos(1, 1)
-    shell.run("/computer-link/src/client/cli.lua")
-  end
 end
 
 local instance = LinkOS.new()
