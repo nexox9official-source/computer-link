@@ -79,6 +79,8 @@ function LinkOS.new()
   self.linksecTargets = {}
   self.ghostState = nil
   self.ghostDevices = {}
+  self.ghostDevice = nil
+  self.ghostDeviceResult = nil
   self.ghostRedstone = {}
   self.ghostDrives = {}
   return self
@@ -1097,6 +1099,63 @@ function LinkOS:ghostLoadDevices()
 
   self.ghostDevices = data.devices or {}
   self.linksecView = "ghost_devices"
+end
+
+function LinkOS:ghostOpenDevice(name)
+  for _, device in ipairs(self.ghostDevices or {}) do
+    if device.name == name then
+      self.ghostDevice = device
+      self.ghostDeviceResult = nil
+      self.linksecView = "ghost_device"
+      return
+    end
+  end
+end
+
+function LinkOS:ghostCallDevice(method)
+  local targetId = self:linksecTarget()
+  if not targetId or not self.ghostDevice then return end
+
+  local raw = self:prompt(
+    tostring(self.ghostDevice.name) .. "." .. tostring(method),
+    "Arguments separes par des espaces. Vide = aucun argument."
+  )
+
+  local args = {}
+  for token in tostring(raw or ""):gmatch("%S+") do
+    local lower = string.lower(token)
+    if lower == "true" or lower == "on" then
+      args[#args + 1] = true
+    elseif lower == "false" or lower == "off" then
+      args[#args + 1] = false
+    else
+      args[#args + 1] = tonumber(token) or token
+    end
+  end
+
+  local data, err = self.service:ghostRemote(targetId, "device_call", {
+    name = self.ghostDevice.name,
+    method = method,
+    args = args
+  })
+
+  if not data then
+    self.ghostDeviceResult = "ERREUR: " .. tostring(err)
+    self:setNotice(self.ghostDeviceResult, self:theme().danger)
+    return
+  end
+
+  local parts = {}
+  for _, value in ipairs(data.results or {}) do
+    if type(value) == "table" then
+      parts[#parts + 1] = textutils.serialize(value, {compact=true})
+    else
+      parts[#parts + 1] = tostring(value)
+    end
+  end
+
+  self.ghostDeviceResult = #parts > 0 and table.concat(parts, " | ") or "OK"
+  self:setNotice(tostring(method) .. " execute.", self:theme().good)
 end
 
 function LinkOS:ghostLoadRedstone()
