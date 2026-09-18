@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 7,
+  version = 8,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
