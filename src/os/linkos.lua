@@ -2154,23 +2154,6 @@ function LinkOS:renderHacker(target, l)
 
     local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
 
-    draw.button(target, x, y, bw, spread and "PROPAGATION ON" or "PROPAGATION OFF",
-      colors.white, spread and colors.red or t.panel)
-    self:addButton("ghost:spread", x, y, bw, 1, function()
-      self:ghostToggleSpread()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "NETTOYER", colors.white, t.panel)
-      self:addButton("ghost:clean", x + bw + 2, y, bw, 1, function()
-        self:ghostClean()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
     draw.button(target, x, y, bw, "ECRAN DISTANT", colors.white, colors.red)
     self:addButton("ghost:desktop", x, y, bw, 1, function()
       self:openMalcraftDesktop()
@@ -2218,15 +2201,48 @@ function LinkOS:renderHacker(target, l)
 
     y = y + 2
 
+    draw.button(target, x, y, bw,
+      spread and "PROPAGATION ON" or "PROPAGATION OFF",
+      colors.white, spread and colors.red or t.panel)
+    self:addButton("ghost:spread", x, y, bw, 1, function()
+      self:ghostToggleSpread()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "SYSTEME", colors.white, colors.red)
+      self:addButton("ghost:system", x + bw + 2, y, bw, 1, function()
+        self.linksecView = "ghost_system"
+        self:render()
+      end)
+    end
+
+    return
+  end
+
+  if self.linksecView == "ghost_system" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("ghost:system:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Systeme distant PC #" .. tostring(self:malcraftTargetId() or "?"),
+      colors.red, t.bg, w)
+    y = y + 2
+
+    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
+
     draw.button(target, x, y, bw, "REBOOT", colors.white, t.panel)
-    self:addButton("ghost:reboot", x, y, bw, 1, function()
+    self:addButton("ghost:sys:reboot", x, y, bw, 1, function()
       self:ghostPower("reboot")
       self:render()
     end)
 
     if w >= bw * 2 + 2 then
       draw.button(target, x + bw + 2, y, bw, "ARRET", colors.white, colors.red)
-      self:addButton("ghost:shutdown", x + bw + 2, y, bw, 1, function()
+      self:addButton("ghost:sys:shutdown", x + bw + 2, y, bw, 1, function()
         self:ghostPower("shutdown")
         self:render()
       end)
@@ -2235,22 +2251,30 @@ function LinkOS:renderHacker(target, l)
     y = y + 2
 
     draw.button(target, x, y, bw, "CRASH", colors.white, colors.red)
-    self:addButton("ghost:crash", x, y, bw, 1, function()
+    self:addButton("ghost:sys:crash", x, y, bw, 1, function()
       self:ghostPower("crash")
       self:render()
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "CONTAMINER PC", colors.white, colors.red)
-      self:addButton("ghost:spreadto", x + bw + 2, y, bw, 1, function()
-        self:ghostSpreadTo()
+      draw.button(target, x + bw + 2, y, bw, "NETTOYER", colors.white, t.panel)
+      self:addButton("ghost:sys:clean", x + bw + 2, y, bw, 1, function()
+        self:ghostClean()
         self:render()
       end)
     end
 
+    y = y + 2
+
+    draw.button(target, x, y, math.min(18, w), "CONTAMINER PC", colors.white, colors.red)
+    self:addButton("ghost:sys:spreadto", x, y, math.min(18, w), 1, function()
+      self:ghostSpreadTo()
+      self:render()
+    end)
+
     if y + 2 < l.h then
       draw.text(target, x, y + 2,
-        "Le controle direct exige une liaison modem; l'infection peut rester hors-ligne.",
+        "Un PC eteint ne peut etre rallume directement que via un Computer proche/cable.",
         t.muted, t.bg, w)
     end
     return
