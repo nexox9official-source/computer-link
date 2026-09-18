@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.9.0
+## LinkOS 0.9.3
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -482,26 +482,69 @@ Pour éviter les suppressions accidentelles :
 - le PC redémarre automatiquement vers CraftOS.
 
 
-## GhostLink
 
-GhostLink est une mécanique stratégique **strictement Minecraft / CC:Tweaked**. Le code tourne uniquement dans les Computers du jeu et la persistance est gérée par le MER AstralNet.
 
-Depuis LinkSec, après avoir sélectionné une cible :
+## Malcraft
 
-- **Conversations** affiche d'abord la liste des conversations, puis ouvre uniquement celle choisie ;
-- **GhostLink** permet d'activer ou nettoyer l'implant de gameplay ;
-- la propagation peut être activée/désactivée par l'opérateur ;
-- un PC contrôlé peut demander la contamination d'un Computer ID précis ;
-- les Computer IDs opérateurs sont immunisés ;
-- l'état GhostLink survit à la désinstallation de LinkOS car il est conservé côté MER ;
-- le runtime GhostLink est fourni par la ROM CC:Tweaked du datapack, ce qui permet aussi de gérer des Computers qui n'ont jamais installé LinkOS ;
-- les disques CC:Tweaked peuvent être marqués comme vecteurs par leur Disk ID ;
-- quand un support marqué est connecté à un Computer compatible, le MER peut appliquer l'état GhostLink au poste ;
-- les périphériques, sorties redstone et lecteurs de la cible peuvent être inspectés/contrôlés via les APIs CC:Tweaked exposées par les mods.
+**Malcraft** est le nom RP du mécanisme de compromission stratégique de Computer Link. Il reste strictement dans **Minecraft / CC:Tweaked** : aucune action n'est réalisée sur l'ordinateur réel du joueur.
 
-Le contrôle de périphériques reste limité aux méthodes exposées par CC:Tweaked et à une liste de familles de méthodes autorisées. Un bloc Create qui n'expose aucune API ComputerCraft reste contrôlable uniquement via redstone ou via un bridge compatible.
+Le protocole interne conserve temporairement les noms `GHOST_*` pour compatibilité avec les versions 0.9.x, mais l'interface et le gameplay utilisent désormais le nom **Malcraft**.
+
+### Propagation
+
+Malcraft peut se propager de plusieurs façons :
+
+- **Disque contaminé** : depuis le PC LinkSec opérateur, ouvrir `MALCRAFT > DISQUES LOCAUX`, puis cliquer le disque branché pour le contaminer. Lorsqu'il est inséré dans un autre Computer compatible, ce poste est immédiatement marqué Malcraft par le MER.
+- **Disques d'un PC infecté** : lorsqu'un Computer infecté avec propagation active reçoit un nouveau disque, il marque automatiquement ce Disk ID comme vecteur. Le disque peut ensuite contaminer d'autres postes.
+- **Proximité** : les Computers équipés du runtime ROM annoncent périodiquement leur présence. Un poste Malcraft avec propagation active contamine automatiquement les Computers détectés à courte portée (2,5 blocs par défaut).
+- **Poste opérateur** : le PC LinkSec `#0` est immunisé, mais agit comme émetteur Malcraft de proximité. Approcher un Computer compatible du poste opérateur permet donc également de l'ensemencer automatiquement.
+- **Propagation ciblée** : depuis un poste infecté, l'opérateur peut toujours choisir explicitement un Computer ID à contaminer.
+
+Les délais et la portée sont définis dans la politique serveur ROM. Un cooldown évite les répétitions inutiles.
+
+### Persistance
+
+L'état Malcraft est conservé dans la base du **MER AstralNet**, et le runtime est fourni par la ROM CC:Tweaked du datapack. Sur les Advanced Computers compatibles, Malcraft reste donc disponible même après désinstallation de LinkOS et peut fonctionner sur un Computer qui n'a jamais installé LinkOS.
+
+Les Computer IDs déclarés opérateurs ou immunisés dans la politique serveur ne peuvent pas être contaminés.
+
+### Malcraft Control Center
+
+Dans LinkSec, le bouton **MALCRAFT** est disponible même sans cible active.
+
+Le Control Center affiche :
+
+- le nombre de PC infectés ;
+- les disques actuellement branchés sur le PC hacker ;
+- **RESEAU INFECTE** pour ouvrir directement un poste déjà compromis sans refaire le hack initial ;
+- **DISQUES LOCAUX** pour contaminer/nettoyer un disque connecté au PC opérateur ;
+- la cible LinkSec courante, si une session classique est déjà ouverte.
+
+Une cible Malcraft peut ensuite être contrôlée via :
+
+- périphériques CC:Tweaked/moddés exposés ;
+- redstone digitale et analogique ;
+- lecteurs/disques ;
+- propagation ;
+- nettoyage de l'infection.
+
+### Imprimantes
+
+Les imprimantes CC:Tweaked sont contrôlables lorsqu'elles sont exposées comme périphérique. Les méthodes supportées incluent notamment :
+
+```text
+newPage
+setPageTitle
+setCursorPos
+write
+endPage
+```
+
+Le texte passé à `write` ou `setPageTitle` est envoyé comme une chaîne complète, espaces compris.
 
 ### Conversations LinkSec
+
+L'espionnage de messages n'affiche plus tout en bloc.
 
 Dans le panel graphique :
 
@@ -510,10 +553,11 @@ CMD
  -> SCAN PC
  -> cible
  -> CONVERSATIONS
- -> PC #42
+ -> choisir une conversation
+ -> retour pour la fermer
 ```
 
-Le bouton de retour ferme la conversation et revient à la liste. Dans le terminal avancé :
+Dans le terminal avancé :
 
 ```text
 conv
