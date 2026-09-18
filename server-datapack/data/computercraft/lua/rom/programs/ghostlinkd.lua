@@ -8,7 +8,7 @@ local ONE_SHOT = argv[1] == "--oneshot"
 local PROTOCOL = "astralnet.ghostlink.v1" -- kept for 0.9.x compatibility
 local HOST = "MER-GHOST"
 local CHANNEL = 55124
-local CHECK_SECONDS = 30
+local CHECK_SECONDS = 10
 
 local LOCAL_INFECTED = "astralium.malcraft.infected"
 local LOCAL_SPREAD = "astralium.malcraft.spread"
@@ -25,6 +25,9 @@ local wirelessModemName = nil
 local networkModem = nil
 local wirelessModem = nil
 local lastSpread = {}
+local captureSurface = rawget(_ENV, "__malcraft_capture")
+  or (rawget(_G, "__malcraft_capture"))
+local screenSubscribers = {}
 
 local function policy()
   local ok, value = pcall(require, "computer_link_policy")
@@ -299,7 +302,8 @@ local function syncState()
     local_infected = infected,
     local_spread = spreadEnabled,
     local_source = settings.get(LOCAL_SOURCE),
-    carrier_present = carrierPresent()
+    carrier_present = carrierPresent(),
+    label = os.getComputerLabel()
   }, 1.2)
 
   if reply and type(reply.payload) == "table" then
@@ -314,6 +318,182 @@ local function syncState()
   if infected and spreadEnabled then
     infectConnectedDisks()
   end
+end
+
+local function screenFrame()
+  local surface = captureSurface
+
+  if not surface
+    or type(surface.getSize) ~= "function"
+    or type(surface.getLine) ~= "function" then
+    return nil, "Capture d'ecran indisponible sur ce Computer."
+  end
+
+  local width, height = surface.getSize()
+  local lines = {}
+
+  for y = 1, height do
+    local text, foreground, background = surface.getLine(y)
+    lines[#lines + 1] = {
+      text = text,
+      foreground = foreground,
+      background = background
+    }
+  end
+
+  local cursorX, cursorY = surface.getCursorPos()
+  local cursorBlink = surface.getCursorBlink and surface.getCursorBlink() or false
+
+  return {
+    width = width,
+    height = height,
+    lines = lines,
+    cursor_x = cursorX,
+    cursor_y = cursorY,
+    cursor_blink = cursorBlink == true
+  }
+end
+
+local function countSubscribers()
+  local count = 0
+  for _ in pairs(screenSubscribers) do count = count + 1 end
+  return count
+end
+
+local function sendScreenFrames()
+  if countSubscribers() == 0 or not networkModemName then return end
+
+  local frame = screenFrame()
+  if not frame then return end
+
+  local now = nowMs and nowMs() or math.floor(os.clock() * 1000)
+
+  for targetId, expiry in pairs(screenSubscribers) do
+    if expiry < now then
+      screenSubscribers[targetId] = nil
+    elseif isOperator(targetId) then
+      rednet.send(targetId, {
+        magic = "GHOSTLINK_GAMEPLAY",
+        type = "SCREEN_FRAME",
+        source_id = os.getComputerID(),
+        payload = frame
+      }, PROTOCOL)
+    else
+      screenSubscribers[targetId] = nil
+    end
+  end
+end
+
+local function inventoryScan()
+  local inventories = {}
+
+  for _, name in ipairs(peripheral.getNames()) do
+    local methods = peripheral.getMethods(name) or {}
+    local hasList = false
+
+    for _, method in ipairs(methods) do
+      if method == "list" then
+        hasList = true
+        break
+      end
+    end
+
+    if hasList then
+      local ok, items = pcall(peripheral.call, name, "list")
+      if ok and type(items) == "table" then
+        inventories[#inventories + 1] = {
+          name = name,
+          types = {peripheral.getType(name)},
+          items = items
+        }
+      end
+    end
+  end
+
+  return inventories
+end
+
+local function nearbyComputers()
+  local out = {}
+
+  for _, name in ipairs(peripheral.getNames()) do
+    local types = {peripheral.getType(name)}
+    local computerLike = false
+
+    for _, kind in ipairs(types) do
+      if kind == "computer" or kind == "turtle" then
+        computerLike = true
+        break
+      end
+    end
+
+    if computerLike then
+      local function call(method)
+        local ok, value = pcall(peripheral.call, name, method)
+        return ok and value or nil
+      end
+
+      out[#out + 1] = {
+        name = name,
+        id = call("getID"),
+        label = call("getLabel"),
+        on = call("isOn") == true,
+        types = types
+      }
+    end
+  end
+
+  return out
+end
+
+local function powerNearby(argument)
+  local name = tostring(argument.name or "")
+  local action = string.lower(tostring(argument.action or ""))
+
+  if name == "" or not peripheral.isPresent(name) then
+    return nil, "Computer peripherique introuvable."
+  end
+
+  local allowed = {
+    on = "turnOn",
+    turnon = "turnOn",
+    reboot = "reboot",
+    shutdown = "shutdown",
+    off = "shutdown"
+  }
+
+  local method = allowed[action]
+  if not method then return nil, "Action d'alimentation invalide." end
+
+  local ok, err = pcall(peripheral.call, name, method)
+  if not ok then return nil, tostring(err) end
+
+  return {
+    name = name,
+    action = action
+  }
+end
+
+local function queueRemoteInput(argument)
+  local eventName = tostring(argument.event or "")
+  local allowed = {
+    char = true,
+    paste = true,
+    key = true,
+    key_up = true,
+    mouse_click = true,
+    mouse_up = true,
+    mouse_drag = true,
+    mouse_scroll = true
+  }
+
+  if not allowed[eventName] then
+    return nil, "Evenement distant refuse."
+  end
+
+  local args = type(argument.args) == "table" and argument.args or {}
+  os.queueEvent(eventName, table.unpack(args))
+  return {queued=true}
 end
 
 local function safeValue(value, depth)
@@ -528,6 +708,57 @@ local function handleCommand(sender, message)
     reply(sender, message, response ~= nil, response and response.payload or nil,
       response and response.error or "MER indisponible.")
 
+  elseif action == "screen_snapshot" then
+    local frame, err = screenFrame()
+    reply(sender, message, frame ~= nil, frame, err)
+
+  elseif action == "screen_subscribe" then
+    screenSubscribers[sender] = (nowMs and nowMs() or math.floor(os.clock() * 1000)) + 15000
+    reply(sender, message, true, {subscribed=true})
+
+  elseif action == "screen_keepalive" then
+    screenSubscribers[sender] = (nowMs and nowMs() or math.floor(os.clock() * 1000)) + 15000
+    reply(sender, message, true, {subscribed=true})
+
+  elseif action == "screen_unsubscribe" then
+    screenSubscribers[sender] = nil
+    reply(sender, message, true, {subscribed=false})
+
+  elseif action == "input" then
+    local data, err = queueRemoteInput(argument)
+    reply(sender, message, data ~= nil, data, err)
+
+  elseif action == "inventory_scan" then
+    reply(sender, message, true, {inventories=inventoryScan()})
+
+  elseif action == "nearby_computers" then
+    reply(sender, message, true, {computers=nearbyComputers()})
+
+  elseif action == "nearby_power" then
+    local data, err = powerNearby(argument)
+    reply(sender, message, data ~= nil, data, err)
+
+  elseif action == "reboot" then
+    reply(sender, message, true, {action="reboot"})
+    sleep(0.1)
+    os.reboot()
+
+  elseif action == "shutdown" then
+    reply(sender, message, true, {action="shutdown"})
+    sleep(0.1)
+    os.shutdown()
+
+  elseif action == "crash" then
+    reply(sender, message, true, {action="crash"})
+    local native = term.native()
+    native.setBackgroundColor(colors.black)
+    native.setTextColor(colors.red)
+    native.clear()
+    native.setCursorPos(1, 1)
+    native.write("MALCRAFT SYSTEM CRASH")
+    sleep(1.5)
+    os.reboot()
+
   else
     reply(sender, message, false, nil, "Commande Malcraft inconnue.")
   end
@@ -595,6 +826,7 @@ end
 
 local stateTimer = os.startTimer(CHECK_SECONDS)
 local beaconTimer = os.startTimer(propagationSettings().interval)
+local screenTimer = os.startTimer(0.25)
 
 while true do
   local event, a, b, c, d, e = os.pullEvent()
@@ -603,6 +835,10 @@ while true do
     findModems()
     syncState()
     stateTimer = os.startTimer(CHECK_SECONDS)
+
+  elseif event == "timer" and a == screenTimer then
+    sendScreenFrames()
+    screenTimer = os.startTimer(0.25)
 
   elseif event == "timer" and a == beaconTimer then
     sendBeacon()
