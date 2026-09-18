@@ -4,6 +4,7 @@ local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
+local HackerConsole = dofile("/computer-link/src/os/hacker_console.lua")
 
 local LinkOS = {}
 LinkOS.__index = LinkOS
@@ -23,6 +24,7 @@ local APPS = {
   {id="contacts", title="Contacts", short="CONT"},
   {id="network", title="Reseau", short="NET"},
   {id="security", title="Securite", short="SEC"},
+  {id="hacker", title="LinkSec CMD", short="CMD"},
   {id="files", title="Fichiers", short="FILES"},
   {id="settings", title="Parametres", short="SET"},
   {id="about", title="A propos", short="INFO"}
@@ -63,6 +65,7 @@ function LinkOS.new()
   self.running = true
   self.exitToCli = false
   self.connectionError = nil
+  self.hackerConsole = HackerConsole.new(self.service)
   return self
 end
 
@@ -226,9 +229,13 @@ function LinkOS:renderChrome(target, l)
       {"home", "H"},
       {"messages", "M"},
       {"network", "N"},
-      {"security", "S"},
-      {"settings", "*"}
+      {"security", "S"}
     }
+    if self.service:isHackOperator() then
+      compactApps[#compactApps + 1] = {"hacker", ">"}
+    else
+      compactApps[#compactApps + 1] = {"settings", "*"}
+    end
 
     local slotW = math.max(3, math.floor(l.w / #compactApps))
     for i, entry in ipairs(compactApps) do
@@ -258,9 +265,14 @@ function LinkOS:renderChrome(target, l)
     {"messages", "MSG"},
     {"network", "NET"},
     {"security", "SEC"},
-    {"files", "FILES"},
-    {"settings", "SET"}
+    {"files", "FILES"}
   }
+
+  if self.service:isHackOperator() then
+    pinned[#pinned + 1] = {"hacker", "CMD"}
+  end
+
+  pinned[#pinned + 1] = {"settings", "SET"}
 
   for _, entry in ipairs(pinned) do
     local bw = #entry[2] + 2
@@ -329,10 +341,15 @@ function LinkOS:renderHome(target, l)
       {"Messages", "messages", "Conversations privees"},
       {"Contacts", "contacts", "Alias locaux par Computer ID"},
       {"Reseau", "network", "MER et modem"},
-      {"Securite", "security", "Protection et intrusion"},
-      {"Fichiers", "files", "Disque local"},
-      {"Parametres", "settings", "Affichage et systeme"}
+      {"Securite", "security", "Etat et protection du poste"},
+      {"Fichiers", "files", "Disque local"}
     }
+
+    if self.service:isHackOperator() then
+      apps[#apps + 1] = {"LinkSec CMD", "hacker", "Terminal d'intrusion operateur"}
+    end
+
+    apps[#apps + 1] = {"Parametres", "settings", "Affichage et systeme"}
 
     for _, app in ipairs(apps) do
       if y <= l.h - 3 then
@@ -361,11 +378,16 @@ function LinkOS:renderHome(target, l)
     {"Messages", self.service.unread > 0 and (self.service.unread .. " nouveau(x)") or "Conversations privees par ID", "messages"},
     {"Contacts", "Alias locaux pour retrouver facilement les PC", "contacts"},
     {"Reseau", statusText, "network"},
-    {"Securite", self.service:isHackOperator() and "Console speciale autorisee" or "Protection active", "security"},
-    {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " libres", "files"},
-    {"Parametres", self.active.label .. " / " .. l.mode, "settings"},
-    {"A propos", "Computer Link " .. config.VERSION, "about"}
+    {"Securite", "Etat du poste et protection LinkOS", "security"},
+    {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " libres", "files"}
   }
+
+  if self.service:isHackOperator() then
+    cards[#cards + 1] = {"LinkSec CMD", "Terminal operateur / espionnage / controle distant", "hacker"}
+  end
+
+  cards[#cards + 1] = {"Parametres", self.active.label .. " / " .. l.mode, "settings"}
+  cards[#cards + 1] = {"A propos", "Computer Link " .. config.VERSION, "about"}
 
   for i, card in ipairs(cards) do
     local col = (i - 1) % columns
@@ -682,6 +704,66 @@ function LinkOS:showRemoteData(action, data)
 
   elseif action == "crash" then
     self:setNotice("Crash distant execute.", t.danger)
+  end
+end
+
+function LinkOS:renderHacker(target, l)
+  local t = self:theme()
+  local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
+
+  if not self.service:isHackOperator() then
+    self:openApp("security")
+    return
+  end
+
+  draw.text(target, x, y, "LinkSec Command Terminal", colors.red, t.bg, w)
+  y = y + 1
+  draw.text(target, x, y,
+    "OPERATEUR #" .. os.getComputerID()
+      .. "  |  cible "
+      .. (self.hackerConsole.target and ("#" .. self.hackerConsole.target) or "-"),
+    colors.lightGray, t.bg, w)
+  y = y + 2
+
+  local terminalH = math.max(4, h - 5)
+  draw.box(target, x, y, w, terminalH, colors.black, colors.red, "CMD")
+
+  local visible = math.max(1, terminalH - 3)
+  local lines = self.hackerConsole.lines or {}
+  local first = math.max(1, #lines - visible + 1)
+  local row = y + 1
+
+  for i = first, #lines do
+    local entry = lines[i]
+    draw.text(
+      target,
+      x + 1,
+      row,
+      tostring(entry.text or ""),
+      entry.colour or colors.white,
+      colors.black,
+      math.max(1, w - 2)
+    )
+    row = row + 1
+    if row >= y + terminalH - 1 then break end
+  end
+
+  local promptText = self.hackerConsole:prompt() .. " [EXEC]"
+  draw.text(target, x + 1, y + terminalH - 1, promptText, colors.lime, colors.black, math.max(1, w - 2))
+  self:addButton("hackercmd:exec", x, y + terminalH - 1, w, 1, function()
+    local line = self:prompt(
+      "LinkSec CMD",
+      self.hackerConsole:prompt() .. "  |  'help' affiche les commandes"
+    )
+    if line and line ~= "" then
+      self.hackerConsole:execute(line)
+    end
+    self:render()
+  end)
+
+  if l.mode ~= "compact" and w >= 42 then
+    draw.text(target, x, y + terminalH, "Astuce: F8 ouvre le terminal. Clique [EXEC] pour saisir une commande.",
+      t.muted, t.bg, w)
   end
 end
 
@@ -1143,7 +1225,8 @@ function LinkOS:renderAbout(target, l)
     "Raccourcis :",
     "F1 Accueil   F2 Messages   F3 Reseau",
     "F4 Securite  F5 Fichiers   F6 Parametres",
-    "F7 Contacts   ESC Accueil"
+    "F7 Contacts   F8 LinkSec CMD (autorise)",
+    "ESC Accueil"
   }
 
   for _, line in ipairs(text) do
@@ -1160,16 +1243,20 @@ function LinkOS:renderHackedDisplay(target, state)
   local skull
   if w >= 38 and h >= 16 then
     skull = {
-      "          ___________",
-      "        /             \\",
-      "       /   X       X   \\",
-      "      |                 |",
-      "      |       /\\        |",
-      "      |      /  \\       |",
-      "      |    .------.      |",
-      "       \\  |______|     /",
-      "        \\             /",
-      "         '-----------'"
+      "             .-''''''''-.",
+      "          .-'            '-.",
+      "        .'   _          _    '.",
+      "       /    (_)        (_)     \\",
+      "      |                      __ |",
+      "      |      .----------.   /  \\|",
+      "      |     /            \\ |   |",
+      "       \\   |   .----.   | |   |",
+      "        '.  |  / /\\ \\  | |  .'",
+      "          \\ | |  \\/  | | /",
+      "           \\|  \\____/  |/",
+      "            |  .------.  |",
+      "             \\|______| /",
+      "              '------'"
     }
   else
     skull = {
@@ -1346,6 +1433,8 @@ function LinkOS:render()
     self:renderNetwork(target, l)
   elseif self.app == "security" then
     self:renderSecurity(target, l)
+  elseif self.app == "hacker" then
+    self:renderHacker(target, l)
   elseif self.app == "files" then
     self:renderFiles(target, l)
   elseif self.app == "settings" then
@@ -1385,6 +1474,10 @@ function LinkOS:handleKey(key)
   elseif key == keys.f5 then self:openApp("files")
   elseif key == keys.f6 then self:openApp("settings")
   elseif key == keys.f7 then self:openApp("contacts")
+  elseif key == keys.f8 and self.service:isHackOperator() then self:openApp("hacker")
+  elseif key == keys.enter and self.app == "hacker" and self.service:isHackOperator() then
+    local line = self:prompt("LinkSec CMD", self.hackerConsole:prompt())
+    if line and line ~= "" then self.hackerConsole:execute(line) end
   elseif key == keys.escape then self:openApp("home")
   elseif key == keys.r then
     self:render()
