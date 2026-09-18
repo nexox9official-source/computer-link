@@ -6,6 +6,7 @@ local hackedState = dofile("/computer-link/src/client/system_state.lua")
 local security = dofile("/computer-link/src/client/security.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
 local HackerConsole = dofile("/computer-link/src/os/operator_console.lua")
+local RemoteDesktop = dofile("/computer-link/src/os/remote_desktop.lua")
 
 local LinkOS = {}
 LinkOS.__index = LinkOS
@@ -89,6 +90,8 @@ function LinkOS.new()
   self.ghostRedstone = {}
   self.ghostDrives = {}
   self.ghostDiskStates = {}
+  self.ghostInventories = {}
+  self.ghostNearbyComputers = {}
   self.malcraftHosts = {}
   self.malcraftLocalDisks = {}
   self.malcraftTarget = nil
@@ -1594,6 +1597,91 @@ function LinkOS:ghostCarrier(diskId)
       .. (infected and " nettoye." or " marque comme vecteur Malcraft."),
     self:theme().good
   )
+end
+
+function LinkOS:openMalcraftDesktop()
+  local targetId = self:malcraftTargetId()
+  if not targetId then
+    self:setNotice("Aucune cible Malcraft.", self:theme().warn)
+    return
+  end
+
+  local previous = term.redirect(self.native)
+  pcall(self.native.setCursorBlink, false)
+
+  local ok, runOk, runErr = pcall(RemoteDesktop.run, self.service, targetId)
+
+  term.redirect(previous)
+
+  if not ok then
+    self:setNotice("Bureau distant: " .. tostring(runOk), self:theme().danger)
+  elseif not runOk then
+    self:setNotice("Bureau distant: " .. tostring(runErr), self:theme().danger)
+  else
+    self:setNotice("Bureau distant ferme.", self:theme().muted)
+  end
+
+  self:refreshDisplays()
+  self:render()
+end
+
+function LinkOS:ghostInventoryScan()
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "inventory_scan")
+  if not data then
+    self:setNotice("Inventaires: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostInventories = data.inventories or {}
+  self.linksecView = "ghost_inventories"
+end
+
+function LinkOS:ghostLoadNearbyComputers()
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "nearby_computers")
+  if not data then
+    self:setNotice("PC proches: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostNearbyComputers = data.computers or {}
+  self.linksecView = "ghost_nearby"
+end
+
+function LinkOS:ghostNearbyPower(name, action)
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "nearby_power", {
+    name = name,
+    action = action
+  })
+
+  if not data then
+    self:setNotice("Alimentation distante: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice(tostring(name) .. " -> " .. tostring(action), self:theme().good)
+  self:ghostLoadNearbyComputers()
+end
+
+function LinkOS:ghostPower(action)
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, action)
+  if not data then
+    self:setNotice("Malcraft " .. tostring(action) .. ": " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("Commande " .. tostring(action) .. " envoyee au PC #" .. tostring(targetId) .. ".", self:theme().good)
 end
 
 function LinkOS:showRemoteData(action, data)
