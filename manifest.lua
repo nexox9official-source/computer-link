@@ -1,12 +1,13 @@
 return {
   name = "Computer Link",
-  version = "0.3.0",
+  version = "0.3.1",
   protocol_version = 2,
   files = {
     "install.lua",
     "manifest.lua",
     "boot.lua",
     "update.lua",
+    "uninstall.lua",
     "src/common/config.lua",
     "src/common/util.lua",
     "src/common/network.lua",
