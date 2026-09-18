@@ -247,23 +247,27 @@ local function help()
   print(" device <PC_ID>")
   print(" ping")
   print(" stats")
-  print()
-  setColour(colors.red)
-  print("MODULE INTRUSION (jeu)")
-  setColour(colors.white)
   if hack.isOperator() then
-    print(" Autorisation : OUI (PC #1)")
-  else
-    print(" Autorisation : NON - reserve au PC #1")
+    print()
+    setColour(colors.red)
+    print("CONSOLE D'INTRUSION - PC #1")
+    setColour(colors.white)
+    print(" scan")
+    print(" hack <PC_ID>")
+    print(" sessions")
+    print(" remote <PC_ID> info")
+    print(" remote <PC_ID> conversations")
+    print(" remote <PC_ID> ls [chemin]")
+    print(" remote <PC_ID> cat <fichier>")
+    print(" remote <PC_ID> lock [message]")
+    print(" remote <PC_ID> unlock")
+    print(" remote <PC_ID> message <texte>")
+    print(" remote <PC_ID> write <chemin> <contenu>")
+    print(" remote <PC_ID> delete <chemin>")
+    print(" remote <PC_ID> label <nom>")
+    print(" remote <PC_ID> reboot")
+    print(" remote <PC_ID> crash")
   end
-  print(" scan")
-  print(" hack <PC_ID>")
-  print(" sessions")
-  print(" remote <PC_ID> info")
-  print(" remote <PC_ID> conversations")
-  print(" remote <PC_ID> ls [chemin]")
-  print(" remote <PC_ID> cat <fichier>")
-  print(" remote <PC_ID> crash")
   print()
   print(" update | uninstall | clear | quit")
 end
@@ -349,7 +353,7 @@ local function uiLoop()
       local packet, err = sendMer("STATS")
       if err then print(err) else showMer(packet) end
 
-    elseif command == "scan" then
+    elseif command == "scan" and hack.isOperator() then
       setColour(colors.red)
       print("Scan radio de proximite...")
       setColour(colors.white)
@@ -370,7 +374,7 @@ local function uiLoop()
         end
       end
 
-    elseif command == "hack" then
+    elseif command == "hack" and hack.isOperator() then
       local target = tonumber(rest)
 
       if not target then
@@ -395,7 +399,7 @@ local function uiLoop()
         end
       end
 
-    elseif command == "sessions" then
+    elseif command == "sessions" and hack.isOperator() then
       local any = false
       for target, session in pairs(hackSessions) do
         any = true
@@ -403,13 +407,15 @@ local function uiLoop()
       end
       if not any then print("Aucune session pirate.") end
 
-    elseif command == "remote" then
+    elseif command == "remote" and hack.isOperator() then
       local targetText, action, argument = rest:match("^(%d+)%s+(%S+)%s*(.-)$")
       local target = tonumber(targetText)
       action = string.lower(action or "")
 
       if not target or action == "" then
-        print("Usage: remote <PC_ID> <info|conversations|ls|cat|crash> [argument]")
+        print("Usage: remote <PC_ID> <action> [argument]")
+      elseif not hack.isOperator() then
+        print("Commande inconnue. Tape 'help'.")
       else
         if action == "conv" then action = "conversations" end
         if action == "read" then action = "cat" end
@@ -418,14 +424,35 @@ local function uiLoop()
         if not session then
           print("Pas de session sur PC #" .. target .. ". Utilise: hack " .. target)
         else
-          local data, err = hack.remote(target, session.token, action, argument)
+          local remoteArg = argument
 
-          if not data then
-            setColour(colors.red)
-            print("ERREUR DISTANTE: " .. tostring(err))
-            setColour(colors.white)
-          else
-            printRemoteResult(action, data)
+          if action == "write" then
+            local path, content = argument:match("^(%S+)%s+(.+)$")
+            if not path then
+              print("Usage: remote <PC_ID> write <chemin> <contenu>")
+              remoteArg = nil
+            else
+              remoteArg = { path = path, content = content }
+            end
+          end
+
+          if action ~= "write" or remoteArg then
+            local data, err = hack.remote(target, session.token, action, remoteArg)
+
+            if not data then
+              setColour(colors.red)
+              print("ERREUR DISTANTE: " .. tostring(err))
+              setColour(colors.white)
+            else
+              if action == "info" or action == "conversations"
+                or action == "ls" or action == "cat" or action == "crash" then
+                printRemoteResult(action, data)
+              else
+                setColour(colors.lime)
+                print("Action distante executee: " .. action)
+                setColour(colors.white)
+              end
+            end
           end
         end
       end
