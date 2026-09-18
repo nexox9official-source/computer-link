@@ -28,6 +28,20 @@ local lastSpread = {}
 local captureSurface = rawget(_ENV, "__malcraft_capture")
   or (rawget(_G, "__malcraft_capture"))
 local screenSubscribers = {}
+local bus = type(malcraft_bus) == "table" and malcraft_bus or nil
+
+local function jsonDecode(value)
+  if type(value) ~= "string" or value == "" then return nil end
+  local ok, decoded = pcall(textutils.unserializeJSON, value)
+  if ok then return decoded end
+  return nil
+end
+
+local function jsonEncode(value)
+  local ok, encoded = pcall(textutils.serializeJSON, value or {})
+  if ok then return encoded end
+  return "{}"
+end
 
 local function policy()
   local ok, value = pcall(require, "computer_link_policy")
@@ -250,7 +264,13 @@ local function localCarrierInfection()
 
   local present, drive = carrierPresent()
   if present then
-    setLocalState(true, true, "disk:" .. tostring(drive.id or "?"))
+    local source = "disk:" .. tostring(drive.id or "?")
+    setLocalState(true, true, source)
+
+    if bus and type(bus.infectSelf) == "function" then
+      pcall(bus.infectSelf, source)
+    end
+
     return true
   end
 
@@ -291,10 +311,55 @@ end
 local function syncState()
   if isImmune(os.getComputerID()) then
     setLocalState(false, false, nil)
-  else
-    localCarrierInfection()
+    return
   end
 
+  -- Physical carrier infection is evaluated first. With Malcraft Bridge this
+  -- becomes server-visible immediately, without a modem or LinkOS.
+  localCarrierInfection()
+
+  if bus then
+    local state = nil
+
+    if type(bus.state) == "function" then
+      local ok, raw = pcall(bus.state)
+      if ok then state = jsonDecode(raw) end
+    end
+
+    if state and state.known == true then
+      if state.infected == true then
+        setLocalState(
+          true,
+          state.spread ~= false,
+          state.source or settings.get(LOCAL_SOURCE) or "bridge"
+        )
+      else
+        -- A remote cleanup persists across reboot/break/place. A carrier which
+        -- is currently inserted may infect the machine again on its next event.
+        local present = carrierPresent()
+        if not present then setLocalState(false, false, nil) end
+      end
+    elseif infected and type(bus.infectSelf) == "function" then
+      pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
+    end
+
+    if infected and type(bus.heartbeat) == "function" then
+      pcall(
+        bus.heartbeat,
+        spreadEnabled,
+        tostring(settings.get(LOCAL_SOURCE) or "bridge")
+      )
+    end
+
+    if infected and spreadEnabled then
+      infectConnectedDisks()
+    end
+
+    return
+  end
+
+  -- Legacy modem/MER fallback when the server-only Malcraft Bridge mod is not
+  -- installed.
   if not networkModemName then return end
 
   local reply = request("STATE", {
@@ -369,10 +434,16 @@ local function countSubscribers()
 end
 
 local function sendScreenFrames()
-  if countSubscribers() == 0 or not networkModemName then return end
+  if not infected then return end
 
   local frame = screenFrame()
   if not frame then return end
+
+  if bus and type(bus.publishScreen) == "function" then
+    pcall(bus.publishScreen, jsonEncode(frame))
+  end
+
+  if countSubscribers() == 0 or not networkModemName then return end
 
   local now = currentMs()
 
@@ -656,108 +727,134 @@ local function reply(target, requestMessage, ok, payload, err)
   }, PROTOCOL)
 end
 
-local function handleCommand(sender, message)
-  if not infected or not isOperator(sender) then return end
-  if tonumber(message.source_id) ~= tonumber(sender) then return end
-
-  local payload = message.payload or {}
-  local action = string.lower(tostring(payload.action or ""))
-  local argument = type(payload.argument) == "table" and payload.argument or {}
+local function processAction(sender, action, argument)
+  action = string.lower(tostring(action or ""))
+  argument = type(argument) == "table" and argument or {}
 
   if action == "status" then
-    reply(sender, message, true, {
+    return true, {
       infected = infected,
       spread = spreadEnabled,
       computer_id = os.getComputerID(),
-      label = os.getComputerLabel()
-    })
+      label = os.getComputerLabel(),
+      transport = bus and "malcraft_bridge" or "rednet"
+    }
 
   elseif action == "devices" then
-    reply(sender, message, true, {devices=devices()})
+    return true, {devices=devices()}
 
   elseif action == "device_call" then
     local data, err = callDevice(argument)
-    reply(sender, message, data ~= nil, data, err)
+    return data ~= nil, data, err
 
   elseif action == "redstone" then
-    reply(sender, message, true, {sides=redstoneInfo()})
+    return true, {sides=redstoneInfo()}
 
   elseif action == "redstone_set" then
     local data, err = setRedstone(argument)
-    reply(sender, message, data ~= nil, data, err)
+    return data ~= nil, data, err
 
   elseif action == "drives" then
-    reply(sender, message, true, {disk_ids=diskIds()})
+    return true, {disk_ids=diskIds()}
 
   elseif action == "spread" then
     if not spreadEnabled then
-      reply(sender, message, false, nil, "Propagation desactivee.")
-      return
+      return false, nil, "Propagation desactivee."
     end
 
     local targetId = tonumber(argument.target_id)
     if not targetId then
-      reply(sender, message, false, nil, "ID cible invalide.")
-      return
+      return false, nil, "ID cible invalide."
+    end
+
+    if bus and type(bus.infectTarget) == "function" then
+      local ok = bus.infectTarget(
+        targetId,
+        "spread:" .. tostring(os.getComputerID())
+      )
+      return ok == true,
+        ok and {target_id=targetId, infected=true, transport="malcraft_bridge"} or nil,
+        ok and nil or "Malcraft Bridge a refuse la propagation."
     end
 
     local response = request("SPREAD_TO", {target_id=targetId}, 1.0)
-    reply(sender, message, response ~= nil, response and response.payload or nil,
-      response and response.error or "MER indisponible.")
+    return response ~= nil,
+      response and response.payload or nil,
+      response and response.error or "MER indisponible."
 
   elseif action == "infect_disk" then
     local diskId = tonumber(argument.disk_id)
     if not diskId then
-      reply(sender, message, false, nil, "Disk ID invalide.")
-      return
+      return false, nil, "Disk ID invalide."
     end
 
-    local response = request("INFECT_DISK", {disk_id=diskId}, 1.0)
-    reply(sender, message, response ~= nil, response and response.payload or nil,
-      response and response.error or "MER indisponible.")
+    local marked = false
+    for _, drive in ipairs(drives()) do
+      if tonumber(drive.id) == diskId then
+        marked = writeMarker(drive)
+        break
+      end
+    end
+
+    if networkModemName then
+      pcall(request, "INFECT_DISK", {disk_id=diskId}, 0.8)
+    end
+
+    return marked, marked and {disk_id=diskId, infected=true} or nil,
+      marked and nil or "Disque introuvable ou non inscriptible."
 
   elseif action == "screen_snapshot" then
     local frame, err = screenFrame()
-    reply(sender, message, frame ~= nil, frame, err)
+    return frame ~= nil, frame, err
 
   elseif action == "screen_subscribe" then
-    screenSubscribers[sender] = (currentMs()) + 15000
-    reply(sender, message, true, {subscribed=true})
+    screenSubscribers[sender] = currentMs() + 15000
+    return true, {subscribed=true}
 
   elseif action == "screen_keepalive" then
-    screenSubscribers[sender] = (currentMs()) + 15000
-    reply(sender, message, true, {subscribed=true})
+    screenSubscribers[sender] = currentMs() + 15000
+    return true, {subscribed=true}
 
   elseif action == "screen_unsubscribe" then
     screenSubscribers[sender] = nil
-    reply(sender, message, true, {subscribed=false})
+    return true, {subscribed=false}
 
   elseif action == "input" then
     local data, err = queueRemoteInput(argument)
-    reply(sender, message, data ~= nil, data, err)
+    return data ~= nil, data, err
 
   elseif action == "inventory_scan" then
-    reply(sender, message, true, {inventories=inventoryScan()})
+    return true, {inventories=inventoryScan()}
 
   elseif action == "nearby_computers" then
-    reply(sender, message, true, {computers=nearbyComputers()})
+    return true, {computers=nearbyComputers()}
 
   elseif action == "nearby_power" then
     local data, err = powerNearby(argument)
-    reply(sender, message, data ~= nil, data, err)
+    return data ~= nil, data, err
 
   elseif action == "reboot" then
-    reply(sender, message, true, {action="reboot"})
-    sleep(0.1)
-    os.reboot()
+    return true, {action="reboot"}, nil, "reboot"
 
   elseif action == "shutdown" then
-    reply(sender, message, true, {action="shutdown"})
-    sleep(0.1)
-    os.shutdown()
+    return true, {action="shutdown"}, nil, "shutdown"
 
   elseif action == "crash" then
-    reply(sender, message, true, {action="crash"})
+    return true, {action="crash"}, nil, "crash"
+  end
+
+  return false, nil, "Commande Malcraft inconnue."
+end
+
+local function performDeferred(action)
+  if not action then return end
+  sleep(0.1)
+
+  if action == "reboot" then
+    os.reboot()
+  elseif action == "shutdown" then
+    os.shutdown()
+  elseif action == "crash" then
     local native = term.native()
     native.setBackgroundColor(colors.black)
     native.setTextColor(colors.red)
@@ -766,10 +863,42 @@ local function handleCommand(sender, message)
     native.write("MALCRAFT SYSTEM CRASH")
     sleep(1.5)
     os.reboot()
-
-  else
-    reply(sender, message, false, nil, "Commande Malcraft inconnue.")
   end
+end
+
+local function handleCommand(sender, message)
+  if not infected or not isOperator(sender) then return end
+  if tonumber(message.source_id) ~= tonumber(sender) then return end
+
+  local payload = message.payload or {}
+  local ok, data, err, deferred = processAction(
+    sender,
+    payload.action,
+    payload.argument
+  )
+
+  reply(sender, message, ok, data, err)
+  performDeferred(deferred)
+end
+
+local function handleBusCommand(sender, requestId, action, payloadJson)
+  if not bus or not infected or not isOperator(sender) then return end
+
+  local argument = jsonDecode(payloadJson) or {}
+  local ok, data, err, deferred = processAction(sender, action, argument)
+
+  if type(bus.reply) == "function" then
+    pcall(
+      bus.reply,
+      tonumber(sender),
+      tostring(requestId or ""),
+      ok == true,
+      jsonEncode(data or {}),
+      tostring(err or "")
+    )
+  end
+
+  performDeferred(deferred)
 end
 
 local function nowMs()
@@ -813,6 +942,29 @@ local function handleBeacon(message, distance)
   pcall(request, "SPREAD_TO", {target_id=targetId}, 1.0)
 end
 
+local function spreadNearbyBridge()
+  if not bus or not canSpreadFromHere() then return end
+  if type(bus.nearby) ~= "function" or type(bus.infectTarget) ~= "function" then return end
+
+  local cfg = propagationSettings()
+  if not cfg.proximity then return end
+
+  local ok, raw = pcall(bus.nearby, cfg.distance)
+  if not ok then return end
+
+  local nearby = jsonDecode(raw) or {}
+  for _, target in ipairs(nearby) do
+    local targetId = tonumber(target.id)
+    if targetId and targetId ~= os.getComputerID() and target.infected ~= true then
+      pcall(
+        bus.infectTarget,
+        targetId,
+        "proximity:" .. tostring(os.getComputerID())
+      )
+    end
+  end
+end
+
 findModems()
 
 if isImmune(os.getComputerID()) then
@@ -835,6 +987,7 @@ end
 local stateTimer = os.startTimer(CHECK_SECONDS)
 local beaconTimer = os.startTimer(propagationSettings().interval)
 local screenTimer = os.startTimer(0.25)
+local bridgeTimer = os.startTimer(1)
 
 while true do
   local event, a, b, c, d, e = os.pullEvent()
@@ -848,9 +1001,29 @@ while true do
     sendScreenFrames()
     screenTimer = os.startTimer(0.25)
 
+  elseif event == "timer" and a == bridgeTimer then
+    syncState()
+    spreadNearbyBridge()
+    bridgeTimer = os.startTimer(1)
+
   elseif event == "timer" and a == beaconTimer then
     sendBeacon()
     beaconTimer = os.startTimer(propagationSettings().interval)
+
+  elseif event == "malcraft_bus_state" then
+    local value = a == true
+    local spread = b == true
+    local source = tostring(c or "bridge")
+
+    if value and not isImmune(os.getComputerID()) then
+      setLocalState(true, spread, source)
+      infectConnectedDisks()
+    else
+      setLocalState(false, false, nil)
+    end
+
+  elseif event == "malcraft_bus_command" then
+    pcall(handleBusCommand, a, b, c, d)
 
   elseif event == "disk" or event == "peripheral" then
     findModems()
