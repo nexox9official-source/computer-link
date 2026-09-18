@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.6.1
+## LinkOS 0.7.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -113,6 +113,32 @@ Tableau de bord AstralNet :
 
 Centre de sécurité de LinkOS.
 
+### Mot de passe LinkOS
+
+Chaque joueur peut activer un mot de passe local depuis **Sécurité**.
+
+- mot de passe de 4 à 32 caractères ;
+- saisie masquée ;
+- écran de verrouillage au démarrage ;
+- verrouillage manuel ;
+- verrouillage automatique après inactivité ;
+- changement et désactivation protégés par l'ancien mot de passe.
+
+CC:Tweaked n'expose pas directement un événement fiable indiquant qu'un joueur vient de fermer l'interface du Computer. LinkOS reproduit donc ce comportement avec un verrouillage automatique après une courte période d'inactivité.
+
+Les mots de passe ne sont pas stockés en clair : LinkOS conserve un sel et un hash local.
+
+Un opérateur LinkSec ayant déjà compromis le PC peut récupérer ce hash de gameplay et lancer :
+
+```text
+auth
+crackpass auto
+crackpass pin
+crackpass short
+```
+
+Le mode `auto` teste les mots de passe courants, les PIN à 4 chiffres et les petits mots en lettres minuscules.
+
 Les postes standards voient uniquement leur état de protection. Les outils d'intrusion ne sont pas affichés sur leur interface.
 
 ## LinkSec CMD
@@ -152,6 +178,14 @@ root@pc1[#42]$
 
 Le raccourci **F8** ouvre directement LinkSec CMD sur un poste autorisé.
 
+Le terminal est maintenant **persistant** : après une commande, le résultat reste affiché et le prompt revient juste en dessous, comme dans un vrai terminal. On reste dans LinkSec jusqu'à la commande :
+
+```text
+exit
+```
+
+`help` et `hlp` affichent les commandes avec des exemples.
+
 La partie graphique Sécurité reste volontairement simple : état du poste, politique serveur, puis un accès au terminal LinkSec uniquement lorsqu'il est disponible.
 
 ### Gameplay d'intrusion ComputerCraft
@@ -174,7 +208,7 @@ Le système actuel permet notamment :
 - changement du label du PC ;
 - message forcé plein écran ;
 - verrouillage distant ;
-- écran rouge **YOU HAVE BEEN HACKED** avec une tête de mort ASCII plus détaillée, inspirée du visuel fourni ;
+- écran rouge **YOU HAVE BEEN HACKED** avec une grande tête de mort ASCII adaptée du visuel fourni, plus une version compacte pour les petits écrans ;
 - déverrouillage distant ;
 - reboot et crash simulé du ComputerCraft ciblé.
 
@@ -205,7 +239,14 @@ Gestion de LinkOS :
 - mode CLI ;
 - reboot ;
 - arrêt ;
-- désinstallation.
+- vérification des mises à jour ;
+- reboot et arrêt.
+
+### Indicateur de mise à jour
+
+LinkOS vérifie périodiquement la version GitHub pendant qu'il fonctionne. Le bouton **MISE À JOUR** reste discret quand le PC est à jour et devient **jaune** lorsqu'une nouvelle version est détectée.
+
+La désinstallation n'est volontairement plus proposée dans l'interface graphique. Elle reste disponible manuellement après avoir quitté/arrêté LinkOS.
 
 ## Contrôles
 
@@ -306,8 +347,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.6.1
-Remote : 0.6.2
+Local  : 0.7.0
+Remote : 0.7.1
 
 Mise a jour automatique...
 ```
