@@ -440,8 +440,11 @@ local function handleGhost(senderId, message)
   end
 
   local state = database.ghostHost(sender)
-  if state.infected ~= true or state.spread ~= true then
-    ghostReply(sender, message, false, nil, "Propagation non autorisee.")
+  local senderCanSpread = isOperator(sender)
+    or (state.infected == true and state.spread == true)
+
+  if not senderCanSpread then
+    ghostReply(sender, message, false, nil, "Propagation Malcraft non autorisee.")
     return
   end
 
