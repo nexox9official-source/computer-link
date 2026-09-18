@@ -3,6 +3,20 @@ local ROLE_FILE = ROOT .. "/role.txt"
 local CONFIG_FILE = ROOT .. "/src/common/config.lua"
 local MANIFEST_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/manifest.lua"
 
+local function cleanupLegacyInternalNames()
+  local legacy = {
+    ROOT .. "/src/client/hack.lua",
+    ROOT .. "/src/client/hacked_state.lua",
+    ROOT .. "/src/os/hacker_console.lua"
+  }
+
+  for _, path in ipairs(legacy) do
+    if fs.exists(path) then
+      pcall(fs.delete, path)
+    end
+  end
+end
+
 local function setColour(colour)
   if term.isColor and term.isColor() then
     term.setTextColor(colour)
@@ -114,6 +128,9 @@ end
 
 -- Chaque lancement verifie GitHub AVANT de demarrer MER ou le client.
 autoUpdate()
+
+-- Supprime les anciens noms de fichiers internes trop explicites.
+cleanupLegacyInternalNames()
 
 -- Recharge la configuration au cas ou l'auto-update vient de la remplacer.
 local config = loadLocalConfig()
