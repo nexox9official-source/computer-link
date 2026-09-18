@@ -1395,7 +1395,7 @@ function LinkOS:uiLoop()
   self:render()
 
   while self.running do
-    local event, a, b, c, d, e = os.pullEvent()
+    local event, a, b, c, d, e = os.pullEventRaw()
     local hijack = hackedState.get()
 
     if hijack.locked then
@@ -1449,7 +1449,7 @@ end
 
 function LinkOS:daemonLoop()
   while self.running do
-    local event, a, b, c, d, e = os.pullEvent()
+    local event, a, b, c, d, e = os.pullEventRaw()
     self.service:handleEvent(event, a, b, c, d, e)
   end
 end
