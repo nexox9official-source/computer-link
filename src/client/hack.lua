@@ -1,6 +1,7 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
+local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
 
 local hack = {}
 
@@ -85,10 +86,15 @@ local function cleanPath(path)
   return "/" .. combined
 end
 
+local function isRomPath(path)
+  path = cleanPath(path)
+  return path == "/rom" or string.sub(path, 1, 5) == "/rom/"
+end
+
 local function listFiles(path)
   path = cleanPath(path)
 
-  if path == "/rom" or string.sub(path, 1, 5) == "/rom/" then
+  if isRomPath(path) then
     return nil, "ROM protegee."
   end
 
@@ -119,7 +125,7 @@ end
 local function readTextFile(path)
   path = cleanPath(path)
 
-  if path == "/rom" or string.sub(path, 1, 5) == "/rom/" then
+  if isRomPath(path) then
     return nil, "ROM protegee."
   end
 
@@ -141,13 +147,68 @@ local function readTextFile(path)
   return content or ""
 end
 
+local function writeTextFile(path, content)
+  path = cleanPath(path)
+  content = tostring(content or "")
+
+  if isRomPath(path) then
+    return nil, "ROM protegee."
+  end
+
+  if #content > config.HACK_MAX_WRITE_BYTES then
+    return nil, "Contenu trop long."
+  end
+
+  local dir = fs.getDir(path)
+  if dir and dir ~= "" and not fs.exists(dir) then
+    fs.makeDir(dir)
+  end
+
+  if fs.exists(path) and fs.isDir(path) then
+    return nil, "La cible est un dossier."
+  end
+
+  local file = fs.open(path, "w")
+  if not file then
+    return nil, "Ecriture impossible."
+  end
+
+  file.write(content)
+  file.close()
+  return {
+    path = path,
+    bytes = #content
+  }
+end
+
+local function deletePath(path)
+  path = cleanPath(path)
+
+  if path == "/" then
+    return nil, "Suppression de la racine interdite."
+  end
+
+  if isRomPath(path) then
+    return nil, "ROM protegee."
+  end
+
+  if not fs.exists(path) then
+    return nil, "Chemin introuvable."
+  end
+
+  fs.delete(path)
+  return { path = path }
+end
+
 local function sessionFor(sourceId, token)
   local session = sessions[tonumber(sourceId)]
   if not session then return nil end
+
   if session.expires_at < util.now() then
     sessions[tonumber(sourceId)] = nil
     return nil
   end
+
   if session.token ~= token then return nil end
   return session
 end
@@ -182,8 +243,7 @@ function hack.handleModem(modemName, channel, replyChannel, message, distance)
     return
   end
 
-  -- Autorisation verifiee cote cible : un client modifie ne suffit pas
-  -- pour s'accorder les commandes d'intrusion.
+  -- Verifie cote cible que l'attaquant fait partie de la politique serveur.
   if not isOperator(sourceId) then
     return
   end
@@ -215,7 +275,9 @@ function hack.handleModem(modemName, channel, replyChannel, message, distance)
 
   if message.type == "CHALLENGE_REQUEST" then
     local requestId = tostring(payload.request_id or "")
-    local nonce = tostring(util.now()) .. ":" .. tostring(math.random(100000, 999999)) .. ":" .. tostring(sourceId)
+    local nonce = tostring(util.now())
+      .. ":" .. tostring(math.random(100000, 999999))
+      .. ":" .. tostring(sourceId)
     local difficulty = config.HACK_BASE_DIFFICULTY * config.HACK_DEFAULT_SECURITY
 
     pending[sourceId] = {
@@ -251,7 +313,8 @@ function hack.handleModem(modemName, channel, replyChannel, message, distance)
     local proof = tonumber(payload.proof)
     if not proof then return end
 
-    local valid = hash(challenge.nonce .. ":" .. tostring(proof)) % challenge.difficulty == 0
+    local valid = hash(challenge.nonce .. ":" .. tostring(proof))
+      % challenge.difficulty == 0
     pending[sourceId] = nil
 
     if not valid then
@@ -308,18 +371,28 @@ function hack.handleRednet(senderId, message, protocol, storage)
   local session = sessionFor(senderId, payload.token)
 
   if not session then
-    sendHackResult(senderId, message.request_id, false, nil, "Session pirate invalide ou expiree.")
+    sendHackResult(
+      senderId,
+      message.request_id,
+      false,
+      nil,
+      "Session pirate invalide ou expiree."
+    )
     return true
   end
 
   local action = string.lower(tostring(payload.action or ""))
+  local argument = payload.argument
 
   if action == "info" then
+    local locked, lockData = hackedState.isLocked()
     sendHackResult(senderId, message.request_id, true, {
       computer_id = os.getComputerID(),
       label = os.getComputerLabel(),
       messages = storage.count(),
-      free_space = fs.getFreeSpace("/")
+      free_space = fs.getFreeSpace("/"),
+      locked = locked,
+      locked_by = lockData and lockData.source_id or nil
     })
 
   elseif action == "conversations" then
@@ -328,18 +401,71 @@ function hack.handleRednet(senderId, message, protocol, storage)
     })
 
   elseif action == "ls" then
-    local entries, err = listFiles(payload.argument or "/")
+    local entries, err = listFiles(argument or "/")
     sendHackResult(senderId, message.request_id, entries ~= nil, {
-      path = cleanPath(payload.argument or "/"),
+      path = cleanPath(argument or "/"),
       entries = entries
     }, err)
 
   elseif action == "cat" then
-    local content, err = readTextFile(payload.argument)
+    local content, err = readTextFile(argument)
     sendHackResult(senderId, message.request_id, content ~= nil, {
-      path = cleanPath(payload.argument),
+      path = cleanPath(argument),
       content = content
     }, err)
+
+  elseif action == "write" then
+    local arg = type(argument) == "table" and argument or {}
+    local result, err = writeTextFile(arg.path, arg.content)
+    sendHackResult(senderId, message.request_id, result ~= nil, result, err)
+
+  elseif action == "delete" then
+    local result, err = deletePath(argument)
+    sendHackResult(senderId, message.request_id, result ~= nil, result, err)
+
+  elseif action == "label" then
+    local label = tostring(argument or "")
+    if label == "" then
+      sendHackResult(senderId, message.request_id, false, nil, "Label vide.")
+    else
+      os.setComputerLabel(string.sub(label, 1, 32))
+      sendHackResult(senderId, message.request_id, true, {
+        label = os.getComputerLabel()
+      })
+      os.queueEvent("linkos_refresh")
+    end
+
+  elseif action == "message" then
+    local flash = hackedState.flash(senderId, tostring(argument or ""))
+    sendHackResult(senderId, message.request_id, true, {
+      displayed = true,
+      message = flash.message
+    })
+
+  elseif action == "lock" then
+    local text = tostring(argument or "")
+    if text == "" then
+      text = "Your system is under remote control."
+    end
+
+    local data = hackedState.lock(senderId, text)
+    sendHackResult(senderId, message.request_id, true, {
+      locked = true,
+      message = data.message
+    })
+
+  elseif action == "unlock" then
+    hackedState.unlock()
+    sendHackResult(senderId, message.request_id, true, {
+      locked = false
+    })
+
+  elseif action == "reboot" then
+    sendHackResult(senderId, message.request_id, true, {
+      rebooting = true
+    })
+    sleep(0.35)
+    os.reboot()
 
   elseif action == "crash" then
     util.writeAll(config.CRASH_FLAG, textutils.serialize({
@@ -356,7 +482,13 @@ function hack.handleRednet(senderId, message, protocol, storage)
     os.reboot()
 
   else
-    sendHackResult(senderId, message.request_id, false, nil, "Action distante inconnue.")
+    sendHackResult(
+      senderId,
+      message.request_id,
+      false,
+      nil,
+      "Action distante inconnue."
+    )
   end
 
   return true
@@ -444,6 +576,7 @@ function hack.attack(modemName, targetId)
       and message.type == "CHALLENGE"
       and tonumber(message.source_id) == targetId
       and tostring((message.payload or {}).request_id or "") == requestId then
+
       challenge = message.payload
       break
     end
@@ -453,7 +586,8 @@ function hack.attack(modemName, targetId)
   local proof
 
   for candidate = 0, config.HACK_MAX_PROOF do
-    if hash(tostring(challenge.nonce) .. ":" .. tostring(candidate)) % difficulty == 0 then
+    if hash(tostring(challenge.nonce) .. ":" .. tostring(candidate))
+      % difficulty == 0 then
       proof = candidate
       break
     end
