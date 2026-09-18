@@ -444,6 +444,15 @@ local function handleGhost(senderId, message)
     end
 
     local state = database.ghostHost(sender)
+
+    if state.infected == true then
+      database.touchGhostHost(sender, {
+        label = payload.label,
+        source = payload.local_source
+      })
+      state = database.ghostHost(sender)
+    end
+
     ghostReply(sender, message, true, {
       infected = state.infected == true,
       spread = state.spread == true,
