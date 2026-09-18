@@ -25,6 +25,7 @@ function service.new()
   self.startedAt = util.now()
   self.updateAvailable = false
   self.remoteVersion = config.VERSION
+  self.serverVersion = nil
   self.updateTimer = nil
   return self
 end
@@ -98,6 +99,7 @@ function service:start()
     return false, err
   end
 
+  self.serverVersion = hello.payload and hello.payload.version or nil
   self.online = true
   self.lastError = nil
   self:syncInbox(false)
@@ -175,6 +177,7 @@ function service:reconnect()
     return false, err
   end
 
+  self.serverVersion = packet.payload and packet.payload.version or nil
   self.online = true
   self.lastError = nil
   return true
@@ -268,7 +271,40 @@ function service:stats()
   return packet.payload
 end
 
+local function versionParts(value)
+  local a, b, c = tostring(value or ""):match("^(%d+)%.(%d+)%.(%d+)")
+  return tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0
+end
+
+local function versionAtLeast(value, required)
+  local a1, b1, c1 = versionParts(value)
+  local a2, b2, c2 = versionParts(required)
+
+  if a1 ~= a2 then return a1 > a2 end
+  if b1 ~= b2 then return b1 > b2 end
+  return c1 >= c2
+end
+
+function service:ensureGhostSupport()
+  if not self.serverVersion then
+    local packet, err = self:request("PING")
+    if not packet then return false, err end
+    self.serverVersion = packet.payload and packet.payload.version or nil
+  end
+
+  if not versionAtLeast(self.serverVersion, "0.9.0") then
+    return false,
+      "MER trop ancien (" .. tostring(self.serverVersion or "?")
+      .. "). Redemarre le MER pour passer en 0.9.0."
+  end
+
+  return true
+end
+
 function service:ghostStatus(targetId)
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_STATUS", {
     target_id = tonumber(targetId)
   })
@@ -277,6 +313,9 @@ function service:ghostStatus(targetId)
 end
 
 function service:ghostInstall(targetId, spread)
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_INFECT", {
     target_id = tonumber(targetId),
     spread = spread ~= false
@@ -286,6 +325,9 @@ function service:ghostInstall(targetId, spread)
 end
 
 function service:ghostClean(targetId)
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_CLEAN", {
     target_id = tonumber(targetId)
   })
@@ -294,6 +336,9 @@ function service:ghostClean(targetId)
 end
 
 function service:ghostSetSpread(targetId, enabled)
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_SPREAD", {
     target_id = tonumber(targetId),
     enabled = enabled == true
@@ -303,12 +348,18 @@ function service:ghostSetSpread(targetId, enabled)
 end
 
 function service:ghostList()
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_LIST")
   if not packet then return nil, err end
   return packet.payload
 end
 
 function service:ghostDiskSet(diskId, infected)
+  local supported, supportErr = self:ensureGhostSupport()
+  if not supported then return nil, supportErr end
+
   local packet, err = self:request("GHOST_DISK_SET", {
     disk_id = tonumber(diskId),
     infected = infected ~= false
