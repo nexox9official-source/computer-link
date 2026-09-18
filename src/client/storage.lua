@@ -84,6 +84,47 @@ function storage.recent(limit)
   return out
 end
 
+function storage.conversationIndex()
+  local myId = os.getComputerID()
+  local peers = {}
+
+  for _, message in ipairs(state.messages) do
+    local fromId = tonumber(message.from_id)
+    local toId = tonumber(message.to_id)
+    local peerId = fromId == myId and toId or fromId
+
+    if peerId and peerId ~= myId then
+      local key = tostring(peerId)
+      local item = peers[key]
+
+      if not item then
+        item = {
+          peer_id = peerId,
+          count = 0,
+          last = nil
+        }
+        peers[key] = item
+      end
+
+      item.count = item.count + 1
+      item.last = message
+    end
+  end
+
+  local out = {}
+  for _, item in pairs(peers) do
+    out[#out + 1] = item
+  end
+
+  table.sort(out, function(a, b)
+    local at = a.last and tonumber(a.last.sent_at) or 0
+    local bt = b.last and tonumber(b.last.sent_at) or 0
+    return at > bt
+  end)
+
+  return out
+end
+
 function storage.count()
   return #state.messages
 end
