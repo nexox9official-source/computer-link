@@ -2160,41 +2160,9 @@ function LinkOS:renderHacker(target, l)
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "PERIPHERIQUES", colors.white, t.panel)
-      self:addButton("ghost:devices", x + bw + 2, y, bw, 1, function()
-        self:ghostLoadDevices()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "INVENTAIRES", colors.white, t.panel)
-    self:addButton("ghost:inventories", x, y, bw, 1, function()
-      self:ghostInventoryScan()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "REDSTONE", colors.white, t.panel)
-      self:addButton("ghost:redstone", x + bw + 2, y, bw, 1, function()
-        self:ghostLoadRedstone()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "DISQUES", colors.white, t.panel)
-    self:addButton("ghost:drives", x, y, bw, 1, function()
-      self:ghostLoadDrives()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "PC PROCHES", colors.white, t.panel)
-      self:addButton("ghost:nearby", x + bw + 2, y, bw, 1, function()
-        self:ghostLoadNearbyComputers()
+      draw.button(target, x + bw + 2, y, bw, "OUTILS", colors.white, t.panel)
+      self:addButton("ghost:tools", x + bw + 2, y, bw, 1, function()
+        self.linksecView = "ghost_tools"
         self:render()
       end)
     end
@@ -2217,6 +2185,59 @@ function LinkOS:renderHacker(target, l)
       end)
     end
 
+    return
+  end
+
+  if self.linksecView == "ghost_tools" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("ghost:tools:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Outils de la cible", colors.red, t.bg, w)
+    y = y + 2
+
+    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
+
+    draw.button(target, x, y, bw, "PERIPHERIQUES", colors.white, t.panel)
+    self:addButton("ghost:devices", x, y, bw, 1, function()
+      self:ghostLoadDevices()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "INVENTAIRES", colors.white, t.panel)
+      self:addButton("ghost:inventories", x + bw + 2, y, bw, 1, function()
+        self:ghostInventoryScan()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "REDSTONE", colors.white, t.panel)
+    self:addButton("ghost:redstone", x, y, bw, 1, function()
+      self:ghostLoadRedstone()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "DISQUES", colors.white, t.panel)
+      self:addButton("ghost:drives", x + bw + 2, y, bw, 1, function()
+        self:ghostLoadDrives()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, math.min(18, w), "PC PROCHES / CABLE", colors.white, t.panel)
+    self:addButton("ghost:nearby", x, y, math.min(18, w), 1, function()
+      self:ghostLoadNearbyComputers()
+      self:render()
+    end)
     return
   end
 
