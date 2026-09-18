@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.5.0
+## LinkOS 0.6.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -111,7 +111,50 @@ Tableau de bord AstralNet :
 
 ### Sécurité
 
-Centre de sécurité et gameplay d'intrusion ComputerCraft.
+Centre de sécurité de LinkOS.
+
+Les postes standards voient uniquement leur état de protection. Les outils d'intrusion ne sont pas affichés sur leur interface.
+
+## LinkSec CMD
+
+Sur un Computer autorisé par la politique serveur — actuellement **PC #1** — LinkOS ajoute une application supplémentaire : **LinkSec CMD**.
+
+Elle n'existe visuellement que pour les opérateurs autorisés. Elle se comporte comme un terminal d'administration/intrusion intégré à l'OS et permet notamment :
+
+```text
+help
+scan
+targets
+hack <id>
+use <id>
+sessions
+info
+conversations
+ls [chemin]
+cat <fichier>
+write <fichier> <texte>
+delete <chemin>
+lock [message]
+message <texte>
+unlock
+label <nom>
+reboot
+crash
+disconnect
+```
+
+Le prompt affiche toujours l'opérateur et la cible active :
+
+```text
+root@pc1[-]$
+root@pc1[#42]$
+```
+
+Le raccourci **F8** ouvre directement LinkSec CMD sur un poste autorisé.
+
+La partie graphique Sécurité reste volontairement simple : état du poste, politique serveur, puis un accès au terminal LinkSec uniquement lorsqu'il est disponible.
+
+### Gameplay d'intrusion ComputerCraft
 
 Le **Computer #1** est l'opérateur spécial autorisé par la politique serveur.
 
@@ -131,7 +174,7 @@ Le système actuel permet notamment :
 - changement du label du PC ;
 - message forcé plein écran ;
 - verrouillage distant ;
-- écran rouge **YOU HAVE BEEN HACKED** avec tête de mort ASCII ;
+- écran rouge **YOU HAVE BEEN HACKED** avec une tête de mort ASCII plus détaillée, inspirée du visuel fourni ;
 - déverrouillage distant ;
 - reboot et crash simulé du ComputerCraft ciblé.
 
@@ -180,6 +223,7 @@ F4  Sécurité
 F5  Fichiers
 F6  Paramètres
 F7  Contacts
+F8  LinkSec CMD (opérateurs uniquement)
 ESC Bureau
 ```
 
@@ -262,8 +306,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.5.0
-Remote : 0.5.1
+Local  : 0.6.0
+Remote : 0.6.1
 
 Mise a jour automatique...
 ```
