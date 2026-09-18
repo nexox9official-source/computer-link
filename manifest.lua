@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.5.0",
+  version = "0.6.0",
   protocol_version = 2,
   files = {
     "install.lua",
@@ -21,6 +21,7 @@ return {
     "src/ui/draw.lua",
     "src/ui/display.lua",
     "src/ui/prefs.lua",
+    "src/os/hacker_console.lua",
     "src/os/linkos.lua",
     "src/client/client.lua"
   }
