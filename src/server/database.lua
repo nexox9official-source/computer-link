@@ -141,6 +141,29 @@ function database.setGhostHost(computerId, infected, actorId, spread)
   return database.ghostHost(computerId)
 end
 
+function database.touchGhostHost(computerId, meta)
+  computerId = tonumber(computerId)
+  if not computerId then return nil end
+
+  local key = tostring(computerId)
+  local current = state.ghost_hosts[key] or {}
+
+  if current.infected ~= true then
+    return database.ghostHost(computerId)
+  end
+
+  meta = type(meta) == "table" and meta or {}
+  current.last_seen = util.now()
+  current.updated_at = current.last_seen
+
+  if meta.label ~= nil then current.label = meta.label end
+  if meta.source ~= nil then current.last_source = meta.source end
+
+  state.ghost_hosts[key] = current
+  database.save()
+  return current
+end
+
 function database.listGhostHosts()
   local out = {}
   for key, value in pairs(state.ghost_hosts) do
@@ -151,7 +174,10 @@ function database.listGhostHosts()
         spread = value.spread == true,
         actor_id = value.actor_id,
         created_at = value.created_at,
-        updated_at = value.updated_at
+        updated_at = value.updated_at,
+        last_seen = value.last_seen,
+        label = value.label,
+        last_source = value.last_source
       }
     end
   end
