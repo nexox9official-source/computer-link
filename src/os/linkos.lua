@@ -91,6 +91,7 @@ function LinkOS.new()
   self.ghostDiskStates = {}
   self.malcraftHosts = {}
   self.malcraftLocalDisks = {}
+  self.malcraftTarget = nil
   return self
 end
 
@@ -1164,6 +1165,10 @@ function LinkOS:linksecLoadDrives()
   self.linksecView = "drives"
 end
 
+function LinkOS:malcraftTargetId()
+  return tonumber(self.malcraftTarget or self.hackerConsole.target)
+end
+
 function LinkOS:malcraftLocalDiskList()
   local out = {}
 
@@ -1221,7 +1226,7 @@ function LinkOS:malcraftSelectHost(computerId)
   computerId = tonumber(computerId)
   if not computerId then return end
 
-  self.hackerConsole.target = computerId
+  self.malcraftTarget = computerId
 
   local data, err = self.service:ghostStatus(computerId)
   if not data then
@@ -1271,7 +1276,7 @@ function LinkOS:malcraftToggleLocalDisk(diskId)
 end
 
 function LinkOS:ghostRefresh()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostStatus(targetId)
@@ -1285,7 +1290,7 @@ function LinkOS:ghostRefresh()
 end
 
 function LinkOS:ghostInstall()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostInstall(targetId, true)
@@ -1299,7 +1304,7 @@ function LinkOS:ghostInstall()
 end
 
 function LinkOS:ghostClean()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostClean(targetId)
@@ -1313,7 +1318,7 @@ function LinkOS:ghostClean()
 end
 
 function LinkOS:ghostToggleSpread()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId or not self.ghostState then return end
 
   local state = self.ghostState.state or {}
@@ -1330,7 +1335,7 @@ function LinkOS:ghostToggleSpread()
 end
 
 function LinkOS:ghostSpreadTo()
-  local sourceId = self:linksecTarget()
+  local sourceId = self:malcraftTargetId()
   if not sourceId then return end
 
   local raw = self:prompt(
@@ -1359,7 +1364,7 @@ function LinkOS:ghostSpreadTo()
 end
 
 function LinkOS:ghostLoadDevices()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostRemote(targetId, "devices")
@@ -1384,7 +1389,7 @@ function LinkOS:ghostOpenDevice(name)
 end
 
 function LinkOS:ghostCallDevice(method)
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId or not self.ghostDevice then return end
 
   local raw = self:prompt(
@@ -1438,7 +1443,7 @@ function LinkOS:ghostCallDevice(method)
 end
 
 function LinkOS:ghostLoadRedstone()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostRemote(targetId, "redstone")
@@ -1452,7 +1457,7 @@ function LinkOS:ghostLoadRedstone()
 end
 
 function LinkOS:ghostSetRedstone(side)
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local value = self:prompt("Redstone " .. tostring(side), "Tape on, off ou 0-15.")
@@ -1471,7 +1476,7 @@ function LinkOS:ghostSetRedstone(side)
 end
 
 function LinkOS:ghostLoadDrives()
-  local targetId = self:linksecTarget()
+  local targetId = self:malcraftTargetId()
   if not targetId then return end
 
   local data, err = self.service:ghostRemote(targetId, "drives")
@@ -1564,13 +1569,17 @@ function LinkOS:renderHacker(target, l)
 
   draw.text(target, x, y, "LinkSec", colors.red, t.bg, w)
 
-  local targetText = self.hackerConsole.target
-    and ("Cible PC #" .. tostring(self.hackerConsole.target))
+  local malcraftView = string.sub(tostring(self.linksecView or ""), 1, 5) == "ghost"
+    or string.sub(tostring(self.linksecView or ""), 1, 8) == "malcraft"
+  local shownTarget = malcraftView and self:malcraftTargetId() or tonumber(self.hackerConsole.target)
+
+  local targetText = shownTarget
+    and ("Cible PC #" .. tostring(shownTarget))
     or "Aucune cible"
 
   if w >= 26 then
     draw.text(target, math.max(x, x + w - #targetText), y, targetText,
-      self.hackerConsole.target and t.good or t.warn, t.bg, #targetText)
+      shownTarget and t.good or t.warn, t.bg, #targetText)
   end
 
   y = y + 2
