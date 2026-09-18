@@ -1,4 +1,5 @@
 local INSTALL_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua"
+local UNINSTALL_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/uninstall.lua"
 local ROOT = "/computer-link"
 local args = { ... }
 
@@ -76,6 +77,44 @@ local function runInstaller()
   return true
 end
 
+local function runUninstaller()
+  if not http or not http.get then
+    colour(colors.red)
+    print("HTTP est desactive sur ce serveur.")
+    colour(colors.white)
+    return false
+  end
+
+  local response, err = http.get(UNINSTALL_URL)
+  if not response then
+    colour(colors.red)
+    print("Desinstallateur inaccessible: " .. tostring(err))
+    colour(colors.white)
+    return false
+  end
+
+  local source = response.readAll()
+  response.close()
+
+  local loader, loadErr = load(source, "@computer_link_uninstall.lua", "t", _ENV)
+  if not loader then
+    colour(colors.red)
+    print("Desinstallateur invalide: " .. tostring(loadErr))
+    colour(colors.white)
+    return false
+  end
+
+  local ok, runErr = pcall(loader)
+  if not ok then
+    colour(colors.red)
+    print("Desinstallation impossible: " .. tostring(runErr))
+    colour(colors.white)
+    return false
+  end
+
+  return true
+end
+
 local function status()
   title()
 
@@ -109,7 +148,8 @@ if command == "" then
     print("1 - Demarrer LinkOS")
     print("2 - Mettre a jour")
     print("3 - Statut")
-    print("4 - Quitter")
+    print("4 - Desinstaller LinkOS")
+    print("5 - Quitter")
     write("Choix: ")
 
     local choice = read()
@@ -120,6 +160,8 @@ if command == "" then
       shell.run(ROOT .. "/update.lua")
     elseif choice == "3" then
       status()
+    elseif choice == "4" then
+      runUninstaller()
     end
     return
   end
@@ -169,10 +211,11 @@ elseif command == "start" then
 
 elseif command == "uninstall" or command == "remove" then
   title()
-  colour(colors.red)
-  print("ACTION BLOQUEE")
-  colour(colors.white)
-  print("La maintenance systeme n'est pas disponible depuis un poste joueur.")
+  if not installed() then
+    print("LinkOS n'est pas installe.")
+  else
+    runUninstaller()
+  end
 
 elseif command == "status" or command == "id" then
   status()
@@ -183,6 +226,7 @@ elseif command == "help" then
   print("link install    installer LinkOS")
   print("link update     mise a jour manuelle")
   print("link start      demarrer LinkOS")
+  print("link uninstall  desinstaller LinkOS")
   print("link status     statut du PC")
 
 else
