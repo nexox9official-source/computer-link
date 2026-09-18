@@ -1071,14 +1071,22 @@ function LinkOS:linksecCallDevice(method)
   )
 
   local args = {}
-  for token in tostring(raw or ""):gmatch("%S+") do
-    local lower = string.lower(token)
-    if lower == "true" or lower == "on" then
-      args[#args + 1] = true
-    elseif lower == "false" or lower == "off" then
-      args[#args + 1] = false
-    else
-      args[#args + 1] = tonumber(token) or token
+  local methodLower = string.lower(tostring(method or ""))
+
+  -- Les imprimantes CC:Tweaked ont besoin de recevoir le texte complet comme
+  -- un seul argument, espaces compris.
+  if methodLower == "write" or methodLower == "setpagetitle" then
+    args[1] = tostring(raw or "")
+  else
+    for token in tostring(raw or ""):gmatch("%S+") do
+      local lower = string.lower(token)
+      if lower == "true" or lower == "on" then
+        args[#args + 1] = true
+      elseif lower == "false" or lower == "off" then
+        args[#args + 1] = false
+      else
+        args[#args + 1] = tonumber(token) or token
+      end
     end
   end
 
@@ -1277,14 +1285,22 @@ function LinkOS:ghostCallDevice(method)
   )
 
   local args = {}
-  for token in tostring(raw or ""):gmatch("%S+") do
-    local lower = string.lower(token)
-    if lower == "true" or lower == "on" then
-      args[#args + 1] = true
-    elseif lower == "false" or lower == "off" then
-      args[#args + 1] = false
-    else
-      args[#args + 1] = tonumber(token) or token
+  local methodLower = string.lower(tostring(method or ""))
+
+  -- Les imprimantes CC:Tweaked ont besoin de recevoir le texte complet comme
+  -- un seul argument, espaces compris.
+  if methodLower == "write" or methodLower == "setpagetitle" then
+    args[1] = tostring(raw or "")
+  else
+    for token in tostring(raw or ""):gmatch("%S+") do
+      local lower = string.lower(token)
+      if lower == "true" or lower == "on" then
+        args[#args + 1] = true
+      elseif lower == "false" or lower == "off" then
+        args[#args + 1] = false
+      else
+        args[#args + 1] = tonumber(token) or token
+      end
     end
   end
 
