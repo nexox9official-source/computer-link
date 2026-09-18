@@ -88,6 +88,7 @@ function LinkOS.new()
   self.ghostDeviceResult = nil
   self.ghostRedstone = {}
   self.ghostDrives = {}
+  self.ghostDiskStates = {}
   return self
 end
 
@@ -1356,17 +1357,36 @@ function LinkOS:ghostLoadDrives()
   end
 
   self.ghostDrives = data.disk_ids or {}
+  self.ghostDiskStates = {}
+
+  local registry = self.service:ghostList()
+  if registry and type(registry.disks) == "table" then
+    for _, item in ipairs(registry.disks) do
+      self.ghostDiskStates[tonumber(item.disk_id)] = true
+    end
+  end
+
   self.linksecView = "ghost_drives"
 end
 
 function LinkOS:ghostCarrier(diskId)
-  local data, err = self.service:ghostDiskSet(diskId, true)
+  diskId = tonumber(diskId)
+  if not diskId then return end
+
+  local infected = self.ghostDiskStates[diskId] == true
+  local data, err = self.service:ghostDiskSet(diskId, not infected)
+
   if not data then
     self:setNotice("Support GhostLink: " .. tostring(err), self:theme().danger)
     return
   end
 
-  self:setNotice("Disque #" .. tostring(diskId) .. " marque comme vecteur GhostLink.", self:theme().good)
+  self.ghostDiskStates[diskId] = not infected
+  self:setNotice(
+    "Disque #" .. tostring(diskId)
+      .. (infected and " nettoye." or " marque comme vecteur GhostLink."),
+    self:theme().good
+  )
 end
 
 function LinkOS:showRemoteData(action, data)
@@ -1859,8 +1879,11 @@ function LinkOS:renderHacker(target, l)
     else
       for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
         local diskId = self.ghostDrives[i]
-        local line = "Disk #" .. tostring(diskId) .. "  [MARQUER GHOSTLINK]"
-        draw.text(target, x, y, line, t.text, t.panel, w)
+        local active = self.ghostDiskStates[tonumber(diskId)] == true
+        local line = "Disk #" .. tostring(diskId)
+          .. (active and "  [GHOSTLINK ACTIF - NETTOYER]"
+            or "  [MARQUER GHOSTLINK]")
+        draw.text(target, x, y, line, active and colors.red or t.text, t.panel, w)
         self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
           self:ghostCarrier(diskId)
           self:render()
