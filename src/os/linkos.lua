@@ -1290,7 +1290,7 @@ function LinkOS:ghostInstall()
 
   local data, err = self.service:ghostInstall(targetId, true)
   if not data then
-    self:setNotice("Installation GhostLink impossible: " .. tostring(err), self:theme().danger)
+    self:setNotice("Installation Malcraft impossible: " .. tostring(err), self:theme().danger)
     return
   end
 
@@ -1334,7 +1334,7 @@ function LinkOS:ghostSpreadTo()
   if not sourceId then return end
 
   local raw = self:prompt(
-    "Propagation GhostLink",
+    "Propagation Malcraft",
     "Computer ID a contaminer depuis la cible active."
   )
   local targetId = tonumber(raw)
@@ -1353,7 +1353,7 @@ function LinkOS:ghostSpreadTo()
   end
 
   self:setNotice(
-    "PC #" .. tostring(targetId) .. " marque GhostLink via PC #" .. tostring(sourceId) .. ".",
+    "PC #" .. tostring(targetId) .. " propage Malcraft via PC #" .. tostring(sourceId) .. ".",
     self:theme().good
   )
 end
