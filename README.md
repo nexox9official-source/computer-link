@@ -1,72 +1,232 @@
-# Computer Link — AstralNet / MER
+# Computer Link — LinkOS / AstralNet
 
-Réseau ComputerCraft / CC:Tweaked pour Astralium.
+Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## Version 0.3.1 — serveur intégré + désinstallation propre
+## LinkOS 0.4.1
 
-Computer Link n'utilise plus de "comptes" pour la messagerie. **L'identité réseau principale est directement l'ID du ComputerCraft**.
+Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
-Exemple :
+- bureau avec barre des tâches ;
+- applications graphiques ;
+- souris sur Advanced Computer ;
+- interaction tactile sur Advanced Monitor ;
+- navigation clavier avec raccourcis F1–F7 ;
+- interface responsive selon la résolution ;
+- support des moniteurs multi-blocs ;
+- gestion de plusieurs moniteurs séparés ;
+- changement d'écran principal par simple toucher ;
+- affichages secondaires avec statut temps réel ;
+- mode CLI classique conservé en secours.
+
+L'identité réseau reste le **Computer ID**. Il n'existe pas de compte central obligatoire.
 
 ```text
-PC #12  ->  PC #47
+PC #1  <---- AstralNet / MER ---->  PC #42
 ```
 
-Le serveur MER sert de routeur central et de boîte d'attente. Il ne fournit aucune commande permettant à un joueur normal de lire les messages d'un autre PC.
+## Interface adaptative
 
-Les historiques de conversation sont enregistrés localement sur chaque Computer dans :
+LinkOS mesure automatiquement la taille réelle de l'écran.
+
+Il utilise quatre présentations :
+
+```text
+COMPACT   petit écran / Computer
+STANDARD  petit moniteur
+WIDE      moniteur moyen
+WALL      grand mur de moniteurs
+```
+
+Pour un moniteur, LinkOS ajuste aussi automatiquement `setTextScale` afin de conserver un bon compromis entre lisibilité et espace disponible.
+
+Un grand mur ne reçoit donc pas une interface simplement étirée : il affiche davantage d'informations et davantage de colonnes.
+
+### Plusieurs moniteurs
+
+Si plusieurs moniteurs sont connectés :
+
+- LinkOS choisit automatiquement un affichage principal adapté ;
+- les autres deviennent des écrans compagnons ;
+- ils affichent l'état MER, l'ID du PC, l'heure et les notifications ;
+- toucher un **Advanced Monitor** secondaire le transforme immédiatement en écran principal.
+
+L'écran peut aussi être choisi dans **Paramètres**.
+
+## Applications intégrées
+
+### Bureau
+
+Le bureau affiche l'état général du PC et donne accès aux applications.
+
+La barre des tâches reste disponible sur les écrans suffisamment grands.
+
+### Messages
+
+Messagerie privée adressée directement à un Computer ID.
+
+```text
+PC #12 -> PC #47
+```
+
+Les conversations sont conservées localement dans :
 
 ```text
 /computer-link/data/history.db
 ```
 
-Le MER conserve uniquement les messages encore en attente de récupération et journalise le routage sans afficher leur contenu dans sa console.
+Fonctions :
 
-> C'est un système de confidentialité **dans l'univers ComputerCraft**. Ce n'est pas une implémentation cryptographique destinée à protéger de vraies données sensibles hors du jeu.
+- nouvelles conversations ;
+- historique local ;
+- notifications ;
+- réponse rapide ;
+- alias locaux.
+
+### Contacts
+
+Un carnet d'adresses local permet d'associer un nom humain à un Computer ID :
+
+```text
+QG Nord      -> #42
+Banque UCS   -> #58
+Radar Est    -> #71
+```
+
+Les alias restent locaux au PC et ne changent jamais l'adresse réseau réelle.
+
+### Réseau
+
+Tableau de bord AstralNet :
+
+- Computer ID ;
+- label du PC ;
+- MER connecté ;
+- modem utilisé ;
+- version ;
+- protocole ;
+- ping ;
+- synchronisation ;
+- reconnexion manuelle ;
+- renommage du PC.
+
+### Sécurité
+
+Centre de sécurité et gameplay d'intrusion ComputerCraft.
+
+Le **Computer #1** est actuellement l'opérateur spécial autorisé par la politique serveur.
+
+Les autres PC peuvent être des cibles, mais ne peuvent pas exécuter les commandes d'intrusion.
+
+La politique peut être fournie par la ROM côté serveur grâce au datapack, donc elle ne dépend pas uniquement d'un fichier local facilement modifiable.
+
+Le système actuel permet notamment :
+
+- scan de proximité ;
+- challenge d'intrusion ;
+- sessions temporaires ;
+- inspection des informations d'un PC compromis ;
+- lecture de son historique Computer Link ;
+- exploration de fichiers ComputerCraft ;
+- crash simulé du ComputerCraft ciblé.
+
+Tout cela reste **strictement dans Minecraft/CC:Tweaked**.
+
+### Fichiers
+
+Explorateur de fichiers local :
+
+- navigation dans les dossiers ;
+- aperçu de fichiers texte ;
+- taille des fichiers ;
+- espace disponible.
+
+### Paramètres
+
+Gestion de LinkOS :
+
+- écran principal ;
+- moniteurs détectés ;
+- résolution ;
+- mode responsive ;
+- support tactile ;
+- couleur d'accent ;
+- mise à jour ;
+- mode CLI ;
+- reboot ;
+- arrêt ;
+- désinstallation.
+
+## Contrôles
+
+Sur **Advanced Computer**, utilise la souris.
+
+Sur **Advanced Monitor**, touche directement les boutons.
+
+Le clavier reste utilisable :
+
+```text
+F1  Bureau
+F2  Messages
+F3  Réseau
+F4  Sécurité
+F5  Fichiers
+F6  Paramètres
+F7  Contacts
+ESC Bureau
+```
+
+Lorsqu'un champ texte doit être saisi alors que l'interface est affichée sur un moniteur, LinkOS demande la saisie sur le terminal du Computer puis revient automatiquement sur le moniteur.
+
+## MER
+
+Le MER est le serveur central de routage AstralNet.
+
+Il gère notamment :
+
+- découverte des PC ;
+- présence ;
+- routage des messages ;
+- messages en attente pour les PC hors ligne ;
+- statistiques réseau.
+
+Le contenu des conversations n'est pas affiché dans la console normale du MER.
 
 ## Installation serveur recommandée
 
-Pour Astralium, la méthode recommandée est maintenant le **datapack serveur Computer Link**.
-
-Place le ZIP du datapack dans :
+Installe le datapack Computer Link dans :
 
 ```text
 <monde>/datapacks/
 ```
 
-puis exécute :
+puis :
 
 ```text
 /reload
 ```
 
-CC:Tweaked charge alors depuis le serveur :
-
-- le programme ROM `link` ;
-- un petit message d'aide sur les PC non configurés ;
-- la politique serveur Computer Link (dont les Computer IDs autorisés pour le hacking).
-
-Sur n'importe quel nouveau PC, plus besoin de recopier l'URL GitHub :
+Le datapack ajoute la commande CraftOS :
 
 ```text
 link
 ```
 
-ou directement :
+Sur un nouveau Computer :
 
 ```text
 link client
 ```
 
-Pour créer le serveur mère :
+Pour le MER :
 
 ```text
 link server
 ```
 
-Autres commandes de bootstrap :
+Autres commandes :
 
 ```text
+link
 link status
 link update
 link start
@@ -74,181 +234,62 @@ link uninstall
 link help
 ```
 
-Les fichiers placés dans la ROM CraftOS par le datapack sont côté serveur et ne sont pas modifiables depuis le disque normal d'un ComputerCraft.
+## Installation manuelle de secours
 
-### Installation manuelle de secours
-
-
-### Serveur mère MER
-
-```text
-wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua server
-```
-
-Puis :
-
-```text
-reboot
-```
-
-### PC client
+Client :
 
 ```text
 wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua client
 ```
 
-Puis :
+MER :
 
 ```text
-reboot
+wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua server
 ```
 
-Chaque machine doit avoir un **Wireless Modem** pour utiliser le réseau radio.
+## Mises à jour
+
+Les installations récentes vérifient GitHub automatiquement à chaque démarrage.
+
+```text
+COMPUTER LINK
+AUTO UPDATE
+
+Local  : 0.4.1
+Remote : 0.4.2
+
+Mise a jour automatique...
+```
+
+Si GitHub est indisponible, LinkOS démarre avec sa copie locale.
 
 ## Désinstallation
 
-Un joueur peut retirer complètement Computer Link de son Computer avec :
+Depuis LinkOS :
 
 ```text
 uninstall
 ```
 
-depuis le client Computer Link, ou depuis CraftOS avec le datapack serveur :
+ou depuis CraftOS avec le datapack :
 
 ```text
 link uninstall
 ```
 
-La commande demande une confirmation, supprime l'application, les données locales et l'historique du PC, puis restaure l'ancien `startup.lua` lorsqu'une sauvegarde existe.
+L'ancien `startup.lua` est restauré lorsqu'une sauvegarde existe.
 
-Le **Computer ID reste inchangé**, car il appartient à CC:Tweaked et non à Computer Link.
-
-## Commandes réseau privées
-
-Afficher l'identité du PC :
-
-```text
-id
-```
-
-Donner un label lisible au PC :
-
-```text
-label QG-NORD
-```
-
-Envoyer un message privé directement à un autre Computer ID :
-
-```text
-msg 47 Rendez-vous au bunker a 22h
-```
-
-Récupérer les messages :
-
-```text
-inbox
-```
-
-Voir uniquement sa propre conversation locale avec un PC :
-
-```text
-history 47
-```
-
-Vérifier qu'un ID est connu du MER :
-
-```text
-device 47
-```
-
-Aucune commande normale ne permet d'obtenir la liste complète des PC enregistrés.
-
-## Module d'intrusion — gameplay ComputerCraft
-
-### Autorisation
-
-Les commandes spéciales d'intrusion sont réservées au **Computer ID #1**. Avec le datapack serveur, cette autorisation est fournie par la ROM serveur plutôt que par un simple fichier local modifiable.
-
-Les autres PC peuvent utiliser AstralNet normalement et peuvent être ciblés, mais ils ne peuvent pas lancer `scan`, `hack` ou `remote`.
-
-La restriction est vérifiée côté attaquant **et côté cible** : même si un autre joueur modifie son client, une cible Computer Link refusera les commandes d'intrusion provenant d'un ID non autorisé.
-
-La version 0.2.0 ajoute un premier système de hacking **entièrement dans Minecraft/ComputerCraft**.
-
-Il ne cible ni Windows, ni le serveur hôte, ni des machines réelles : seulement les Computers CC:Tweaked qui exécutent Computer Link.
-
-### Scanner les machines proches
-
-```text
-scan
-```
-
-Le scan radio ne découvre que les Computers Computer Link présents dans la portée configurée (64 blocs actuellement).
-
-Exemple :
-
-```text
-#47 | 18.2 blocs | SEC 2 | QG-NORD
-#82 | 41.7 blocs | SEC 2 | PC-LABO
-```
-
-### Tenter une intrusion
-
-```text
-hack 47
-```
-
-La cible génère un challenge local. L'attaquant doit être à proximité pour obtenir une session temporaire.
-
-Voir les sessions obtenues :
-
-```text
-sessions
-```
-
-### Une fois connecté à une cible
-
-Informations :
-
-```text
-remote 47 info
-```
-
-Lire un extrait des conversations conservées sur ce PC :
-
-```text
-remote 47 conversations
-```
-
-Lister ses fichiers ComputerCraft :
-
-```text
-remote 47 ls /
-```
-
-Lire un fichier texte :
-
-```text
-remote 47 cat /startup.lua
-```
-
-Provoquer un crash **du ComputerCraft ciblé uniquement** :
-
-```text
-remote 47 crash
-```
-
-Le PC redémarre ensuite en mode récupération pendant quelques secondes.
-
-Le dossier ROM de CC:Tweaked n'est pas exposé par le terminal distant.
+Le Computer ID ne change pas.
 
 ## Architecture
 
 ```text
 install.lua
-manifest.lua
-boot.lua
 update.lua
+uninstall.lua
+boot.lua
+manifest.lua
 
 src/
   common/
@@ -256,96 +297,41 @@ src/
     util.lua
     network.lua
 
+  client/
+    client.lua
+    service.lua
+    storage.lua
+    hack.lua
+    cli.lua
+
+  ui/
+    draw.lua
+    display.lua
+    prefs.lua
+
+  os/
+    linkos.lua
+
   server/
     database.lua
     server.lua
-
-  client/
-    storage.lua
-    hack.lua
-    client.lua
 ```
 
-## Mise à jour automatique
+## Direction du projet
 
-À partir de la **v0.2.3**, chaque Computer vérifie automatiquement GitHub **à chaque démarrage**, aussi bien le MER que les clients.
+La base graphique est maintenant en place. Les prochaines couches prévues peuvent inclure :
 
-Au boot :
-
-```text
-COMPUTER LINK
-AUTO UPDATE
-
-Verification des mises a jour...
-Local  : 0.2.3
-Remote : 0.2.4
-
-Nouvelle version detectee.
-Mise a jour automatique...
-```
-
-Si une nouvelle version existe, elle est téléchargée avant le lancement de Computer Link. Si GitHub/HTTP est indisponible, le Computer continue simplement avec sa version locale.
-
-Pour les machines installées avant la v0.2.3, il faut faire **une dernière mise à jour manuelle** afin de récupérer le nouveau boot automatique :
-
-Client :
-
-```text
-update
-reboot
-```
-
-MER :
-
-```text
-Ctrl+T
-/computer-link/update.lua
-reboot
-```
-
-Après cette migration, un simple `reboot` suffit pour récupérer automatiquement les futures versions.
-
-## Suite prévue
-
-La fondation actuelle permet maintenant de construire au-dessus :
-
-- interface graphique Advanced Computer ;
-- carnet d'adresses local (alias -> Computer ID) sans comptes centraux ;
-- canaux de groupe/pays ;
-- chiffrement de gameplay et clés tournantes ;
-- niveaux de sécurité, antivirus et pare-feu ;
-- exploits différents selon le matériel ;
-- terminal pirate plus visuel avec progression ;
-- brouilleur radio ;
-- interception temporaire après compromission ;
-- fausses données / honeypots ;
-- économie et commerce à distance ;
-- réseau militaire ;
-- radar et alertes ;
-- Create / Create Big Cannons.
-
-
-## Architecture cible
-
-Computer Link doit évoluer vers un véritable OS réseau pour Astralium, pas seulement un terminal de commandes. La base 0.3.0 est organisée pour accueillir :
-
-- bureau graphique sur Advanced Computer ;
-- application Messages avec conversations privées par Computer ID ;
-- carnet de contacts et alias locaux ;
-- groupes, pays, coalitions et canaux militaires ;
-- système de fichiers et pièces jointes ComputerCraft ;
-- notifications temps réel ;
-- statut en ligne/hors ligne ;
-- chiffrement de gameplay des communications ;
-- niveaux de sécurité et pare-feu ;
-- logs d'intrusion et antivirus ;
-- hacking de proximité avec plusieurs exploits/minijeux ;
-- backdoors et sessions temporaires ;
-- économie, banque, boutiques et marché ;
-- actualités et faux sites AstralNet ;
-- cartes/radar et alertes militaires ;
-- contrôle Create, Create Big Cannons et autres périphériques compatibles ;
-- permissions serveur centralisées ;
-- mises à jour automatiques à chaque démarrage.
-
-Le serveur **MER** reste le cœur de routage et de services, tandis que les conversations privées sont adressées par Computer ID.
+- vraies fenêtres déplaçables/minimisables ;
+- écran de verrouillage ;
+- centre de notifications ;
+- navigateur AstralNet et faux sites ;
+- banque et économie ;
+- boutique et marché ;
+- groupes, pays et coalitions ;
+- canaux militaires ;
+- chiffrement de gameplay ;
+- firewall, antivirus et journaux de sécurité ;
+- outils de hacking plus variés ;
+- radar/cartographie ;
+- Create et Create Big Cannons ;
+- programmes installables comme de véritables applications LinkOS.
