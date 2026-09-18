@@ -2,7 +2,7 @@
 
 Réseau ComputerCraft / CC:Tweaked pour Astralium.
 
-## Version 0.3.0 — serveur intégré + réseau par Computer ID
+## Version 0.3.1 — serveur intégré + désinstallation propre
 
 Computer Link n'utilise plus de "comptes" pour la messagerie. **L'identité réseau principale est directement l'ID du ComputerCraft**.
 
@@ -70,6 +70,7 @@ Autres commandes de bootstrap :
 link status
 link update
 link start
+link uninstall
 link help
 ```
 
@@ -103,6 +104,24 @@ reboot
 ```
 
 Chaque machine doit avoir un **Wireless Modem** pour utiliser le réseau radio.
+
+## Désinstallation
+
+Un joueur peut retirer complètement Computer Link de son Computer avec :
+
+```text
+uninstall
+```
+
+depuis le client Computer Link, ou depuis CraftOS avec le datapack serveur :
+
+```text
+link uninstall
+```
+
+La commande demande une confirmation, supprime l'application, les données locales et l'historique du PC, puis restaure l'ancien `startup.lua` lorsqu'une sauvegarde existe.
+
+Le **Computer ID reste inchangé**, car il appartient à CC:Tweaked et non à Computer Link.
 
 ## Commandes réseau privées
 
