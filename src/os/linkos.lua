@@ -2,6 +2,7 @@ local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
+local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
 
 local LinkOS = {}
@@ -692,16 +693,23 @@ function LinkOS:renderSecurity(target, l)
   y = y + 2
 
   if not self.service:isHackOperator() then
-    self:card(target, x, y, w, math.min(7, h - 2), "Protection active",
-      "Ce PC peut utiliser AstralNet normalement. Les outils d'intrusion sont verrouilles par la politique serveur. Operateur autorise : PC #1.")
+    self:card(
+      target,
+      x,
+      y,
+      w,
+      math.min(7, h - 2),
+      "Protection LinkOS",
+      "Etat du systeme normal. Les fonctions sensibles ne sont pas disponibles sur ce poste."
+    )
     return
   end
 
-  draw.text(target, x, y, "MODE OPERATEUR SPECIAL - PC #1", t.danger, t.bg, w)
+  draw.text(target, x, y, "CONSOLE D'INTRUSION AUTORISEE - PC #1", t.danger, t.bg, w)
   y = y + 2
 
-  self:button(target, "sec:scan", x, y, math.min(14, w), "SCAN PROXIMITE", function()
-    self:setNotice("Scan radio en cours...", t.warn)
+  self:button(target, "sec:scan", x, y, math.min(14, w), "SCAN", function()
+    self:setNotice("Scan radio de proximite...", t.warn)
     self:render()
     local found, err = self.service:scan()
     if not found then
@@ -717,82 +725,228 @@ function LinkOS:renderSecurity(target, l)
       local sessions = self.service:sessions()
       local lines = {}
       for _, s in ipairs(sessions) do
-        lines[#lines + 1] = "PC #" .. s.id .. " session active"
+        lines[#lines + 1] = "PC #" .. s.id .. "  session active"
       end
       self.remoteView = {
         title = "Sessions pirates",
         lines = #lines > 0 and lines or {"Aucune session active."}
       }
+      self:render()
     end)
   end
 
   y = y + 2
 
   if self.remoteView then
-    draw.box(target, x, y, w, math.max(5, math.min(h - 4, 10)), t.panel, t.accent, self.remoteView.title)
+    draw.box(
+      target,
+      x,
+      y,
+      w,
+      math.max(5, math.min(h - 4, 11)),
+      t.panel,
+      t.accent,
+      self.remoteView.title
+    )
     local lines = self.remoteView.lines or {}
     for i = 1, math.min(#lines, math.max(1, h - 7)) do
       draw.text(target, x + 1, y + i, lines[i], t.text, t.panel, w - 2)
     end
-    self:addButton("sec:closeview", x, y, w, math.max(5, math.min(h - 4, 10)), function()
+    self:addButton("sec:closeview", x, y, w, math.max(5, math.min(h - 4, 11)), function()
       self.remoteView = nil
       self:render()
     end)
     return
   end
 
-  if #self.scanResults == 0 then
-    draw.text(target, x, y, "Aucun resultat. Lance un scan.", t.muted, t.bg, w)
-  else
-    for i, pc in ipairs(self.scanResults) do
-      if y >= l.h - 3 then break end
+  if not self.remoteTarget then
+    if #self.scanResults == 0 then
+      draw.text(target, x, y, "Aucun PC cible. Lance un scan.", t.muted, t.bg, w)
+      return
+    end
+
+    draw.text(target, x, y, "Clique une cible pour tenter l'intrusion :", t.muted, t.bg, w)
+    y = y + 1
+
+    for _, pc in ipairs(self.scanResults) do
+      if y >= l.h - 2 then break end
+
       local label = "#" .. tostring(pc.id)
         .. "  " .. tostring(math.floor((pc.distance or 0) * 10) / 10) .. " blocs"
         .. "  SEC " .. tostring(pc.security or "?")
         .. "  " .. tostring(pc.label or "-")
+
       draw.text(target, x, y, label, t.text, t.bg, w)
+
       local targetId = pc.id
       self:addButton("sec:target:" .. targetId, x, y, w, 1, function()
+        self:setNotice("Intrusion sur PC #" .. targetId .. "...", t.warn)
+        self:render()
         local session, err = self.service:hack(targetId)
+
         if not session then
           self:setNotice("Echec #" .. targetId .. ": " .. tostring(err), t.danger)
         else
-          self:setNotice("Acces obtenu au PC #" .. targetId .. ".", t.good)
           self.remoteTarget = targetId
+          self:setNotice("ACCES OBTENU AU PC #" .. targetId, t.good)
         end
       end)
+
       y = y + 1
+    end
+    return
+  end
+
+  draw.text(target, x, y, "CONTROLE DISTANT : PC #" .. self.remoteTarget, t.danger, t.bg, w)
+  y = y + 1
+  draw.text(target, x, y, "Session compromise active", t.good, t.bg, w)
+  y = y + 2
+
+  local function remote(action, argument, successText)
+    local data, err = self.service:remote(self.remoteTarget, action, argument)
+    if not data then
+      self:setNotice(tostring(err), t.danger)
+      return nil
+    end
+    if successText then
+      self:setNotice(successText, t.good)
+    end
+    return data
+  end
+
+  local actions = {
+    {
+      label = "INFO",
+      run = function()
+        local data = remote("info")
+        if data then self:showRemoteData("info", data) end
+      end
+    },
+    {
+      label = "MSG LOG",
+      run = function()
+        local data = remote("conversations")
+        if data then self:showRemoteData("conversations", data) end
+      end
+    },
+    {
+      label = "LS",
+      run = function()
+        local path = self:prompt("Dossier distant", "Exemple: / ou /computer-link")
+        if path == "" then path = "/" end
+        local data = remote("ls", path)
+        if data then self:showRemoteData("ls", data) end
+      end
+    },
+    {
+      label = "CAT",
+      run = function()
+        local path = self:prompt("Fichier distant a lire", "Exemple: /startup.lua")
+        if path ~= "" then
+          local data = remote("cat", path)
+          if data then self:showRemoteData("cat", data) end
+        end
+      end
+    },
+    {
+      label = "LOCK",
+      run = function()
+        local msg = self:prompt(
+          "Message de verrouillage",
+          "Affiche sous YOU HAVE BEEN HACKED. Vide = message par defaut."
+        )
+        remote("lock", msg, "PC #" .. self.remoteTarget .. " BLOQUE.")
+      end
+    },
+    {
+      label = "MESSAGE",
+      run = function()
+        local msg = self:prompt("Message force sur le PC cible", "Le joueur le verra en plein ecran.")
+        if msg ~= "" then
+          remote("message", msg, "Message force affiche.")
+        end
+      end
+    },
+    {
+      label = "WRITE",
+      run = function()
+        local path = self:prompt("Fichier distant a ecrire", "Exemple: /notes.txt")
+        if path == "" then return end
+        local content = self:prompt("Nouveau contenu du fichier", "Maximum " .. config.HACK_MAX_WRITE_BYTES .. " caracteres.")
+        remote("write", {path=path, content=content}, "Fichier distant modifie.")
+      end
+    },
+    {
+      label = "DELETE",
+      run = function()
+        local path = self:prompt("Chemin distant a supprimer", "Fichier ou dossier ComputerCraft.")
+        if path ~= "" and self:confirm("Supprimer " .. path .. " sur PC #" .. self.remoteTarget .. " ?") then
+          remote("delete", path, "Chemin distant supprime.")
+        end
+      end
+    },
+    {
+      label = "UNLOCK",
+      run = function()
+        remote("unlock", nil, "PC #" .. self.remoteTarget .. " debloque.")
+      end
+    },
+    {
+      label = "LABEL",
+      run = function()
+        local label = self:prompt("Nouveau label du PC cible", "Maximum 32 caracteres.")
+        if label ~= "" then remote("label", label, "Label distant modifie.") end
+      end
+    },
+    {
+      label = "REBOOT",
+      run = function()
+        if self:confirm("Redemarrer le PC #" .. self.remoteTarget .. " ?") then
+          remote("reboot", nil, "Ordre de reboot envoye.")
+        end
+      end
+    },
+    {
+      label = "CRASH",
+      run = function()
+        if self:confirm("Provoquer un crash sur PC #" .. self.remoteTarget .. " ?") then
+          remote("crash", nil, "Crash distant envoye.")
+        end
+      end
+    }
+  }
+
+  local cols = w >= 56 and 4 or (w >= 34 and 3 or 2)
+  local gap = 1
+  local bw = math.max(7, math.floor((w - (cols - 1) * gap) / cols))
+
+  for i, item in ipairs(actions) do
+    local col = (i - 1) % cols
+    local row = math.floor((i - 1) / cols)
+    local bx = x + col * (bw + gap)
+    local by = y + row * 2
+
+    if by < l.h - 1 then
+      self:button(
+        target,
+        "sec:action:" .. item.label,
+        bx,
+        by,
+        math.min(bw, x + w - bx),
+        item.label,
+        item.run
+      )
     end
   end
 
-  if self.remoteTarget and y < l.h - 4 then
-    y = y + 1
-    draw.text(target, x, y, "Session PC #" .. self.remoteTarget, t.accent, t.bg, w)
-    y = y + 1
-
-    local actions = {
-      {"INFO", "info"},
-      {"MESSAGES", "conversations"},
-      {"FICHIERS", "ls"},
-      {"CRASH", "crash"}
-    }
-
-    local bx = x
-    for _, action in ipairs(actions) do
-      local bw = math.min(11, math.max(7, math.floor(w / #actions) - 1))
-      if bx + bw - 1 <= x + w - 1 then
-        local actionName = action[2]
-        self:button(target, "sec:remote:" .. actionName, bx, y, bw, action[1], function()
-          local data, err = self.service:remote(self.remoteTarget, actionName, actionName == "ls" and "/" or nil)
-          if not data then
-            self:setNotice(tostring(err), t.danger)
-          else
-            self:showRemoteData(actionName, data)
-          end
-        end)
-        bx = bx + bw + 1
-      end
-    end
+  local bottomY = y + math.ceil(#actions / cols) * 2
+  if bottomY < l.h - 1 then
+    draw.text(target, x, bottomY, "< Fermer la session locale", t.muted, t.bg, w)
+    self:addButton("sec:disconnect", x, bottomY, w, 1, function()
+      self.remoteTarget = nil
+      self.remoteView = nil
+      self:render()
+    end)
   end
 end
 
@@ -999,6 +1153,115 @@ function LinkOS:renderAbout(target, l)
   end
 end
 
+function LinkOS:renderHackedDisplay(target, state)
+  local w, h = target.getSize()
+  draw.clear(target, colors.black, colors.red)
+
+  local skull
+  if w >= 38 and h >= 16 then
+    skull = {
+      "          ___________",
+      "        /             \\",
+      "       /   X       X   \\",
+      "      |                 |",
+      "      |       /\\        |",
+      "      |      /  \\       |",
+      "      |    .------.      |",
+      "       \\  |______|     /",
+      "        \\             /",
+      "         '-----------'"
+    }
+  else
+    skull = {
+      "   .----.",
+      "  / X  X \\",
+      " |   /\\   |",
+      " |  ____  |",
+      "  \\______/"
+    }
+  end
+
+  local total = #skull + 5
+  local startY = math.max(1, math.floor((h - total) / 2))
+
+  for i, line in ipairs(skull) do
+    if startY + i - 1 <= h then
+      draw.center(target, startY + i - 1, line, colors.red, colors.black)
+    end
+  end
+
+  local titleY = startY + #skull + 1
+  if titleY <= h then
+    draw.center(target, titleY, "YOU HAVE BEEN HACKED", colors.red, colors.black)
+  end
+
+  if titleY + 1 <= h then
+    draw.center(target, titleY + 1, "SYSTEM LOCKED", colors.white, colors.red)
+  end
+
+  local message = ""
+  if state.flash and state.flash.message and state.flash.message ~= "" then
+    message = state.flash.message
+  elseif state.message then
+    message = state.message
+  end
+
+  if message ~= "" and titleY + 3 <= h then
+    local lines = draw.wrap(message, math.max(10, w - 4))
+    for i = 1, math.min(#lines, math.max(1, h - titleY - 3)) do
+      draw.center(target, titleY + 2 + i, lines[i], colors.white, colors.black)
+    end
+  end
+
+  if h >= 3 then
+    draw.center(target, h, "REMOTE CONTROL ACTIVE", colors.red, colors.black)
+  end
+
+  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+end
+
+function LinkOS:renderForcedMessageDisplay(target, flash)
+  local w, h = target.getSize()
+  draw.clear(target, colors.black, colors.white)
+
+  draw.center(target, math.max(1, math.floor(h / 2) - 3), "REMOTE TRANSMISSION", colors.red, colors.black)
+  draw.center(target, math.max(2, math.floor(h / 2) - 1), "PC #" .. tostring(flash.source_id or "?"), colors.lightGray, colors.black)
+
+  local lines = draw.wrap(tostring(flash.message or ""), math.max(8, w - 4))
+  local y = math.max(3, math.floor(h / 2) + 1)
+  for i = 1, math.min(#lines, math.max(1, h - y - 2)) do
+    draw.center(target, y + i - 1, lines[i], colors.white, colors.black)
+  end
+
+  if h >= 3 then
+    draw.center(target, h, "Clique ou appuie sur une touche pour fermer", colors.lightGray, colors.black)
+  end
+
+  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+end
+
+function LinkOS:renderHijackState()
+  local state = hackedState.get()
+
+  if state.locked then
+    self.buttons = {}
+    for _, d in ipairs(self.displays or {}) do
+      if d.target then self:renderHackedDisplay(d.target, state) end
+    end
+    return true
+  end
+
+  if state.flash and state.flash.message then
+    self.buttons = {}
+    for _, d in ipairs(self.displays or {}) do
+      if d.target then self:renderForcedMessageDisplay(d.target, state.flash) end
+    end
+    return true
+  end
+
+  return false
+end
+
 function LinkOS:renderCompanion(d)
   if not d or d.kind ~= "monitor" or not d.target then return end
   if self.active and d.id == self.active.id then return end
@@ -1060,6 +1323,10 @@ end
 
 function LinkOS:render()
   if not self.active then return end
+
+  if self:renderHijackState() then
+    return
+  end
 
   local target = self.active.target
   local l = self:layout()
@@ -1129,8 +1396,25 @@ function LinkOS:uiLoop()
 
   while self.running do
     local event, a, b, c, d, e = os.pullEvent()
+    local hijack = hackedState.get()
 
-    if event == "mouse_click" and self.active and self.active.kind == "computer" then
+    if hijack.locked then
+      if event == "linkos_hacked_state" or event == "linkos_refresh"
+        or event == "monitor_resize" or event == "term_resize"
+        or event == "peripheral" or event == "peripheral_detach" then
+        if event == "peripheral" or event == "peripheral_detach"
+          or event == "monitor_resize" or event == "term_resize" then
+          self:refreshDisplays()
+        end
+        self:render()
+      end
+
+    elseif hijack.flash and hijack.flash.message
+      and (event == "mouse_click" or event == "monitor_touch" or event == "key") then
+      hackedState.clearFlash()
+      self:render()
+
+    elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
       self:hit(b, c)
       self:render()
 
@@ -1146,7 +1430,7 @@ function LinkOS:uiLoop()
       self:handleKey(a)
       self:render()
 
-    elseif event == "linkos_refresh" then
+    elseif event == "linkos_refresh" or event == "linkos_hacked_state" then
       self:render()
 
     elseif event == "linkos_display_changed"
