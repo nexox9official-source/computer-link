@@ -2,6 +2,7 @@ local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local storage = dofile("/computer-link/src/client/storage.lua")
+local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
 local hack = dofile("/computer-link/src/client/hack.lua")
 
 local function setColour(colour)
@@ -494,7 +495,24 @@ local function daemonLoop()
       local sender, message, protocol = a, b, c
 
       if hack.handleRednet(sender, message, protocol, storage) then
-        -- Commande d'intrusion traitee.
+        local locked, state = hackedState.isLocked()
+        if locked then
+          setColour(colors.red)
+          print()
+          print("SYSTEM COMPROMISED")
+          print("YOU HAVE BEEN HACKED")
+          setColour(colors.white)
+          sleep(0.5)
+          os.reboot()
+        elseif state and state.flash and state.flash.message then
+          setColour(colors.red)
+          print()
+          print("=== REMOTE TRANSMISSION ===")
+          setColour(colors.white)
+          print(tostring(state.flash.message))
+          print("===========================")
+          hackedState.clearFlash()
+        end
       elseif sender == serverId
         and protocol == config.PROTOCOL
         and network.isPacket(message)
