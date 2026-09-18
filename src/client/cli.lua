@@ -251,7 +251,7 @@ local function help()
   if hack.isOperator() then
     print()
     setColour(colors.red)
-    print("CONSOLE D'INTRUSION - PC #1")
+    print("CONSOLE D'INTRUSION - PC #0")
     setColour(colors.white)
     print(" scan")
     print(" hack <PC_ID>")
