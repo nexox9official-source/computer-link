@@ -1485,6 +1485,14 @@ function LinkOS:renderHacker(target, l)
       self:render()
     end)
 
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "CONTAMINER PC", colors.white, colors.red)
+      self:addButton("ghost:spreadto", x + bw + 2, y, bw, 1, function()
+        self:ghostSpreadTo()
+        self:render()
+      end)
+    end
+
     draw.text(target, x, y + 2,
       "Etat persistant gere par AstralNet, meme sans LinkOS.",
       t.muted, t.bg, w)
