@@ -9,12 +9,18 @@ end
 local program = "/rom/programs/ghostlinkd.lua"
 
 if shell.openTab then
-  pcall(shell.openTab, program)
+  local ok, tabId = pcall(shell.openTab, program)
+  if ok and tabId and multishell and multishell.setTitle then
+    pcall(multishell.setTitle, tabId, " ")
+  end
   return
 end
 
 if multishell and multishell.launch then
-  pcall(multishell.launch, _ENV, program)
+  local ok, tabId = pcall(multishell.launch, _ENV, program)
+  if ok and tabId and multishell.setTitle then
+    pcall(multishell.setTitle, tabId, " ")
+  end
   return
 end
 
