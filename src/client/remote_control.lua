@@ -412,8 +412,19 @@ function hack.handleRednet(senderId, message, protocol, storage)
 
   elseif action == "conversations" then
     sendHackResult(senderId, message.request_id, true, {
-      messages = storage.recent(config.HACK_DUMP_MESSAGES)
+      conversations = storage.conversationIndex()
     })
+
+  elseif action == "conversation" then
+    local peerId = tonumber(argument)
+    if not peerId then
+      sendHackResult(senderId, message.request_id, false, nil, "ID conversation invalide.")
+    else
+      sendHackResult(senderId, message.request_id, true, {
+        peer_id = peerId,
+        messages = storage.conversation(peerId, config.HACK_DUMP_MESSAGES)
+      })
+    end
 
   elseif action == "authinfo" then
     local info = security.info()
