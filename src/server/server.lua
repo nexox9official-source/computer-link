@@ -422,6 +422,19 @@ local function handleGhost(senderId, message)
       return
     end
 
+    -- A ROM-only Computer may already be infected locally by the physical
+    -- Malcraft marker stored on an inserted CC:Tweaked data disk. This lets a
+    -- Computer that never installed LinkOS register with the MER as soon as it
+    -- has network connectivity.
+    if payload.local_infected == true then
+      database.setGhostHost(
+        sender,
+        true,
+        payload.local_source or "rom-local",
+        payload.local_spread ~= false
+      )
+    end
+
     for _, diskId in ipairs(payload.disk_ids or {}) do
       local diskState = database.ghostDisk(diskId)
       if diskState.infected == true then
