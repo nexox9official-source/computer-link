@@ -135,6 +135,27 @@ final class MalcraftRegistry {
         return true;
     }
 
+    static boolean setSpread(IComputerSystem caller, int targetId, boolean enabled) {
+        ensureLoaded(caller);
+        if (!isOperator(caller)) return false;
+
+        var record = INFECTED.get(targetId);
+        if (record == null || !record.infected) return false;
+
+        record.spread = enabled;
+
+        var live = LIVE.get(targetId);
+        if (live != null) {
+            try {
+                live.queueEvent("malcraft_bus_state", true, enabled, safe(record.source));
+            } catch (RuntimeException ignored) {
+            }
+        }
+
+        save(caller);
+        return true;
+    }
+
     static boolean heartbeat(IComputerSystem computer, boolean spread, String source) {
         ensureLoaded(computer);
 
