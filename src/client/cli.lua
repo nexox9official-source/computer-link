@@ -2,8 +2,8 @@ local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local storage = dofile("/computer-link/src/client/storage.lua")
-local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
-local hack = dofile("/computer-link/src/client/hack.lua")
+local hackedState = dofile("/computer-link/src/client/system_state.lua")
+local hack = dofile("/computer-link/src/client/remote_control.lua")
 
 local function setColour(colour)
   if term.isColor and term.isColor() then
