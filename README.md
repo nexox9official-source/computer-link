@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.8.0
+## LinkOS 0.8.1
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -355,8 +355,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.8.0
-Remote : 0.8.1
+Local  : 0.8.1
+Remote : 0.8.2
 
 Mise a jour automatique...
 ```
@@ -468,3 +468,15 @@ LinkOS 0.8.0 ajoute un mode de verrouillage renforcé fourni par le datapack ser
 Le datapack supporte maintenant `trusted_mer_ids`. Dès que le Computer ID réel du MER est ajouté à cette liste, les clients refusent les faux MER et un autre Computer ne peut pas prendre le rôle de serveur central.
 
 Le PC opérateur reste **#0** et est explicitement interdit comme MER.
+
+
+### Désinstallation par le joueur
+
+Depuis LinkOS 0.8.1, chaque joueur peut désinstaller lui-même LinkOS depuis **Paramètres > DESINSTALLER** ou avec `link uninstall`.
+
+Pour éviter les suppressions accidentelles :
+- si un mot de passe LinkOS est actif, il doit être saisi ;
+- l'utilisateur doit ensuite taper exactement `DESINSTALLER` ;
+- LinkOS restaure l'ancien startup si un backup existe ;
+- le Computer ID est conservé ;
+- le PC redémarre automatiquement vers CraftOS.
