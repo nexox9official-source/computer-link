@@ -3,6 +3,7 @@ local draw = dofile("/computer-link/src/ui/draw.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
+local security = dofile("/computer-link/src/client/security.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
 local HackerConsole = dofile("/computer-link/src/os/hacker_console.lua")
 
@@ -66,6 +67,10 @@ function LinkOS.new()
   self.exitToCli = false
   self.connectionError = nil
   self.hackerConsole = HackerConsole.new(self.service)
+  self.sessionLocked = security.enabled()
+  self.lastActivity = os.clock()
+  self.lockTimer = nil
+  self.failedUnlocks = 0
   return self
 end
 
@@ -162,6 +167,128 @@ end
 function LinkOS:confirm(title)
   local answer = string.lower(self:prompt(title, "Tape OUI pour confirmer.") or "")
   return answer == "oui" or answer == "o" or answer == "yes" or answer == "y"
+end
+
+function LinkOS:promptSecret(title, hint)
+  local active = self.active
+  local t = self:theme()
+
+  if active and active.kind == "monitor" then
+    local target = active.target
+    local w, h = target.getSize()
+    draw.fill(target, 2, math.max(2, h - 4), math.max(1, w - 2), 3, t.panel)
+    draw.text(target, 3, math.max(2, h - 3), "Saisie securisee sur le Computer...", t.warn, t.panel, math.max(1, w - 4))
+  end
+
+  local previous = term.current()
+  term.redirect(self.native)
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  print("LinkOS Security")
+  print("---------------")
+  print(tostring(title or "Mot de passe"))
+  if hint and hint ~= "" then
+    term.setTextColor(colors.lightGray)
+    print(tostring(hint))
+    term.setTextColor(colors.white)
+  end
+  write("> ")
+  local value = read("*")
+  term.redirect(previous)
+  return value
+end
+
+function LinkOS:configurePassword()
+  local t = self:theme()
+
+  if security.enabled() then
+    local current = self:promptSecret("Mot de passe actuel")
+    if not security.verify(current) then
+      self:setNotice("Mot de passe incorrect.", t.danger)
+      self:render()
+      return
+    end
+  end
+
+  local first = self:promptSecret("Nouveau mot de passe", "4 a 32 caracteres.")
+  local second = self:promptSecret("Confirme le mot de passe")
+
+  if first ~= second then
+    self:setNotice("Les mots de passe ne correspondent pas.", t.danger)
+    self:render()
+    return
+  end
+
+  local ok, err = security.setPassword(first)
+  if not ok then
+    self:setNotice(tostring(err), t.danger)
+  else
+    self.sessionLocked = false
+    self.lastActivity = os.clock()
+    self:setNotice("Protection par mot de passe activee.", t.good)
+  end
+
+  self:render()
+end
+
+function LinkOS:disablePassword()
+  local t = self:theme()
+  if not security.enabled() then return end
+
+  local current = self:promptSecret("Mot de passe actuel")
+  local ok, err = security.disable(current)
+
+  if ok then
+    self.sessionLocked = false
+    self:setNotice("Mot de passe desactive.", t.good)
+  else
+    self:setNotice(tostring(err), t.danger)
+  end
+
+  self:render()
+end
+
+function LinkOS:lockSession()
+  if not security.enabled() then return end
+  self.sessionLocked = true
+  self:render()
+end
+
+function LinkOS:unlockSession()
+  if not security.enabled() then
+    self.sessionLocked = false
+    return true
+  end
+
+  local password = self:promptSecret("PC verrouille", "Entre ton mot de passe LinkOS.")
+  if security.verify(password) then
+    self.sessionLocked = false
+    self.failedUnlocks = 0
+    self.lastActivity = os.clock()
+    self:setNotice("Session deverrouillee.", self:theme().good)
+    self:render()
+    return true
+  end
+
+  self.failedUnlocks = self.failedUnlocks + 1
+  self:setNotice("Mot de passe incorrect.", self:theme().danger)
+
+  if self.failedUnlocks >= 3 then
+    sleep(2)
+  end
+
+  self:render()
+  return false
+end
+
+function LinkOS:openHackerTerminal()
+  if not self.service:isHackOperator() then return end
+  self.lastActivity = os.clock()
+  self.hackerConsole:runInteractive(self.active and self.active.target or self.native)
+  self.lastActivity = os.clock()
+  self:render()
 end
 
 function LinkOS:layout()
@@ -380,19 +507,18 @@ function LinkOS:renderHome(target, l)
     or ("Hors-ligne : " .. tostring(self.service.lastError or "MER indisponible"))
 
   local cards = {
-    {"Messages", self.service.unread > 0 and (self.service.unread .. " nouveau(x)") or "Conversations privees par ID", "messages"},
-    {"Contacts", "Alias locaux pour retrouver facilement les PC", "contacts"},
-    {"Reseau", statusText, "network"},
-    {"Securite", "Etat du poste et protection LinkOS", "security"},
-    {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " libres", "files"}
+    {"Messages", self.service.unread > 0 and (self.service.unread .. " nouveau(x)") or "Discuter avec un autre PC", "messages"},
+    {"Contacts", "Retrouver rapidement les PC connus", "contacts"},
+    {"Reseau", self.service.online and "AstralNet connecte" or "AstralNet hors-ligne", "network"},
+    {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " disponibles", "files"},
+    {"Securite", security.enabled() and "Mot de passe actif" or "Protection standard", "security"}
   }
 
   if self.service:isHackOperator() then
-    cards[#cards + 1] = {"LinkSec CMD", "Terminal operateur / espionnage / controle distant", "hacker"}
+    cards[#cards + 1] = {"LinkSec CMD", "Terminal operateur", "hacker"}
   end
 
-  cards[#cards + 1] = {"Parametres", self.active.label .. " / " .. l.mode, "settings"}
-  cards[#cards + 1] = {"A propos", "Computer Link " .. config.VERSION, "about"}
+  cards[#cards + 1] = {"Parametres", "Affichage et systeme", "settings"}
 
   for i, card in ipairs(cards) do
     local col = (i - 1) % columns
@@ -721,123 +847,98 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "LinkSec Command Terminal", colors.red, t.bg, w)
-  y = y + 1
-  draw.text(target, x, y,
-    "OPERATEUR #" .. os.getComputerID()
-      .. "  |  cible "
-      .. (self.hackerConsole.target and ("#" .. self.hackerConsole.target) or "-"),
-    colors.lightGray, t.bg, w)
+  draw.text(target, x, y, "LinkSec CMD", colors.red, t.bg, w)
   y = y + 2
 
-  local terminalH = math.max(4, h - 5)
-  draw.box(target, x, y, w, terminalH, colors.black, colors.red, "CMD")
+  draw.text(target, x, y, "Operateur : PC #" .. os.getComputerID(), t.text, t.bg, w)
+  y = y + 1
+  draw.text(target, x, y,
+    "Cible     : " .. (self.hackerConsole.target and ("PC #" .. self.hackerConsole.target) or "aucune"),
+    t.muted, t.bg, w)
+  y = y + 2
 
-  local visible = math.max(1, terminalH - 3)
-  local lines = self.hackerConsole.lines or {}
-  local first = math.max(1, #lines - visible + 1)
-  local row = y + 1
+  self:card(
+    target,
+    x,
+    y,
+    w,
+    math.min(7, math.max(5, h - 7)),
+    "Terminal persistant",
+    "Le terminal reste ouvert pendant toutes tes commandes. Les resultats s'ajoutent a la suite. Tape 'exit' pour revenir a LinkOS.",
+    function()
+      self:openHackerTerminal()
+    end
+  )
 
-  for i = first, #lines do
-    local entry = lines[i]
-    draw.text(
-      target,
-      x + 1,
-      row,
-      tostring(entry.text or ""),
-      entry.colour or colors.white,
-      colors.black,
-      math.max(1, w - 2)
-    )
-    row = row + 1
-    if row >= y + terminalH - 1 then break end
+  local buttonY = y + math.min(7, math.max(5, h - 7)) + 1
+  if buttonY < l.h - 1 then
+    self:button(target, "hacker:open", x, buttonY, math.min(20, w), "OUVRIR LE TERMINAL", function()
+      self:openHackerTerminal()
+    end)
   end
 
-  local promptText = self.hackerConsole:prompt() .. " [EXEC]"
-  draw.text(target, x + 1, y + terminalH - 1, promptText, colors.lime, colors.black, math.max(1, w - 2))
-  self:addButton("hackercmd:exec", x, y + terminalH - 1, w, 1, function()
-    local line = self:prompt(
-      "LinkSec CMD",
-      self.hackerConsole:prompt() .. "  |  'help' affiche les commandes"
-    )
-    if line and line ~= "" then
-      self.hackerConsole:execute(line)
-    end
-    self:render()
-  end)
-
-  if l.mode ~= "compact" and w >= 42 then
-    draw.text(target, x, y + terminalH, "Astuce: F8 ouvre le terminal. Clique [EXEC] pour saisir une commande.",
-      t.muted, t.bg, w)
+  if buttonY + 2 < l.h - 1 then
+    draw.text(target, x, buttonY + 2, "Raccourci: F8  |  Aide: help ou hlp", t.muted, t.bg, w)
   end
 end
 
 function LinkOS:renderSecurity(target, l)
   local t = self:theme()
   local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
-
-  draw.text(target, x, y, "Securite LinkOS", t.text, t.bg, w)
-  y = y + 2
-
+  local passwordOn = security.enabled()
   local operator = self.service:isHackOperator()
-  local stateText = operator and "OPERATEUR LINKSEC" or "POSTE STANDARD"
-  local stateColour = operator and colors.red or t.good
 
-  draw.text(target, x, y, stateText, stateColour, t.bg, w)
+  draw.text(target, x, y, "Securite", t.text, t.bg, w)
   y = y + 2
 
-  local statusLines = {
-    "Identite    : PC #" .. os.getComputerID(),
-    "MER         : " .. (self.service.online and "connecte" or "hors-ligne"),
-    "Modem       : " .. tostring(self.service.modemName or "absent"),
-    "Protection  : politique serveur active",
-    "Controle    : " .. (operator and "privileges operateur" or "aucun privilege offensif")
-  }
-
-  for _, line in ipairs(statusLines) do
-    if y >= l.h - 4 then break end
-    draw.text(target, x, y, line, t.text, t.bg, w)
-    y = y + 1
-  end
-
+  draw.text(target, x, y,
+    "Mot de passe : " .. (passwordOn and "ACTIF" or "DESACTIVE"),
+    passwordOn and t.good or t.muted, t.bg, w)
   y = y + 1
 
-  if operator then
-    self:card(
-      target,
-      x,
-      y,
-      w,
-      math.min(7, math.max(4, h - 8)),
-      "LinkSec Operator",
-      "Ce poste possede le terminal CMD reserve aux operateurs. Les outils d'intrusion ne sont visibles sur aucun autre PC.",
-      function()
-        self:openApp("hacker")
-      end
-    )
-
-    local cardH = math.min(7, math.max(4, h - 8))
-    local buttonY = y + cardH + 1
-    if buttonY < l.h - 1 then
-      self:button(target, "sec:open-cmd", x, buttonY, math.min(18, w), "OUVRIR LINKSEC CMD", function()
-        self:openApp("hacker")
-      end)
-
-      if w >= 38 then
-        local sessions = #self.service:sessions()
-        draw.text(target, x + 20, buttonY, "Sessions: " .. tostring(sessions), t.muted, t.bg, math.max(1, w - 20))
-      end
-    end
+  if passwordOn then
+    draw.text(target, x, y,
+      "Verrouillage auto : " .. tostring(security.autoLockSeconds()) .. "s d'inactivite",
+      t.muted, t.bg, w)
   else
-    self:card(
-      target,
-      x,
-      y,
-      w,
-      math.min(7, math.max(4, h - 8)),
-      "Protection active",
-      "Ce PC peut utiliser AstralNet normalement. Aucun outil d'intrusion n'est installe dans l'interface utilisateur de ce poste."
-    )
+    draw.text(target, x, y, "Active un mot de passe pour proteger ce PC.", t.muted, t.bg, w)
+  end
+  y = y + 2
+
+  if not passwordOn then
+    self:button(target, "sec:password-on", x, y, math.min(18, w), "ACTIVER MOT DE PASSE", function()
+      self:configurePassword()
+    end)
+  else
+    self:button(target, "sec:lock-now", x, y, math.min(13, w), "VERROUILLER", function()
+      self:lockSession()
+    end)
+
+    if w >= 30 then
+      self:button(target, "sec:password-change", x + 15, y, math.min(13, w - 15), "MODIFIER MDP", function()
+        self:configurePassword()
+      end)
+    end
+
+    if w >= 45 then
+      self:button(target, "sec:password-off", x + 30, y, math.min(13, w - 30), "DESACTIVER", function()
+        self:disablePassword()
+      end)
+    end
+  end
+
+  y = y + 3
+
+  if operator and y < l.h - 3 then
+    draw.text(target, x, y, "LinkSec Operator", colors.red, t.bg, w)
+    y = y + 1
+    draw.text(target, x, y, "Ce PC possede les privileges d'intrusion.", t.muted, t.bg, w)
+    y = y + 2
+    self:button(target, "sec:linksec", x, y, math.min(20, w), "OUVRIR LINKSEC CMD", function()
+      self:openHackerTerminal()
+    end)
+  elseif y < l.h - 2 then
+    draw.text(target, x, y, "Protection AstralNet active.", t.good, t.bg, w)
   end
 end
 
@@ -931,24 +1032,23 @@ function LinkOS:renderSettings(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
 
-  draw.text(target, x, y, "Parametres LinkOS", t.text, t.bg, w)
+  draw.text(target, x, y, "Parametres", t.text, t.bg, w)
   y = y + 2
 
-  draw.text(target, x, y, "Affichage actif : " .. tostring(self.active.label), t.accent, t.bg, w)
+  draw.text(target, x, y, "Affichage", t.accent, t.bg, w)
   y = y + 1
-  draw.text(target, x, y, tostring(self.active.width) .. "x" .. tostring(self.active.height)
-    .. " | mode " .. tostring(self.active.layout)
-    .. (self.active.scale and (" | scale " .. self.active.scale) or ""), t.muted, t.bg, w)
+  draw.text(target, x, y,
+    tostring(self.active.label) .. "  " .. tostring(self.active.width) .. "x" .. tostring(self.active.height),
+    t.text, t.bg, w)
   y = y + 2
 
+  local shown = 0
   for _, d in ipairs(self.displays) do
-    if y >= l.h - 6 then break end
+    if shown >= 3 or y >= l.h - 8 then break end
     local selected = d.id == self.active.id
-    local label = (selected and "* " or "  ") .. d.label
-      .. "  " .. d.width .. "x" .. d.height
-      .. "  " .. d.layout
-      .. (d.touch and "  TOUCH" or "")
-    draw.text(target, x, y, label, selected and t.good or t.text, t.bg, w)
+    local label = (selected and "* " or "  ") .. d.label .. "  " .. d.width .. "x" .. d.height
+    draw.text(target, x, y, label, selected and t.good or t.muted, t.bg, w)
+
     local displayId = d.id
     self:addButton("display:" .. displayId, x, y, w, 1, function()
       prefs.set("display_id", displayId)
@@ -956,18 +1056,21 @@ function LinkOS:renderSettings(target, l)
       self:setNotice("Affichage principal change.", t.good)
       self:render()
     end)
+
+    shown = shown + 1
     y = y + 1
   end
 
   y = y + 1
-  if y < l.h - 4 then
-    draw.text(target, x, y, "Couleur d'accent", t.text, t.bg, w)
+  if y < l.h - 6 then
+    draw.text(target, x, y, "Couleur", t.accent, t.bg, w)
     y = y + 1
 
     local accentNames = {"cyan", "blue", "lime", "orange", "purple", "red"}
     local bx = x
+
     for _, name in ipairs(accentNames) do
-      local bw = math.min(8, math.max(5, math.floor(w / #accentNames)))
+      local bw = math.min(7, math.max(4, math.floor(w / #accentNames)))
       if bx + bw - 1 <= x + w - 1 then
         draw.button(target, bx, y, bw, string.sub(name, 1, 3), colors.white, ACCENTS[name])
         local accentName = name
@@ -978,41 +1081,53 @@ function LinkOS:renderSettings(target, l)
         bx = bx + bw
       end
     end
+
     y = y + 2
   end
 
-  if y < l.h - 2 then
-    local buttons = {
-      {"UPDATE", function()
-        shell.run("/computer-link/update.lua")
-        self:setNotice("Mise a jour terminee. Reboot conseille.", t.good)
-      end},
-      {"CLI", function()
-        self.exitToCli = true
-        self.running = false
-      end},
-      {"REBOOT", function()
-        os.reboot()
-      end},
-      {"ARRET", function()
-        os.shutdown()
-      end},
-      {"DESINSTALLER", function()
-        if self:confirm("Desinstaller Computer Link ?") then
-          shell.run("/computer-link/uninstall.lua", "yes")
-          sleep(1)
-          os.reboot()
-        end
-      end}
-    }
+  if y < l.h - 4 then
+    draw.text(target, x, y, "Systeme", t.accent, t.bg, w)
+    y = y + 1
+    draw.text(target, x, y,
+      "LinkOS " .. config.VERSION
+        .. (self.service.updateAvailable and ("  ->  " .. tostring(self.service.remoteVersion)) or "  |  a jour"),
+      self.service.updateAvailable and t.warn or t.muted, t.bg, w)
+    y = y + 2
 
-    local bx = x
-    for _, item in ipairs(buttons) do
-      local bw = math.min(14, math.max(7, math.floor(w / #buttons) - 1))
-      if bx + bw - 1 <= x + w - 1 then
-        self:button(target, "set:" .. item[1], bx, y, bw, item[1], item[2])
-        bx = bx + bw + 1
+    local updateLabel = self.service.updateAvailable and "MISE A JOUR !" or "VERIFIER MAJ"
+    local updateBg = self.service.updateAvailable and colors.yellow or t.button
+    local updateFg = self.service.updateAvailable and colors.black or t.text
+    local updateW = math.min(15, w)
+
+    draw.button(target, x, y, updateW, updateLabel, updateFg, updateBg)
+    self:addButton("set:update", x, y, updateW, 1, function()
+      if self.service.updateAvailable then
+        shell.run("/computer-link/update.lua")
+        self.service.updateAvailable = false
+        self:setNotice("Mise a jour installee. Redemarre le PC.", t.good)
+      else
+        local ok, err = self.service:checkUpdate()
+        if not ok then
+          self:setNotice("Verification impossible: " .. tostring(err), t.danger)
+        elseif self.service.updateAvailable then
+          self:setNotice("Nouvelle version: " .. tostring(self.service.remoteVersion), t.warn)
+        else
+          self:setNotice("LinkOS est a jour.", t.good)
+        end
       end
+      self:render()
+    end)
+
+    if w >= 31 then
+      self:button(target, "set:reboot", x + 17, y, math.min(10, w - 17), "REBOOT", function()
+        os.reboot()
+      end)
+    end
+
+    if w >= 43 then
+      self:button(target, "set:shutdown", x + 29, y, math.min(10, w - 29), "ARRET", function()
+        os.shutdown()
+      end)
     end
   end
 end
@@ -1050,22 +1165,37 @@ function LinkOS:renderHackedDisplay(target, state)
   draw.clear(target, colors.black, colors.red)
 
   local skull
-  if w >= 38 and h >= 16 then
+  if w >= 50 and h >= 22 then
     skull = {
-      "             .-''''''''-.",
-      "          .-'            '-.",
-      "        .'   _          _    '.",
-      "       /    (_)        (_)     \\",
-      "      |                      __ |",
-      "      |      .----------.   /  \\|",
-      "      |     /            \\ |   |",
-      "       \\   |   .----.   | |   |",
-      "        '.  |  / /\\ \\  | |  .'",
-      "          \\ | |  \\/  | | /",
-      "           \\|  \\____/  |/",
-      "            |  .------.  |",
-      "             \\|______| /",
-      "              '------'"
+      "              .-''''''''''''-.",
+      "           .-'                '-.",
+      "         .'                      '.",
+      "        /      .----------.        \\",
+      "       /     .'            '.       \\",
+      "      |     /   _        _   \\       |",
+      "      |    |   (_)      (_)   |      |",
+      "      |    |                __|      |",
+      "      |    |      .----.   /  \\     |",
+      "       \\    \\    / /\\ \\  |   |    /",
+      "        '.   '. |  \\/  | |  .'  .'",
+      "          \\    \\|      |/    /",
+      "           \\    | .--. |    /",
+      "            '.  | |__| |  .'",
+      "              \\ |______| /",
+      "               '--------'"
+    }
+  elseif w >= 34 and h >= 15 then
+    skull = {
+      "        .-''''''''-.",
+      "      .'            '.",
+      "     /   X        X   \\",
+      "    |                  |",
+      "    |      .----.      |",
+      "    |     / /\\ \\     |",
+      "     \\    \\ \\/ /    /",
+      "      '.   |__|   .'",
+      "        \\ .----. /",
+      "         '|____|'"
     }
   else
     skull = {
@@ -1134,6 +1264,33 @@ function LinkOS:renderForcedMessageDisplay(target, flash)
   end
 
   if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+end
+
+function LinkOS:renderUserLockDisplay(target)
+  local w, h = target.getSize()
+  draw.clear(target, colors.black, colors.white)
+
+  local label = os.getComputerLabel() or ("PC-" .. os.getComputerID())
+  draw.center(target, math.max(2, math.floor(h / 2) - 4), "LINK OS", colors.cyan, colors.black)
+  draw.center(target, math.max(3, math.floor(h / 2) - 2), label, colors.white, colors.black)
+  draw.center(target, math.max(4, math.floor(h / 2)), "PC VERROUILLE", colors.orange, colors.black)
+  draw.center(target, math.max(5, math.floor(h / 2) + 2), "Mot de passe requis", colors.lightGray, colors.black)
+
+  if h >= 8 then
+    draw.center(target, h - 1, "Appuie sur une touche ou touche l'ecran", colors.lightGray, colors.black)
+  end
+
+  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+end
+
+function LinkOS:renderUserLock()
+  if not self.sessionLocked or not security.enabled() then return false end
+
+  self.buttons = {}
+  for _, d in ipairs(self.displays or {}) do
+    if d.target then self:renderUserLockDisplay(d.target) end
+  end
+  return true
 end
 
 function LinkOS:renderHijackState()
@@ -1224,6 +1381,10 @@ function LinkOS:render()
     return
   end
 
+  if self:renderUserLock() then
+    return
+  end
+
   local target = self.active.target
   local l = self:layout()
   if not l then return end
@@ -1283,10 +1444,10 @@ function LinkOS:handleKey(key)
   elseif key == keys.f5 then self:openApp("files")
   elseif key == keys.f6 then self:openApp("settings")
   elseif key == keys.f7 then self:openApp("contacts")
-  elseif key == keys.f8 and self.service:isHackOperator() then self:openApp("hacker")
+  elseif key == keys.f8 and self.service:isHackOperator() then
+    self:openHackerTerminal()
   elseif key == keys.enter and self.app == "hacker" and self.service:isHackOperator() then
-    local line = self:prompt("LinkSec CMD", self.hackerConsole:prompt())
-    if line and line ~= "" then self.hackerConsole:execute(line) end
+    self:openHackerTerminal()
   elseif key == keys.escape then self:openApp("home")
   elseif key == keys.r then
     self:render()
@@ -1295,40 +1456,70 @@ end
 
 function LinkOS:uiLoop()
   self:render()
+  self.lockTimer = os.startTimer(1)
 
   while self.running do
     local event, a, b, c, d, e = os.pullEventRaw()
     local hijack = hackedState.get()
 
-    if hijack.locked then
+    if event == "timer" and self.lockTimer and a == self.lockTimer then
+      self.lockTimer = os.startTimer(1)
+
+      if security.enabled()
+        and not self.sessionLocked
+        and (os.clock() - self.lastActivity) >= security.autoLockSeconds() then
+        self.sessionLocked = true
+        self:render()
+      end
+
+    elseif hijack.locked then
       if event == "linkos_hacked_state" or event == "linkos_refresh"
         or event == "monitor_resize" or event == "term_resize"
         or event == "peripheral" or event == "peripheral_detach" then
+
         if event == "peripheral" or event == "peripheral_detach"
           or event == "monitor_resize" or event == "term_resize" then
           self:refreshDisplays()
         end
+
         self:render()
       end
 
     elseif hijack.flash and hijack.flash.message
       and (event == "mouse_click" or event == "monitor_touch" or event == "key") then
       hackedState.clearFlash()
+      self.lastActivity = os.clock()
       self:render()
 
+    elseif self.sessionLocked and security.enabled() then
+      if event == "mouse_click" or event == "monitor_touch" or event == "key" then
+        self:unlockSession()
+      elseif event == "linkos_refresh" or event == "linkos_hacked_state" then
+        self:render()
+      elseif event == "monitor_resize" or event == "term_resize"
+        or event == "peripheral" or event == "peripheral_detach" then
+        self:refreshDisplays()
+        self:render()
+      end
+
     elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
+      self.lastActivity = os.clock()
       self:hit(b, c)
       self:render()
 
     elseif event == "monitor_touch" then
+      self.lastActivity = os.clock()
+
       if self.active and self.active.kind == "monitor" and a == self.active.name then
         self:hit(b, c)
       else
         self:activateMonitorByName(a)
       end
+
       self:render()
 
     elseif event == "key" then
+      self.lastActivity = os.clock()
       self:handleKey(a)
       self:render()
 
@@ -1358,6 +1549,8 @@ end
 
 function LinkOS:run()
   self:refreshDisplays()
+  self.service:checkUpdate()
+  self.service:startUpdateMonitor()
 
   local ok, err = self.service:start()
   if not ok then
