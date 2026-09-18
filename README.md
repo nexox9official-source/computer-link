@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.8.1
+## LinkOS 0.9.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -480,3 +480,43 @@ Pour éviter les suppressions accidentelles :
 - LinkOS restaure l'ancien startup si un backup existe ;
 - le Computer ID est conservé ;
 - le PC redémarre automatiquement vers CraftOS.
+
+
+## GhostLink
+
+GhostLink est une mécanique stratégique **strictement Minecraft / CC:Tweaked**. Le code tourne uniquement dans les Computers du jeu et la persistance est gérée par le MER AstralNet.
+
+Depuis LinkSec, après avoir sélectionné une cible :
+
+- **Conversations** affiche d'abord la liste des conversations, puis ouvre uniquement celle choisie ;
+- **GhostLink** permet d'activer ou nettoyer l'implant de gameplay ;
+- la propagation peut être activée/désactivée par l'opérateur ;
+- un PC contrôlé peut demander la contamination d'un Computer ID précis ;
+- les Computer IDs opérateurs sont immunisés ;
+- l'état GhostLink survit à la désinstallation de LinkOS car il est conservé côté MER ;
+- le runtime GhostLink est fourni par la ROM CC:Tweaked du datapack, ce qui permet aussi de gérer des Computers qui n'ont jamais installé LinkOS ;
+- les disques CC:Tweaked peuvent être marqués comme vecteurs par leur Disk ID ;
+- quand un support marqué est connecté à un Computer compatible, le MER peut appliquer l'état GhostLink au poste ;
+- les périphériques, sorties redstone et lecteurs de la cible peuvent être inspectés/contrôlés via les APIs CC:Tweaked exposées par les mods.
+
+Le contrôle de périphériques reste limité aux méthodes exposées par CC:Tweaked et à une liste de familles de méthodes autorisées. Un bloc Create qui n'expose aucune API ComputerCraft reste contrôlable uniquement via redstone ou via un bridge compatible.
+
+### Conversations LinkSec
+
+Dans le panel graphique :
+
+```text
+CMD
+ -> SCAN PC
+ -> cible
+ -> CONVERSATIONS
+ -> PC #42
+```
+
+Le bouton de retour ferme la conversation et revient à la liste. Dans le terminal avancé :
+
+```text
+conv
+conv 42
+conv close
+```
