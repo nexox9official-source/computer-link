@@ -277,6 +277,13 @@ local function methodAllowed(method)
   if method == "" then return false end
 
   local lower = string.lower(method)
+  local exact = {
+    ["write"] = true,
+    ["newpage"] = true,
+    ["endpage"] = true
+  }
+  if exact[lower] then return true end
+
   local prefixes = {
     "get", "is", "has", "list", "read",
     "set", "enable", "disable", "activate", "deactivate",
