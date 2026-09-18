@@ -30,6 +30,7 @@ function Console.new(service)
   }
   self.maxLines = 220
   self.lastScan = {}
+  self.openConversation = nil
   return self
 end
 
@@ -59,7 +60,9 @@ function Console:help()
   self:push(" sessions                      sessions ouvertes")
   self:push(" status                        etat operateur/cible")
   self:push(" info                          infos PC cible")
-  self:push(" conversations                 espionner messages")
+  self:push(" conv                          lister les conversations")
+  self:push(" conv <id>                     ouvrir une conversation")
+  self:push(" conv close                    fermer la conversation")
   self:push(" ls [chemin]                   ex: ls /")
   self:push(" cat <fichier>                 ex: cat /startup.lua")
   self:push(" write <f> <texte>             ex: write /note.txt owned")
@@ -305,18 +308,66 @@ function Console:execute(line)
     end
 
   elseif command == "conversations" or command == "conv" then
-    local data = self:remote("conversations")
-    if data then
-      local messages = data.messages or {}
-      self:push("--- MESSAGE LOG ---", colors.red)
+    local arg = string.lower(rest or "")
 
-      for _, message in ipairs(messages) do
-        self:push("#" .. tostring(message.from_id)
-          .. " -> #" .. tostring(message.to_id)
-          .. " : " .. tostring(message.body))
+    if arg == "" or arg == "list" then
+      local data = self:remote("conversation_index")
+      if data then
+        self.lines = {}
+        self:push("CONVERSATIONS DISPONIBLES", colors.red)
+
+        for _, item in ipairs(data.conversations or {}) do
+          local preview = tostring((item.last or {}).body or "")
+          if #preview > 34 then preview = string.sub(preview, 1, 31) .. "..." end
+
+          self:push("#" .. tostring(item.peer_id)
+            .. "  " .. tostring(item.count or 0) .. " msg"
+            .. (preview ~= "" and ("  |  " .. preview) or ""))
+        end
+
+        if #(data.conversations or {}) == 0 then
+          self:push("(aucune conversation)", colors.lightGray)
+        else
+          self:push("", colors.white)
+          self:push("Ouvre avec: conv <id>", colors.lightGray)
+        end
       end
 
-      if #messages == 0 then self:push("(empty)") end
+    elseif arg == "close" or arg == "back" then
+      self.openConversation = nil
+      self.lines = {}
+      self:push("Conversation fermee.", colors.lightGray)
+      self:push("Tape 'conv' pour revoir la liste.", colors.lightGray)
+
+    else
+      local peerId = tonumber(rest)
+      if not peerId then
+        self:push("Usage: conv | conv <id> | conv close", colors.orange)
+      else
+        local data = self:remote("conversation", peerId)
+        if data then
+          self.openConversation = peerId
+          self.lines = {}
+          self:push("CONVERSATION AVEC PC #" .. tostring(peerId), colors.red)
+          self:push(string.rep("-", 26), colors.gray)
+
+          for _, message in ipairs(data.messages or {}) do
+            local fromId = tonumber(message.from_id)
+            local prefix = fromId == tonumber(self.target)
+              and "CIBLE"
+              or ("PC #" .. tostring(fromId))
+
+            self:push(prefix .. " : " .. tostring(message.body))
+          end
+
+          if #(data.messages or {}) == 0 then
+            self:push("(conversation vide)", colors.lightGray)
+          end
+
+          self:push("", colors.white)
+          self:push("conv close = fermer | conv = liste", colors.lightGray)
+        end
+      end
     end
 
   elseif command == "ls" then
