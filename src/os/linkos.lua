@@ -1533,6 +1533,127 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
+  if self.linksecView == "devices" then
+    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
+    self:addButton("linksec:devices:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Peripheriques connectes - clique pour controler", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.linksecDevices == 0 then
+      draw.text(target, x, y, "Aucun peripherique detecte.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.linksecDevices, math.max(1, l.h - y - 2)) do
+        local device = self.linksecDevices[i]
+        local line = tostring(device.name)
+          .. " [" .. table.concat(device.types or {}, ",") .. "]"
+          .. "  " .. tostring(#(device.methods or {})) .. " methodes"
+
+        draw.text(target, x, y, line, t.text, t.panel, w)
+        local name = device.name
+        self:addButton("linksec:device:" .. tostring(name), x, y, w, 1, function()
+          self:linksecOpenDevice(name)
+          self:render()
+        end)
+        y = y + 1
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "device" and self.linksecDevice then
+    draw.text(target, x, y, "< PERIPHERIQUES", t.accent, t.bg, w)
+    self:addButton("linksec:device:back", x, y, math.min(18, w), 1, function()
+      self.linksecView = "devices"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y,
+      tostring(self.linksecDevice.name)
+        .. " [" .. table.concat(self.linksecDevice.types or {}, ",") .. "]",
+      colors.red, t.bg, w)
+    y = y + 2
+
+    local methods = self.linksecDevice.methods or {}
+    local maxRows = math.max(1, l.h - y - 4)
+
+    for i = 1, math.min(#methods, maxRows) do
+      local method = methods[i]
+      draw.text(target, x, y, tostring(method), t.text, t.panel, w)
+      local methodName = method
+      self:addButton("linksec:method:" .. tostring(methodName), x, y, w, 1, function()
+        self:linksecCallDevice(methodName)
+        self:render()
+      end)
+      y = y + 1
+    end
+
+    if self.linksecDeviceResult and y < l.h - 1 then
+      draw.text(target, x, y + 1, tostring(self.linksecDeviceResult), t.good, t.bg, w)
+    end
+    return
+  end
+
+  if self.linksecView == "redstone" then
+    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
+    self:addButton("linksec:redstone:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Redstone - clique une face pour modifier", t.text, t.bg, w)
+    y = y + 2
+
+    for i = 1, math.min(#self.linksecRedstone, math.max(1, l.h - y - 2)) do
+      local side = self.linksecRedstone[i]
+      local line = tostring(side.side)
+        .. "  IN:" .. tostring(side.analog_input or (side.input and 15 or 0))
+        .. "  OUT:" .. tostring(side.analog_output or (side.output and 15 or 0))
+
+      draw.text(target, x, y, line, t.text, t.panel, w)
+      local sideName = side.side
+      self:addButton("linksec:redstone:" .. tostring(sideName), x, y, w, 1, function()
+        self:linksecSetRedstone(sideName)
+        self:render()
+      end)
+      y = y + 1
+    end
+    return
+  end
+
+  if self.linksecView == "drives" then
+    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
+    self:addButton("linksec:drives:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Lecteurs et disques connectes", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.linksecDrives == 0 then
+      draw.text(target, x, y, "Aucun lecteur detecte.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.linksecDrives, math.max(1, l.h - y - 2)) do
+        local drive = self.linksecDrives[i]
+        local line = tostring(drive.name)
+          .. " ID:" .. tostring(drive.id or "-")
+          .. " " .. tostring(drive.label or "sans label")
+          .. (drive.mount and (" " .. tostring(drive.mount)) or "")
+        draw.text(target, x, y, line, t.text, t.panel, w)
+        y = y + 1
+      end
+    end
+    return
+  end
+
   if self.linksecView == "ghost" then
     draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
     self:addButton("ghost:back", x, y, math.min(12, w), 1, function()
