@@ -1,7 +1,7 @@
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
-  VERSION = "0.4.1",
+  VERSION = "0.5.0",
   PROTOCOL_VERSION = 2,
 
   MAGIC = "COMPUTER_LINK",
@@ -13,6 +13,7 @@ return {
   DATABASE_FILE = "/computer-link/data/mer.db",
   HISTORY_FILE = "/computer-link/data/history.db",
   CRASH_FLAG = "/computer-link/data/crashed.flag",
+  HACKED_STATE_FILE = "/computer-link/data/hacked_state.db",
 
   MESSAGE_MAX = 500,
   LOCAL_HISTORY_MAX = 500,
@@ -29,6 +30,7 @@ return {
   HACK_SESSION_SECONDS = 120,
   HACK_DUMP_MESSAGES = 25,
   HACK_MAX_READ_BYTES = 4096,
+  HACK_MAX_WRITE_BYTES = 4096,
   HACK_MAX_LIST_ENTRIES = 50,
 
   -- Seuls ces Computer IDs peuvent lancer des commandes d'intrusion.
