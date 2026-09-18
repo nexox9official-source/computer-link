@@ -20,13 +20,13 @@ end
 local function isOperator(computerId)
   computerId = tonumber(computerId)
 
-  if serverPolicy
-    and type(serverPolicy.hack_operator_ids) == "table" then
-    return serverPolicy.hack_operator_ids[computerId] == true
+  -- Security boundary: operator rights only come from the server ROM policy.
+  -- Editing local LinkOS files/config must never grant offensive privileges.
+  if not serverPolicy or type(serverPolicy.hack_operator_ids) ~= "table" then
+    return false
   end
 
-  return config.HACK_OPERATOR_IDS
-    and config.HACK_OPERATOR_IDS[computerId] == true
+  return serverPolicy.hack_operator_ids[computerId] == true
 end
 
 function hack.isOperator(computerId)
@@ -361,6 +361,12 @@ function hack.handleRednet(senderId, message, protocol, storage)
   end
 
   if not isOperator(senderId) then
+    return true
+  end
+
+  -- Refuse packets which claim another source ID. rednet senderId is supplied
+  -- by ComputerCraft and is the identity used for authorization.
+  if tonumber(message.source_id) ~= tonumber(senderId) then
     return true
   end
 
