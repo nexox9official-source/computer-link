@@ -7,7 +7,7 @@ return {
 
   -- Only these Computer IDs may use intrusion tools.
   hack_operator_ids = {
-    [1] = true
+    [0] = true
   },
 
   -- MER installation is intentionally not exposed to players.
