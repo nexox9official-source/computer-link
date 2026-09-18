@@ -2,10 +2,10 @@ local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
-local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
+local hackedState = dofile("/computer-link/src/client/system_state.lua")
 local security = dofile("/computer-link/src/client/security.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
-local HackerConsole = dofile("/computer-link/src/os/hacker_console.lua")
+local HackerConsole = dofile("/computer-link/src/os/operator_console.lua")
 
 local LinkOS = {}
 LinkOS.__index = LinkOS
@@ -1015,11 +1015,30 @@ function LinkOS:isHiddenFilePath(path)
     return true
   end
 
-  local name = fs.getName(path)
+  local name = string.lower(fs.getName(path) or "")
   if name == "startup.lua"
     or name == "startup.computer-link-backup.lua"
     or name:match("^startup%.computer%-link%-backup%-%d+%.lua$") then
     return true
+  end
+
+  -- Ne jamais exposer les noms internes de sécurité/contrôle dans l'explorateur utilisateur.
+  local sensitiveWords = {
+    "hack",
+    "hacking",
+    "hacked",
+    "linksec",
+    "exploit",
+    "intrusion",
+    "remote_control",
+    "operator_console",
+    "system_state"
+  }
+
+  for _, word in ipairs(sensitiveWords) do
+    if string.find(name, word, 1, true) then
+      return true
+    end
   end
 
   return false
