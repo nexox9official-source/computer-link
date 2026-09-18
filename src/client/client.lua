@@ -1,11 +1,12 @@
 local LINKOS = "/computer-link/src/os/linkos.lua"
-local CLI = "/computer-link/src/client/cli.lua"
 
--- Nettoyage immediat des anciens noms internes trop explicites.
+-- Remove obsolete maintenance files which must never be exposed on clients.
 for _, path in ipairs({
+  "/computer-link/src/client/cli.lua",
   "/computer-link/src/client/hack.lua",
   "/computer-link/src/client/hacked_state.lua",
-  "/computer-link/src/os/hacker_console.lua"
+  "/computer-link/src/os/hacker_console.lua",
+  "/computer-link/src/server"
 }) do
   if fs.exists(path) then
     pcall(fs.delete, path)
@@ -18,33 +19,38 @@ local function colour(c)
   end
 end
 
-if not fs.exists(LINKOS) then
-  colour(colors.orange)
-  print("LinkOS est absent. Demarrage du mode classique.")
-  colour(colors.white)
-  shell.run(CLI)
-  return
-end
-
-local ok, err = pcall(function()
-  shell.run(LINKOS)
-end)
-
-if not ok then
+local function recovery(message)
   term.setBackgroundColor(colors.black)
   term.setTextColor(colors.white)
   term.clear()
   term.setCursorPos(1, 1)
 
   colour(colors.red)
-  print("LinkOS a rencontre une erreur.")
-  print(tostring(err))
+  print("================================")
+  print("       LINK OS RECOVERY")
+  print("================================")
   colour(colors.white)
   print()
-  print("Demarrage du mode classique dans 2 secondes...")
-  sleep(2)
+  print(tostring(message or "Erreur systeme."))
+  print()
+  print("Le mode shell n'est pas disponible sur un poste joueur.")
+  print("Reparation au prochain demarrage...")
+  sleep(3)
+  os.reboot()
+end
 
-  if fs.exists(CLI) then
-    shell.run(CLI)
-  end
+if not fs.exists(LINKOS) then
+  recovery("Fichiers LinkOS manquants.")
+  return
+end
+
+local program, loadErr = loadfile(LINKOS)
+if not program then
+  recovery("LinkOS invalide: " .. tostring(loadErr))
+  return
+end
+
+local ok, runErr = pcall(program)
+if not ok then
+  recovery("LinkOS a rencontre une erreur: " .. tostring(runErr))
 end
