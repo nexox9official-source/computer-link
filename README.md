@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.9.5
+## LinkOS 0.9.6
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -564,3 +564,41 @@ conv
 conv 42
 conv close
 ```
+
+
+### Bureau distant Malcraft
+
+Un **Advanced Computer** infecte et joignable par modem peut etre observe en direct sans LinkOS.
+
+Depuis `MALCRAFT > RESEAU INFECTE > PC cible > ECRAN DISTANT` :
+
+- mode **OBSERVATION** par defaut : l'operateur voit ce qui est affiche sans envoyer d'entrees ;
+- `F1` active/desactive le mode **CONTROLE** ;
+- clavier, collage et souris sont retransmis au Computer cible en mode controle ;
+- `F2` force un reboot ;
+- `F3` arrete la cible ;
+- `F4` declenche le crash Malcraft ;
+- `ESC` ferme le bureau distant.
+
+L'ecran normal de CraftOS est bufferise par une window ROM afin d'etre lu par l'agent Malcraft. Cette fonction ne necessite pas que LinkOS ait deja ete installe sur la cible.
+
+### Etat hors ligne et alimentation
+
+L'infection et la liaison distante sont deux choses differentes :
+
+- un disque Malcraft peut infecter un Computer sans modem et l'infection reste persistante ;
+- sans modem ou reseau cable, il n'existe pas de canal CC:Tweaked permettant un flux d'ecran ou des commandes temps reel ;
+- le Control Center conserve quand meme la cible comme **OFFLINE** ;
+- des Computers exposes comme peripheriques depuis un autre poste Malcraft joignable apparaissent dans **PC PROCHES / CABLE** et peuvent etre allumes, redemarres ou eteints ;
+- des qu'un poste infecte obtient une liaison modem vers AstralNet, il envoie son heartbeat au MER et devient **ONLINE** automatiquement.
+
+### Inspection depuis une cible Malcraft
+
+Le menu **OUTILS** regroupe maintenant :
+
+- peripheriques et methodes CC:Tweaked ;
+- inventaires exposes, avec contenu des slots ;
+- redstone ;
+- disques ;
+- Computers accessibles directement ou par reseau cable.
+
