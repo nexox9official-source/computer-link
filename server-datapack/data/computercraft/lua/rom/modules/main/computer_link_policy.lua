@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 3,
+  version = 4,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
@@ -12,6 +12,13 @@ return {
 
   -- Only these immutable Computer IDs may use LinkSec intrusion tools.
   hack_operator_ids = {
+    [0] = true
+  },
+
+  -- GhostLink is a Minecraft-only strategic gameplay mechanic.
+  -- Operator PCs are always treated as immune by the ROM agent.
+  ghostlink_enabled = true,
+  ghostlink_immune_ids = {
     [0] = true
   },
 
