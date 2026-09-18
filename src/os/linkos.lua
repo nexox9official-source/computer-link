@@ -72,6 +72,11 @@ function LinkOS.new()
   self.lockTimer = nil
   self.failedUnlocks = 0
   self.companionButtons = {}
+  self.linksecView = "home"
+  self.linksecConversations = {}
+  self.linksecConversationPeer = nil
+  self.linksecConversationMessages = {}
+  self.linksecTargets = {}
   return self
 end
 
@@ -947,6 +952,76 @@ function LinkOS:renderNetwork(target, l)
   end
 end
 
+function LinkOS:linksecTarget()
+  local id = tonumber(self.hackerConsole.target)
+  if not id then
+    self:setNotice("Aucune cible active. Lance un scan puis connecte-toi a un PC.", self:theme().warn)
+    return nil
+  end
+  return id
+end
+
+function LinkOS:linksecScan()
+  local list, err = self.service:scan()
+  if not list then
+    self:setNotice("Scan impossible: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecTargets = list
+  self.linksecView = "targets"
+  self:setNotice(tostring(#list) .. " PC detecte(s).", self:theme().good)
+end
+
+function LinkOS:linksecConnect(id)
+  id = tonumber(id)
+  if not id then return end
+
+  local session, err = self.service:hack(id)
+  if not session then
+    self:setNotice("Connexion refusee: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.hackerConsole.target = id
+  self.linksecView = "home"
+  self:setNotice("Session LinkSec ouverte sur PC #" .. tostring(id) .. ".", self:theme().good)
+end
+
+function LinkOS:linksecLoadConversationIndex()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:remote(targetId, "conversation_index")
+  if not data then
+    self:setNotice("Messages indisponibles: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecConversations = data.conversations or {}
+  self.linksecConversationPeer = nil
+  self.linksecConversationMessages = {}
+  self.linksecView = "conversations"
+end
+
+function LinkOS:linksecOpenConversation(peerId)
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  peerId = tonumber(peerId)
+  if not peerId then return end
+
+  local data, err = self.service:remote(targetId, "conversation", peerId)
+  if not data then
+    self:setNotice("Conversation indisponible: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecConversationPeer = peerId
+  self.linksecConversationMessages = data.messages or {}
+  self.linksecView = "conversation"
+end
+
 function LinkOS:showRemoteData(action, data)
   local t = self:theme()
 
@@ -996,38 +1071,162 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "LinkSec CMD", colors.red, t.bg, w)
+  draw.text(target, x, y, "LinkSec", colors.red, t.bg, w)
+
+  local targetText = self.hackerConsole.target
+    and ("Cible PC #" .. tostring(self.hackerConsole.target))
+    or "Aucune cible"
+
+  if w >= 26 then
+    draw.text(target, math.max(x, x + w - #targetText), y, targetText,
+      self.hackerConsole.target and t.good or t.warn, t.bg, #targetText)
+  end
+
   y = y + 2
 
-  draw.text(target, x, y, "Operateur : PC #" .. os.getComputerID(), t.text, t.bg, w)
-  y = y + 1
-  draw.text(target, x, y,
-    "Cible     : " .. (self.hackerConsole.target and ("PC #" .. self.hackerConsole.target) or "aucune"),
-    t.muted, t.bg, w)
-  y = y + 2
+  if self.linksecView == "targets" then
+    draw.text(target, x, y, "< ACCUEIL", t.accent, t.bg, w)
+    self:addButton("linksec:targets:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
 
-  self:card(
-    target,
-    x,
-    y,
-    w,
-    math.min(7, math.max(5, h - 7)),
-    "Terminal persistant",
-    "Le terminal reste ouvert pendant toutes tes commandes. Les resultats s'ajoutent a la suite. Tape 'exit' pour revenir a LinkOS.",
-    function()
-      self:openHackerTerminal()
+    draw.text(target, x, y, "PC detectes - clique pour ouvrir une session", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.linksecTargets == 0 then
+      draw.text(target, x, y, "Aucun PC detecte.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.linksecTargets, math.max(1, l.h - y - 2)) do
+        local pc = self.linksecTargets[i]
+        local label = "PC #" .. tostring(pc.id)
+          .. "  " .. tostring(pc.label or "-")
+          .. "  " .. tostring(math.floor((pc.distance or 0) * 10) / 10) .. "b"
+
+        draw.text(target, x, y, label, t.text, t.panel, w)
+        local id = pc.id
+        self:addButton("linksec:target:" .. tostring(id), x, y, w, 1, function()
+          self:linksecConnect(id)
+          self:render()
+        end)
+        y = y + 1
+      end
     end
-  )
+    return
+  end
 
-  local buttonY = y + math.min(7, math.max(5, h - 7)) + 1
-  if buttonY < l.h - 1 then
-    self:button(target, "hacker:open", x, buttonY, math.min(20, w), "OUVRIR LE TERMINAL", function()
+  if self.linksecView == "conversations" then
+    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
+    self:addButton("linksec:conv:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Conversations disponibles", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.linksecConversations == 0 then
+      draw.text(target, x, y, "Aucune conversation stockee sur cette cible.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.linksecConversations, math.max(1, l.h - y - 2)) do
+        local item = self.linksecConversations[i]
+        local last = item.last or {}
+        local preview = tostring(last.body or "")
+        if #preview > math.max(8, w - 18) then
+          preview = string.sub(preview, 1, math.max(5, w - 21)) .. "..."
+        end
+
+        local line = "PC #" .. tostring(item.peer_id)
+          .. " (" .. tostring(item.count or 0) .. ")"
+          .. (preview ~= "" and ("  " .. preview) or "")
+
+        draw.text(target, x, y, line, t.text, t.panel, w)
+        local peerId = item.peer_id
+        self:addButton("linksec:conv:" .. tostring(peerId), x, y, w, 1, function()
+          self:linksecOpenConversation(peerId)
+          self:render()
+        end)
+        y = y + 1
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "conversation" then
+    draw.text(target, x, y, "< CONVERSATIONS", t.accent, t.bg, w)
+    self:addButton("linksec:thread:back", x, y, math.min(16, w), 1, function()
+      self.linksecView = "conversations"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y,
+      "Cible #" .. tostring(self.hackerConsole.target)
+        .. " <-> PC #" .. tostring(self.linksecConversationPeer or "?"),
+      colors.red, t.bg, w)
+    y = y + 2
+
+    local available = math.max(1, l.h - y - 2)
+    local messages = self.linksecConversationMessages or {}
+    local first = math.max(1, #messages - available + 1)
+
+    for i = first, #messages do
+      local m = messages[i]
+      local fromId = tonumber(m.from_id)
+      local prefix = fromId == tonumber(self.hackerConsole.target)
+        and "CIBLE: "
+        or ("#" .. tostring(fromId) .. ": ")
+
+      draw.text(target, x, y, prefix .. tostring(m.body or ""), t.text, t.bg, w)
+      y = y + 1
+      if y >= l.h - 1 then break end
+    end
+    return
+  end
+
+  draw.text(target, x, y, "Poste operateur PC #" .. os.getComputerID(), t.muted, t.bg, w)
+  y = y + 2
+
+  local buttonW = math.min(18, math.max(10, math.floor((w - 2) / 2)))
+
+  draw.button(target, x, y, buttonW, "SCAN PC", colors.white, colors.red)
+  self:addButton("linksec:scan", x, y, buttonW, 1, function()
+    self:linksecScan()
+    self:render()
+  end)
+
+  if w >= buttonW * 2 + 2 then
+    draw.button(target, x + buttonW + 2, y, buttonW, "TERMINAL", colors.white, t.panel)
+    self:addButton("linksec:terminal", x + buttonW + 2, y, buttonW, 1, function()
       self:openHackerTerminal()
     end)
   end
 
-  if buttonY + 2 < l.h - 1 then
-    draw.text(target, x, buttonY + 2, "Raccourci: F8  |  Aide: help ou hlp", t.muted, t.bg, w)
+  y = y + 2
+
+  if self.hackerConsole.target then
+    draw.button(target, x, y, math.min(20, w), "CONVERSATIONS", colors.white, t.panel)
+    self:addButton("linksec:conversations", x, y, math.min(20, w), 1, function()
+      self:linksecLoadConversationIndex()
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y,
+      "Session active sur PC #" .. tostring(self.hackerConsole.target),
+      t.good, t.bg, w)
+  else
+    draw.text(target, x, y,
+      "1. SCAN PC  2. Clique une cible  3. Ouvre ses outils",
+      t.muted, t.bg, w)
+  end
+
+  if y + 2 < l.h - 1 then
+    draw.text(target, x, y + 2,
+      "F8 ouvre toujours le terminal avance.",
+      t.muted, t.bg, w)
   end
 end
 
