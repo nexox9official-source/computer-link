@@ -208,6 +208,227 @@ local function deletePath(path)
   return { path = path }
 end
 
+local function serialiseValue(value, depth)
+  depth = depth or 0
+  local kind = type(value)
+
+  if kind == "nil" or kind == "boolean" or kind == "number" or kind == "string" then
+    return value
+  end
+
+  if kind ~= "table" or depth >= 3 then
+    return tostring(value)
+  end
+
+  local out = {}
+  local count = 0
+
+  for key, child in pairs(value) do
+    count = count + 1
+    if count > 64 then break end
+    out[tostring(key)] = serialiseValue(child, depth + 1)
+  end
+
+  return out
+end
+
+local function connectedDevices()
+  local out = {}
+
+  for _, name in ipairs(peripheral.getNames()) do
+    local deviceTypes = {peripheral.getType(name)}
+    local methods = peripheral.getMethods(name) or {}
+
+    table.sort(methods)
+
+    out[#out + 1] = {
+      name = name,
+      types = deviceTypes,
+      methods = methods
+    }
+  end
+
+  table.sort(out, function(a, b)
+    return tostring(a.name) < tostring(b.name)
+  end)
+
+  return out
+end
+
+local function deviceDetails(name)
+  name = tostring(name or "")
+
+  if name == "" or not peripheral.isPresent(name) then
+    return nil, "Peripherique introuvable."
+  end
+
+  local methods = peripheral.getMethods(name) or {}
+  table.sort(methods)
+
+  return {
+    name = name,
+    types = {peripheral.getType(name)},
+    methods = methods
+  }
+end
+
+local function methodAllowed(method)
+  method = tostring(method or "")
+  if method == "" then return false end
+
+  local lower = string.lower(method)
+  local prefixes = {
+    "get", "is", "has", "list", "read",
+    "set", "enable", "disable", "activate", "deactivate",
+    "open", "close", "start", "stop", "fire", "shoot",
+    "assemble", "disassemble", "move", "rotate", "turn",
+    "eject", "play"
+  }
+
+  for _, prefix in ipairs(prefixes) do
+    if string.sub(lower, 1, #prefix) == prefix then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function callDevice(argument)
+  local arg = type(argument) == "table" and argument or {}
+  local name = tostring(arg.name or "")
+  local method = tostring(arg.method or "")
+
+  if name == "" or not peripheral.isPresent(name) then
+    return nil, "Peripherique introuvable."
+  end
+
+  if not methodAllowed(method) then
+    return nil, "Methode non autorisee par LinkSec."
+  end
+
+  local found = false
+  for _, candidate in ipairs(peripheral.getMethods(name) or {}) do
+    if candidate == method then
+      found = true
+      break
+    end
+  end
+
+  if not found then
+    return nil, "Methode indisponible."
+  end
+
+  local args = type(arg.args) == "table" and arg.args or {}
+  local result = table.pack(pcall(peripheral.call, name, method, table.unpack(args)))
+
+  if result[1] ~= true then
+    return nil, tostring(result[2])
+  end
+
+  local values = {}
+  for i = 2, result.n do
+    values[#values + 1] = serialiseValue(result[i])
+  end
+
+  return {
+    name = name,
+    method = method,
+    results = values
+  }
+end
+
+local function redstoneState()
+  local out = {}
+
+  for _, side in ipairs(redstone.getSides()) do
+    local row = {
+      side = side,
+      input = redstone.getInput(side),
+      output = redstone.getOutput(side)
+    }
+
+    if redstone.getAnalogInput then
+      row.analog_input = redstone.getAnalogInput(side)
+    end
+
+    if redstone.getAnalogOutput then
+      row.analog_output = redstone.getAnalogOutput(side)
+    end
+
+    out[#out + 1] = row
+  end
+
+  return out
+end
+
+local function setRedstoneState(argument)
+  local arg = type(argument) == "table" and argument or {}
+  local side = tostring(arg.side or "")
+  local value = arg.value
+  local valid = false
+
+  for _, candidate in ipairs(redstone.getSides()) do
+    if candidate == side then
+      valid = true
+      break
+    end
+  end
+
+  if not valid then
+    return nil, "Face redstone invalide."
+  end
+
+  local numeric = tonumber(value)
+
+  if numeric and redstone.setAnalogOutput then
+    numeric = math.max(0, math.min(15, math.floor(numeric)))
+    redstone.setAnalogOutput(side, numeric)
+  else
+    local enabled = value == true
+      or tostring(value) == "1"
+      or string.lower(tostring(value)) == "on"
+      or string.lower(tostring(value)) == "true"
+
+    redstone.setOutput(side, enabled)
+  end
+
+  return {
+    side = side,
+    output = redstone.getOutput(side),
+    analog_output = redstone.getAnalogOutput and redstone.getAnalogOutput(side) or nil
+  }
+end
+
+local function connectedDrives()
+  local out = {}
+
+  for _, name in ipairs(peripheral.getNames()) do
+    local isDrive = false
+    local types = {peripheral.getType(name)}
+
+    for _, deviceType in ipairs(types) do
+      if deviceType == "drive" then
+        isDrive = true
+        break
+      end
+    end
+
+    if isDrive then
+      out[#out + 1] = {
+        name = name,
+        present = disk.isPresent(name),
+        has_data = disk.hasData(name),
+        id = disk.isPresent(name) and disk.getID(name) or nil,
+        label = disk.isPresent(name) and disk.getLabel(name) or nil,
+        mount = disk.hasData(name) and disk.getMountPath(name) or nil
+      }
+    end
+  end
+
+  return out
+end
+
 local function sessionFor(sourceId, token)
   local session = sessions[tonumber(sourceId)]
   if not session then return nil end
@@ -430,6 +651,33 @@ function hack.handleRednet(senderId, message, protocol, storage)
         messages = storage.conversation(peerId, config.HACK_DUMP_MESSAGES)
       })
     end
+
+  elseif action == "devices" then
+    sendHackResult(senderId, message.request_id, true, {
+      devices = connectedDevices()
+    })
+
+  elseif action == "device_info" then
+    local data, err = deviceDetails(argument)
+    sendHackResult(senderId, message.request_id, data ~= nil, data, err)
+
+  elseif action == "device_call" then
+    local data, err = callDevice(argument)
+    sendHackResult(senderId, message.request_id, data ~= nil, data, err)
+
+  elseif action == "redstone" then
+    sendHackResult(senderId, message.request_id, true, {
+      sides = redstoneState()
+    })
+
+  elseif action == "redstone_set" then
+    local data, err = setRedstoneState(argument)
+    sendHackResult(senderId, message.request_id, data ~= nil, data, err)
+
+  elseif action == "drives" then
+    sendHackResult(senderId, message.request_id, true, {
+      drives = connectedDrives()
+    })
 
   elseif action == "authinfo" then
     local info = security.info()
