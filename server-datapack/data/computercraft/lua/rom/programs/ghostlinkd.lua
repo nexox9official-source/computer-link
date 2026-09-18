@@ -434,6 +434,9 @@ while true do
           local payload = message.payload or {}
           infected = payload.infected == true and not isImmune(os.getComputerID())
           spreadEnabled = infected and payload.spread == true
+          if infected and spreadEnabled then
+            infectConnectedDisks()
+          end
         end
 
       elseif message.type == "COMMAND" then
