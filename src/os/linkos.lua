@@ -77,6 +77,10 @@ function LinkOS.new()
   self.linksecConversationPeer = nil
   self.linksecConversationMessages = {}
   self.linksecTargets = {}
+  self.ghostState = nil
+  self.ghostDevices = {}
+  self.ghostRedstone = {}
+  self.ghostDrives = {}
   return self
 end
 
@@ -1020,6 +1024,136 @@ function LinkOS:linksecOpenConversation(peerId)
   self.linksecConversationPeer = peerId
   self.linksecConversationMessages = data.messages or {}
   self.linksecView = "conversation"
+end
+
+function LinkOS:ghostRefresh()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostStatus(targetId)
+  if not data then
+    self:setNotice("GhostLink: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostState = data
+  self.linksecView = "ghost"
+end
+
+function LinkOS:ghostInstall()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostInstall(targetId, true)
+  if not data then
+    self:setNotice("Installation GhostLink impossible: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("GhostLink actif sur PC #" .. tostring(targetId) .. ".", self:theme().good)
+  self:ghostRefresh()
+end
+
+function LinkOS:ghostClean()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostClean(targetId)
+  if not data then
+    self:setNotice("Nettoyage GhostLink impossible: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("GhostLink retire de PC #" .. tostring(targetId) .. ".", self:theme().good)
+  self:ghostRefresh()
+end
+
+function LinkOS:ghostToggleSpread()
+  local targetId = self:linksecTarget()
+  if not targetId or not self.ghostState then return end
+
+  local state = self.ghostState.state or {}
+  local enabled = not (state.spread == true)
+  local data, err = self.service:ghostSetSpread(targetId, enabled)
+
+  if not data then
+    self:setNotice("Propagation: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("Propagation " .. (enabled and "activee." or "desactivee."), self:theme().good)
+  self:ghostRefresh()
+end
+
+function LinkOS:ghostLoadDevices()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "devices")
+  if not data then
+    self:setNotice("Peripheriques GhostLink: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostDevices = data.devices or {}
+  self.linksecView = "ghost_devices"
+end
+
+function LinkOS:ghostLoadRedstone()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "redstone")
+  if not data then
+    self:setNotice("Redstone GhostLink: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostRedstone = data.sides or {}
+  self.linksecView = "ghost_redstone"
+end
+
+function LinkOS:ghostSetRedstone(side)
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local value = self:prompt("Redstone " .. tostring(side), "Tape on, off ou 0-15.")
+  local data, err = self.service:ghostRemote(targetId, "redstone_set", {
+    side = side,
+    value = tonumber(value) or value
+  })
+
+  if not data then
+    self:setNotice("Redstone: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("Sortie " .. tostring(side) .. " modifiee.", self:theme().good)
+  self:ghostLoadRedstone()
+end
+
+function LinkOS:ghostLoadDrives()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:ghostRemote(targetId, "drives")
+  if not data then
+    self:setNotice("Disques GhostLink: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.ghostDrives = data.disk_ids or {}
+  self.linksecView = "ghost_drives"
+end
+
+function LinkOS:ghostCarrier(diskId)
+  local data, err = self.service:ghostDiskSet(diskId, true)
+  if not data then
+    self:setNotice("Support GhostLink: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("Disque #" .. tostring(diskId) .. " marque comme vecteur GhostLink.", self:theme().good)
 end
 
 function LinkOS:showRemoteData(action, data)
