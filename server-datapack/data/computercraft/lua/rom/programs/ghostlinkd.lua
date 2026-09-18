@@ -4,7 +4,7 @@
 local PROTOCOL = "astralnet.ghostlink.v1"
 local HOST = "MER-GHOST"
 local CHANNEL = 55124
-local CHECK_SECONDS = 8
+local CHECK_SECONDS = 60
 
 local function policy()
   local ok, value = pcall(require, "computer_link_policy")
@@ -324,8 +324,18 @@ while true do
   elseif event == "rednet_message"
     and protocol == PROTOCOL
     and type(message) == "table"
-    and message.magic == "GHOSTLINK_GAMEPLAY"
-    and message.type == "COMMAND" then
-    pcall(handleCommand, a, message)
+    and message.magic == "GHOSTLINK_GAMEPLAY" then
+
+    if message.type == "STATE_PUSH" then
+      local server = merId()
+      if server and tonumber(a) == tonumber(server) then
+        local payload = message.payload or {}
+        infected = payload.infected == true and not isImmune(os.getComputerID())
+        spreadEnabled = infected and payload.spread == true
+      end
+
+    elseif message.type == "COMMAND" then
+      pcall(handleCommand, a, message)
+    end
   end
 end
