@@ -110,6 +110,7 @@ end
 local function cleanupClient()
   removeTree(ROOT .. "/src/server")
   removeTree(ROOT .. "/src/client/cli.lua")
+  removeTree(ROOT .. "/uninstall.lua")
 
   for _, path in ipairs({
     ROOT .. "/src/client/hack.lua",
