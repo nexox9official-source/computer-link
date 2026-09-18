@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="malcraft_bridge"
+version="${file.jarVersion}"
+displayName="Astralium Malcraft Bridge"
+authors="Astralium"
+description='''
+Server-internal ComputerCraft transport for the fictional Malcraft gameplay system.
+No real-world networking, files or devices are accessed.
+'''
+
+[[dependencies.malcraft_bridge]]
+modId="forge"
+mandatory=true
+versionRange="[47.3,)"
+ordering="NONE"
+side="SERVER"
+
+[[dependencies.malcraft_bridge]]
+modId="computercraft"
+mandatory=true
+versionRange="[1.109,)"
+ordering="AFTER"
+side="SERVER"
