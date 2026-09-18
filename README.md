@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.9.6
+## LinkOS 0.10.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -602,3 +602,22 @@ Le menu **OUTILS** regroupe maintenant :
 - disques ;
 - Computers accessibles directement ou par reseau cable.
 
+
+
+### Malcraft Bridge — réseau invisible serveur
+
+LinkOS 0.10.0 ajoute un addon Forge **serveur uniquement** nommé `malcraft-bridge`. Il fournit à chaque Computer CC:Tweaked une API interne `malcraft_bus`.
+
+Cette couche ne représente aucun réseau réel : elle existe uniquement à l'intérieur du serveur Minecraft. Elle permet au gameplay Malcraft de continuer même quand le Computer infecté n'a aucun modem ComputerCraft.
+
+Fonctions principales :
+
+- un disque Malcraft branché sur un Computer sain l'enregistre immédiatement comme infecté ;
+- l'infection est persistante par **Computer ID**, même après retrait du disque et après casse/repose du même Computer ;
+- le PC opérateur #0 voit les machines contaminées via le Control Center sans que LinkOS soit installé sur celles-ci ;
+- commandes, périphériques, inventaires, redstone et écran distant passent par le bus serveur interne ;
+- propagation de proximité utilise les positions Minecraft des Computers et ne dépend plus d'un modem ;
+- le serveur peut rallumer/éteindre un Computer infecté chargé par son Computer ID ;
+- `NETTOYER` pose un état sain persistant côté serveur afin qu'un reboot ou une repose du même Computer ne réactive pas Malcraft tout seul.
+
+Le mod est marqué **serveur uniquement** : les joueurs n'ont pas besoin de l'ajouter dans leur instance client.
