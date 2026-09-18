@@ -33,7 +33,8 @@ if not loader then
   return
 end
 
-local ok, runErr = pcall(loader, table.unpack(args))
+local unpackArgs = table.unpack or unpack
+local ok, runErr = pcall(loader, unpackArgs(args))
 if not ok then
   colour(colors.red)
   print("Erreur LinkOS:")
