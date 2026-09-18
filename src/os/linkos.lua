@@ -292,6 +292,43 @@ function LinkOS:openHackerTerminal()
   self:render()
 end
 
+function LinkOS:runUninstallAction()
+  local t = self:theme()
+
+  if not http or not http.get then
+    self:setNotice("HTTP indisponible: desinstallation impossible.", t.danger)
+    self:render()
+    return
+  end
+
+  local response, err = http.get(config.GITHUB_RAW .. "uninstall.lua?t="
+    .. tostring(os.epoch and os.epoch("utc") or os.time()))
+
+  if not response then
+    self:setNotice("Desinstallateur inaccessible: " .. tostring(err), t.danger)
+    self:render()
+    return
+  end
+
+  local source = response.readAll()
+  response.close()
+
+  local loader, loadErr = load(source, "@linkos_uninstall.lua", "t", _ENV)
+  if not loader then
+    self:setNotice("Desinstallateur invalide: " .. tostring(loadErr), t.danger)
+    self:render()
+    return
+  end
+
+  term.redirect(self.native)
+  local ok, runErr = pcall(loader)
+
+  if not ok then
+    self:setNotice("Desinstallation impossible: " .. tostring(runErr), t.danger)
+    self:render()
+  end
+end
+
 function LinkOS:runUpdateAction()
   local t = self:theme()
 
@@ -1238,6 +1275,14 @@ function LinkOS:renderSettings(target, l)
         os.shutdown()
       end)
     end
+  end
+
+  local uninstallY = l.mode == "compact" and (l.h - 2) or (l.h - 4)
+  if uninstallY > y and uninstallY > 3 then
+    draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
+    self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
+      self:runUninstallAction()
+    end)
   end
 end
 
