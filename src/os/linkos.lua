@@ -71,6 +71,7 @@ function LinkOS.new()
   self.lastActivity = os.clock()
   self.lockTimer = nil
   self.failedUnlocks = 0
+  self.companionButtons = {}
   return self
 end
 
@@ -1434,6 +1435,16 @@ function LinkOS:renderCompanion(d)
     draw.text(target, 2, 10, nowText(), t.muted, colors.black, math.max(1, w - 2))
   end
 
+  self.companionButtons[d.name] = nil
+  if self.service.updateAvailable and d.touch and h >= 13 and w >= 12 then
+    local bw = math.min(14, w - 3)
+    local by = h - 2
+    draw.button(target, 2, by, bw, "MISE A JOUR", colors.black, colors.yellow)
+    self.companionButtons[d.name] = {
+      x = 2, y = by, w = bw, h = 1, action = "update"
+    }
+  end
+
   if d.touch and h >= 13 then
     draw.text(target, 2, h - 1, "Touchez pour ouvrir ici", t.accent, colors.black, math.max(1, w - 2))
   elseif h >= 13 then
@@ -1444,6 +1455,7 @@ function LinkOS:renderCompanion(d)
 end
 
 function LinkOS:renderCompanions()
+  self.companionButtons = {}
   for _, d in ipairs(self.displays or {}) do
     if d.kind == "monitor" and (not self.active or d.id ~= self.active.id) then
       self:renderCompanion(d)
@@ -1599,10 +1611,25 @@ function LinkOS:uiLoop()
     elseif event == "monitor_touch" then
       self.lastActivity = os.clock()
 
-      if self.active and self.active.kind == "monitor" and a == self.active.name then
-        self:hit(b, c)
-      else
-        self:activateMonitorByName(a)
+      local companionButton = self.companionButtons and self.companionButtons[a]
+      local handledCompanion = false
+
+      if companionButton
+        and b >= companionButton.x and b < companionButton.x + companionButton.w
+        and c >= companionButton.y and c < companionButton.y + companionButton.h then
+
+        handledCompanion = true
+        if companionButton.action == "update" then
+          self:runUpdateAction()
+        end
+      end
+
+      if not handledCompanion then
+        if self.active and self.active.kind == "monitor" and a == self.active.name then
+          self:hit(b, c)
+        else
+          self:activateMonitorByName(a)
+        end
       end
 
       self:render()
