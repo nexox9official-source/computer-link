@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 4,
+  version = 5,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
@@ -21,6 +21,13 @@ return {
   ghostlink_immune_ids = {
     [0] = true
   },
+
+  -- Propagation physique Minecraft : un poste compromis peut contaminer un
+  -- autre Computer GhostLink visible a tres courte distance via modem.
+  ghostlink_proximity_spread = true,
+  ghostlink_proximity_distance = 2.5,
+  ghostlink_beacon_seconds = 5,
+  ghostlink_spread_cooldown_seconds = 15,
 
   -- Computers explicitly forbidden from ever becoming the MER.
   -- PC #0 is the operator workstation, not the central MER.
