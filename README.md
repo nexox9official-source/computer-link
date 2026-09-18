@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.4.1
+## LinkOS 0.5.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -113,9 +113,9 @@ Tableau de bord AstralNet :
 
 Centre de sécurité et gameplay d'intrusion ComputerCraft.
 
-Le **Computer #1** est actuellement l'opérateur spécial autorisé par la politique serveur.
+Le **Computer #1** est l'opérateur spécial autorisé par la politique serveur.
 
-Les autres PC peuvent être des cibles, mais ne peuvent pas exécuter les commandes d'intrusion.
+Les commandes et boutons d'intrusion ne sont affichés **que** sur un PC autorisé. Sur les autres postes, le Centre de sécurité reste une simple interface de protection sans commandes de hacking.
 
 La politique peut être fournie par la ROM côté serveur grâce au datapack, donc elle ne dépend pas uniquement d'un fichier local facilement modifiable.
 
@@ -126,8 +126,16 @@ Le système actuel permet notamment :
 - sessions temporaires ;
 - inspection des informations d'un PC compromis ;
 - lecture de son historique Computer Link ;
-- exploration de fichiers ComputerCraft ;
-- crash simulé du ComputerCraft ciblé.
+- exploration et lecture de fichiers ComputerCraft ;
+- écriture et suppression de fichiers distants ;
+- changement du label du PC ;
+- message forcé plein écran ;
+- verrouillage distant ;
+- écran rouge **YOU HAVE BEEN HACKED** avec tête de mort ASCII ;
+- déverrouillage distant ;
+- reboot et crash simulé du ComputerCraft ciblé.
+
+Un PC verrouillé reste connecté au service réseau afin que l'opérateur puisse continuer à le contrôler ou le déverrouiller. L'écran de verrouillage est persistant après reboot tant qu'il n'a pas été retiré à distance.
 
 Tout cela reste **strictement dans Minecraft/CC:Tweaked**.
 
@@ -214,14 +222,16 @@ link
 Sur un nouveau Computer :
 
 ```text
-link client
+link
 ```
 
-Pour le MER :
+ou directement :
 
 ```text
-link server
+link install
 ```
+
+L'installation du **MER n'est pas proposée aux joueurs**. Le MER est provisionné uniquement par l'administration Astralium.
 
 Autres commandes :
 
@@ -242,11 +252,7 @@ Client :
 wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua client
 ```
 
-MER :
-
-```text
-wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua server
-```
+Une demande d'installation MER est refusée par défaut sauf sur un MER déjà provisionné ou explicitement autorisé par la politique serveur.
 
 ## Mises à jour
 
@@ -256,8 +262,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.4.1
-Remote : 0.4.2
+Local  : 0.5.0
+Remote : 0.5.1
 
 Mise a jour automatique...
 ```
@@ -335,3 +341,10 @@ La base graphique est maintenant en place. Les prochaines couches prévues peuve
 - radar/cartographie ;
 - Create et Create Big Cannons ;
 - programmes installables comme de véritables applications LinkOS.
+
+
+## Bootstrap serveur dynamique
+
+À partir du datapack LinkOS 0.5.0, la commande ROM `link` ne contient plus le menu complet. Elle charge le bootstrap officiel depuis GitHub à chaque utilisation.
+
+Conséquence : les futures modifications du menu d'installation ne nécessitent plus de remplacer le datapack. Le datapack conserve uniquement les éléments qui doivent rester côté serveur, notamment la politique de sécurité.
