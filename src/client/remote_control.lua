@@ -19,14 +19,21 @@ end
 
 local function isOperator(computerId)
   computerId = tonumber(computerId)
+  if not computerId then return false end
 
-  -- Security boundary: operator rights only come from the server ROM policy.
-  -- Editing local LinkOS files/config must never grant offensive privileges.
-  if not serverPolicy or type(serverPolicy.hack_operator_ids) ~= "table" then
-    return false
+  -- PC #0 is the built-in Astralium LinkSec workstation.
+  -- os.getComputerID()/rednet sender IDs are provided by ComputerCraft, so a
+  -- different client cannot gain this identity by editing local Lua files.
+  if computerId == 0 then
+    return true
   end
 
-  return serverPolicy.hack_operator_ids[computerId] == true
+  -- The read-only server ROM policy may authorize additional operator IDs later.
+  if serverPolicy and type(serverPolicy.hack_operator_ids) == "table" then
+    return serverPolicy.hack_operator_ids[computerId] == true
+  end
+
+  return false
 end
 
 function hack.isOperator(computerId)
@@ -244,7 +251,8 @@ function hack.handleModem(modemName, channel, replyChannel, message, distance)
     return
   end
 
-  -- Verifie cote cible que l'attaquant fait partie de la politique serveur.
+  -- Verifie cote cible le vrai Computer ID de l'attaquant. PC #0 est autorise
+  -- nativement; les autres IDs doivent etre presents dans la politique serveur.
   if not isOperator(sourceId) then
     return
   end
