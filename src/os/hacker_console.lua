@@ -1,3 +1,5 @@
+local security = dofile("/computer-link/src/client/security.lua")
+
 local Console = {}
 Console.__index = Console
 
@@ -6,9 +8,15 @@ local function split(line)
   return string.lower(command or ""), rest or ""
 end
 
-local function asLines(value)
-  if type(value) == "table" then return value end
-  return { tostring(value or "") }
+local function yieldNow()
+  os.queueEvent("linksec_yield")
+  os.pullEvent("linksec_yield")
+end
+
+local function colour(value)
+  if term.isColor and term.isColor() then
+    term.setTextColor(value)
+  end
 end
 
 function Console.new(service)
@@ -18,25 +26,21 @@ function Console.new(service)
   self.lines = {
     {text="LINKSEC TERMINAL", colour=colors.red},
     {text="Operator privilege confirmed.", colour=colors.lime},
-    {text="Type 'help' for commands.", colour=colors.lightGray}
+    {text="Tape 'help' ou 'hlp' pour les commandes.", colour=colors.lightGray}
   }
-  self.maxLines = 160
+  self.maxLines = 220
+  self.lastScan = {}
   return self
 end
 
-function Console:push(text, colour)
+function Console:push(text, lineColour)
   self.lines[#self.lines + 1] = {
     text = tostring(text or ""),
-    colour = colour or colors.white
+    colour = lineColour or colors.white
   }
+
   while #self.lines > self.maxLines do
     table.remove(self.lines, 1)
-  end
-end
-
-function Console:pushMany(lines, colour)
-  for _, line in ipairs(asLines(lines)) do
-    self:push(line, colour)
   end
 end
 
@@ -47,32 +51,35 @@ end
 
 function Console:help()
   self:push("COMMANDES LINKSEC", colors.red)
-  self:push(" help                aide")
-  self:push(" clear               nettoyer le terminal")
-  self:push(" status              etat de l'operateur")
-  self:push(" scan                scanner les PC proches")
-  self:push(" targets             derniers PC detectes")
-  self:push(" hack <id>           compromettre un PC")
-  self:push(" use <id>            selectionner une cible compromise")
-  self:push(" sessions            sessions actives")
-  self:push(" info                 infos cible")
-  self:push(" conversations        lire ses conversations")
-  self:push(" ls [chemin]          lister ses fichiers")
-  self:push(" cat <fichier>        lire un fichier")
-  self:push(" write <f> <texte>    ecrire un fichier")
-  self:push(" delete <chemin>      supprimer un chemin")
-  self:push(" lock [message]       bloquer LinkOS")
-  self:push(" message <texte>      message plein ecran")
-  self:push(" unlock               debloquer LinkOS")
-  self:push(" label <nom>          renommer le PC cible")
-  self:push(" reboot               redemarrer la cible")
-  self:push(" crash                crash simule cible")
-  self:push(" disconnect           fermer cible locale")
+  self:push(" help | hlp                    aide + exemples")
+  self:push(" scan                          ex: scan")
+  self:push(" targets                       voir dernier scan")
+  self:push(" hack <id>                     ex: hack 12")
+  self:push(" use <id>                      ex: use 12")
+  self:push(" sessions                      sessions ouvertes")
+  self:push(" status                        etat operateur/cible")
+  self:push(" info                          infos PC cible")
+  self:push(" conversations                 espionner messages")
+  self:push(" ls [chemin]                   ex: ls /")
+  self:push(" cat <fichier>                 ex: cat /startup.lua")
+  self:push(" write <f> <texte>             ex: write /note.txt owned")
+  self:push(" delete <chemin>               ex: delete /note.txt")
+  self:push(" auth                          voir protection mot de passe")
+  self:push(" crackpass [auto|pin|short]    ex: crackpass auto")
+  self:push(" lock [message]                ex: lock ACCESS DENIED")
+  self:push(" message <texte>               ex: message Je vous vois.")
+  self:push(" unlock                        debloquer LinkOS")
+  self:push(" label <nom>                   ex: label COMPROMISED")
+  self:push(" reboot                        redemarrer cible")
+  self:push(" crash                         crash simule cible")
+  self:push(" disconnect                    retirer cible locale")
+  self:push(" clear                         vider l'ecran")
+  self:push(" exit                          revenir a LinkOS")
 end
 
 function Console:requireTarget()
   if not self.target then
-    self:push("Aucune cible active. Utilise: use <id>", colors.orange)
+    self:push("Aucune cible active. Exemple: hack 12", colors.orange)
     return nil
   end
   return self.target
@@ -87,18 +94,118 @@ function Console:remote(action, argument)
     self:push("ERREUR: " .. tostring(err), colors.red)
     return nil
   end
+
   return data
+end
+
+local function lowerAlphaCandidate(index, length)
+  local chars = {}
+  for i = length, 1, -1 do
+    local digit = index % 26
+    chars[i] = string.char(string.byte("a") + digit)
+    index = math.floor(index / 26)
+  end
+  return table.concat(chars)
+end
+
+function Console:crackPassword(mode)
+  local auth = self:remote("authinfo")
+  if not auth then return end
+
+  if not auth.enabled then
+    self:push("La cible n'a aucun mot de passe LinkOS.", colors.orange)
+    return
+  end
+
+  if not auth.salt or not auth.password_hash then
+    self:push("Hash de mot de passe indisponible.", colors.red)
+    return
+  end
+
+  mode = string.lower(mode or "")
+  if mode == "" then mode = "auto" end
+
+  if mode ~= "auto" and mode ~= "pin" and mode ~= "short" then
+    self:push("Usage: crackpass [auto|pin|short]", colors.orange)
+    return
+  end
+
+  self:push("PASSWORD HASH ACQUIRED", colors.red)
+  self:push("Mode: " .. mode .. " | lancement du brute-force...", colors.orange)
+
+  local attempts = 0
+  local found = nil
+
+  local function test(candidate)
+    attempts = attempts + 1
+    if security.hashPassword(candidate, auth.salt) == tostring(auth.password_hash) then
+      found = candidate
+      return true
+    end
+
+    if attempts % 5000 == 0 then
+      self:push("... " .. attempts .. " essais", colors.lightGray)
+      yieldNow()
+    end
+
+    return false
+  end
+
+  local common = {
+    "1234", "0000", "1111", "123456", "password", "admin",
+    "astralium", "minecraft", "coalition", "linkos", "qwerty"
+  }
+
+  if mode == "auto" then
+    for _, candidate in ipairs(common) do
+      if test(candidate) then break end
+    end
+  end
+
+  if not found and (mode == "auto" or mode == "pin") then
+    for i = 0, 9999 do
+      local candidate = string.format("%04d", i)
+      if test(candidate) then break end
+    end
+  end
+
+  if not found and (mode == "auto" or mode == "short") then
+    for length = 1, 4 do
+      local count = 26 ^ length
+      for i = 0, count - 1 do
+        local candidate = lowerAlphaCandidate(i, length)
+        if test(candidate) then break end
+      end
+      if found then break end
+    end
+  end
+
+  if found then
+    self:push("PASSWORD CRACKED", colors.lime)
+    self:push("Mot de passe: " .. found, colors.lime)
+    self:push("Essais: " .. attempts, colors.lightGray)
+  else
+    self:push("ECHEC: mot de passe hors de l'espace teste.", colors.red)
+    self:push("Essais: " .. attempts, colors.lightGray)
+    self:push("Essaie pin ou short selon le type suppose.", colors.orange)
+  end
 end
 
 function Console:execute(line)
   line = tostring(line or "")
-  if line:match("^%s*$") then return end
-
-  self:push(self:prompt() .. " " .. line, colors.lime)
+  if line:match("^%s*$") then return nil end
 
   local command, rest = split(line)
 
-  if command == "help" or command == "?" then
+  if command == "exit" or command == "quit" then
+    self:push(self:prompt() .. " " .. line, colors.lime)
+    self:push("Retour a LinkOS.", colors.lightGray)
+    return "exit"
+  end
+
+  self:push(self:prompt() .. " " .. line, colors.lime)
+
+  if command == "help" or command == "hlp" or command == "?" then
     self:help()
 
   elseif command == "clear" or command == "cls" then
@@ -114,11 +221,13 @@ function Console:execute(line)
   elseif command == "scan" then
     self:push("Scanning radio range...", colors.orange)
     local found, err = self.service:scan()
+
     if not found then
       self:push("SCAN FAILED: " .. tostring(err), colors.red)
     else
       self.lastScan = found
       self:push("Found " .. tostring(#found) .. " target(s).", colors.lime)
+
       for _, pc in ipairs(found) do
         self:push("#" .. tostring(pc.id)
           .. "  " .. tostring(math.floor((pc.distance or 0) * 10) / 10) .. " blocks"
@@ -128,11 +237,10 @@ function Console:execute(line)
     end
 
   elseif command == "targets" then
-    local found = self.lastScan or {}
-    if #found == 0 then
-      self:push("No scan results.")
+    if #self.lastScan == 0 then
+      self:push("Aucun resultat. Exemple: scan")
     else
-      for _, pc in ipairs(found) do
+      for _, pc in ipairs(self.lastScan) do
         self:push("#" .. tostring(pc.id) .. "  " .. tostring(pc.label or "-"))
       end
     end
@@ -140,22 +248,24 @@ function Console:execute(line)
   elseif command == "hack" then
     local id = tonumber(rest)
     if not id then
-      self:push("Usage: hack <id>", colors.orange)
+      self:push("Usage: hack <id> | Exemple: hack 12", colors.orange)
     else
       self:push("Launching exploit against #" .. id .. "...", colors.orange)
       local session, err = self.service:hack(id)
+
       if not session then
         self:push("ACCESS DENIED: " .. tostring(err), colors.red)
       else
         self.target = id
         self:push("ACCESS GRANTED -> PC #" .. id, colors.lime)
+        self:push("Cible active. Exemple: info", colors.lightGray)
       end
     end
 
   elseif command == "use" or command == "target" then
     local id = tonumber(rest)
     if not id then
-      self:push("Usage: use <id>", colors.orange)
+      self:push("Usage: use <id> | Exemple: use 12", colors.orange)
     else
       local found = false
       for _, session in ipairs(self.service:sessions()) do
@@ -199,17 +309,20 @@ function Console:execute(line)
     if data then
       local messages = data.messages or {}
       self:push("--- MESSAGE LOG ---", colors.red)
-      for _, m in ipairs(messages) do
-        self:push("#" .. tostring(m.from_id)
-          .. " -> #" .. tostring(m.to_id)
-          .. " : " .. tostring(m.body))
+
+      for _, message in ipairs(messages) do
+        self:push("#" .. tostring(message.from_id)
+          .. " -> #" .. tostring(message.to_id)
+          .. " : " .. tostring(message.body))
       end
+
       if #messages == 0 then self:push("(empty)") end
     end
 
   elseif command == "ls" then
     local path = rest ~= "" and rest or "/"
     local data = self:remote("ls", path)
+
     if data then
       self:push("--- " .. tostring(data.path or path) .. " ---", colors.red)
       for _, entry in ipairs(data.entries or {}) do
@@ -219,25 +332,29 @@ function Console:execute(line)
 
   elseif command == "cat" then
     if rest == "" then
-      self:push("Usage: cat <fichier>", colors.orange)
+      self:push("Usage: cat <fichier> | Exemple: cat /startup.lua", colors.orange)
     else
       local data = self:remote("cat", rest)
+
       if data then
         self:push("--- " .. tostring(data.path or rest) .. " ---", colors.red)
-        for lineText in (tostring(data.content or "") .. "\n"):gmatch("(.-)\n") do
-          self:push(lineText)
+        for textLine in (tostring(data.content or "") .. "\n"):gmatch("(.-)\n") do
+          self:push(textLine)
         end
       end
     end
 
   elseif command == "write" then
     local path, content = rest:match("^(%S+)%s+(.+)$")
+
     if not path then
       self:push("Usage: write <fichier> <texte>", colors.orange)
+      self:push("Exemple: write /note.txt owned", colors.lightGray)
     else
       local data = self:remote("write", {path=path, content=content})
       if data then
-        self:push("WROTE " .. tostring(data.bytes or 0) .. " bytes -> " .. tostring(data.path), colors.lime)
+        self:push("WROTE " .. tostring(data.bytes or 0)
+          .. " bytes -> " .. tostring(data.path), colors.lime)
       end
     end
 
@@ -248,6 +365,20 @@ function Console:execute(line)
       local data = self:remote("delete", rest)
       if data then self:push("DELETED " .. tostring(data.path), colors.lime) end
     end
+
+  elseif command == "auth" then
+    local data = self:remote("authinfo")
+    if data then
+      self:push("Password protection: " .. (data.enabled and "ENABLED" or "DISABLED"),
+        data.enabled and colors.orange or colors.lightGray)
+      if data.enabled then
+        self:push("Auto-lock: " .. tostring(data.auto_lock_seconds or "?") .. "s")
+        self:push("Hash captured. Exemple: crackpass auto", colors.red)
+      end
+    end
+
+  elseif command == "crackpass" or command == "crack" then
+    self:crackPassword(rest)
 
   elseif command == "lock" then
     local data = self:remote("lock", rest)
@@ -283,8 +414,62 @@ function Console:execute(line)
 
   else
     self:push("Unknown command: " .. command, colors.red)
-    self:push("Type 'help' for available commands.", colors.lightGray)
+    self:push("Tape 'help' ou 'hlp'.", colors.lightGray)
   end
+
+  return nil
+end
+
+function Console:runInteractive(target)
+  target = target or term.current()
+  local previous = term.current()
+  term.redirect(target)
+
+  local function render()
+    local w, h = term.getSize()
+    term.setBackgroundColor(colors.black)
+    term.clear()
+    term.setCursorPos(1, 1)
+
+    colour(colors.red)
+    term.write("LINKSEC CMD")
+    colour(colors.lightGray)
+    term.setCursorPos(math.max(1, w - 10), 1)
+    term.write("PC #" .. os.getComputerID())
+
+    colour(colors.gray)
+    term.setCursorPos(1, 2)
+    term.write(string.rep("-", w))
+
+    local visible = math.max(1, h - 4)
+    local first = math.max(1, #self.lines - visible + 1)
+    local y = 3
+
+    for i = first, #self.lines do
+      local entry = self.lines[i]
+      term.setCursorPos(1, y)
+      colour(entry.colour or colors.white)
+      local text = tostring(entry.text or "")
+      if #text > w then text = string.sub(text, 1, w) end
+      term.write(text)
+      y = y + 1
+      if y > h - 1 then break end
+    end
+
+    term.setCursorPos(1, h)
+    colour(colors.lime)
+    term.write(self:prompt() .. " ")
+    colour(colors.white)
+  end
+
+  while true do
+    render()
+    local line = read()
+    local result = self:execute(line)
+    if result == "exit" then break end
+  end
+
+  term.redirect(previous)
 end
 
 return Console
