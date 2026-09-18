@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 5,
+  version = 6,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
@@ -28,6 +28,11 @@ return {
   ghostlink_proximity_distance = 2.5,
   ghostlink_beacon_seconds = 5,
   ghostlink_spread_cooldown_seconds = 15,
+
+  -- Malcraft: les postes infectes marquent automatiquement les disques inseres.
+  -- Le poste operateur reste immunise mais peut agir comme emetteur de proximite.
+  malcraft_auto_infect_disks = true,
+  malcraft_operator_proximity_emitter = true,
 
   -- Computers explicitly forbidden from ever becoming the MER.
   -- PC #0 is the operator workstation, not the central MER.
