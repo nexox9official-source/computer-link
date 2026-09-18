@@ -434,13 +434,9 @@ function LinkOS:renderChrome(target, l)
       {"home", "H"},
       {"messages", "M"},
       {"network", "N"},
-      {"security", "S"}
+      {"security", "S"},
+      {"settings", "*"}
     }
-    if self.service:isHackOperator() then
-      compactApps[#compactApps + 1] = {"hacker", ">"}
-    else
-      compactApps[#compactApps + 1] = {"settings", "*"}
-    end
 
     local slotW = math.max(3, math.floor(l.w / #compactApps))
     for i, entry in ipairs(compactApps) do
@@ -1195,6 +1191,46 @@ function LinkOS:renderSettings(target, l)
   draw.text(target, x, y, "Parametres", t.text, t.bg, w)
   y = y + 2
 
+  -- Petit ecran: version simplifiee pour que toutes les actions importantes restent visibles.
+  if l.mode == "compact" then
+    draw.text(target, x, y, "LinkOS " .. config.VERSION, t.accent, t.bg, w)
+    y = y + 1
+    draw.text(target, x, y,
+      self.service.updateAvailable
+        and ("Mise a jour: " .. tostring(self.service.remoteVersion))
+        or "Systeme a jour",
+      self.service.updateAvailable and t.warn or t.muted, t.bg, w)
+    y = y + 2
+
+    local updateLabel = self.service.updateAvailable and "MISE A JOUR !" or "VERIFIER MAJ"
+    local updateBg = self.service.updateAvailable and colors.yellow or t.button
+    local updateFg = self.service.updateAvailable and colors.black or t.text
+    draw.button(target, x, y, math.min(15, w), updateLabel, updateFg, updateBg)
+    self:addButton("set:update", x, y, math.min(15, w), 1, function()
+      self:runUpdateAction()
+    end)
+    y = y + 2
+
+    self:button(target, "set:reboot", x, y, math.min(10, w), "REBOOT", function()
+      os.reboot()
+    end)
+
+    if w >= 22 then
+      self:button(target, "set:shutdown", x + 12, y, math.min(9, w - 12), "ARRET", function()
+        os.shutdown()
+      end)
+    end
+
+    -- Toujours visible sur le petit Computer.
+    local uninstallY = math.max(y + 2, l.h - 2)
+    if uninstallY >= l.h then uninstallY = l.h - 1 end
+    draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
+    self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
+      self:runUninstallAction()
+    end)
+    return
+  end
+
   draw.text(target, x, y, "Affichage", t.accent, t.bg, w)
   y = y + 1
   draw.text(target, x, y,
@@ -1204,7 +1240,7 @@ function LinkOS:renderSettings(target, l)
 
   local shown = 0
   for _, d in ipairs(self.displays) do
-    if shown >= 3 or y >= l.h - 8 then break end
+    if shown >= 3 or y >= l.h - 9 then break end
     local selected = d.id == self.active.id
     local label = (selected and "* " or "  ") .. d.label .. "  " .. d.width .. "x" .. d.height
     draw.text(target, x, y, label, selected and t.good or t.muted, t.bg, w)
@@ -1222,7 +1258,7 @@ function LinkOS:renderSettings(target, l)
   end
 
   y = y + 1
-  if y < l.h - 6 then
+  if y < l.h - 8 then
     draw.text(target, x, y, "Couleur", t.accent, t.bg, w)
     y = y + 1
 
@@ -1241,11 +1277,10 @@ function LinkOS:renderSettings(target, l)
         bx = bx + bw
       end
     end
-
     y = y + 2
   end
 
-  if y < l.h - 4 then
+  if y < l.h - 5 then
     draw.text(target, x, y, "Systeme", t.accent, t.bg, w)
     y = y + 1
     draw.text(target, x, y,
@@ -1277,13 +1312,13 @@ function LinkOS:renderSettings(target, l)
     end
   end
 
-  local uninstallY = l.mode == "compact" and (l.h - 2) or (l.h - 4)
-  if uninstallY > y and uninstallY > 3 then
-    draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
-    self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
-      self:runUninstallAction()
-    end)
-  end
+  -- Zone reservee en bas: jamais masquee par les autres reglages.
+  local uninstallY = l.h - 4
+  if uninstallY < 4 then uninstallY = 4 end
+  draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
+  self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
+    self:runUninstallAction()
+  end)
 end
 
 function LinkOS:renderAbout(target, l)
