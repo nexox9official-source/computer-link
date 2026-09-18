@@ -320,6 +320,14 @@ local function syncState()
   end
 end
 
+local function currentMs()
+  if os.epoch then
+    local ok, value = pcall(os.epoch, "utc")
+    if ok then return value end
+  end
+  return math.floor(os.clock() * 1000)
+end
+
 local function screenFrame()
   local surface = captureSurface
 
@@ -366,7 +374,7 @@ local function sendScreenFrames()
   local frame = screenFrame()
   if not frame then return end
 
-  local now = nowMs and nowMs() or math.floor(os.clock() * 1000)
+  local now = currentMs()
 
   for targetId, expiry in pairs(screenSubscribers) do
     if expiry < now then
@@ -713,11 +721,11 @@ local function handleCommand(sender, message)
     reply(sender, message, frame ~= nil, frame, err)
 
   elseif action == "screen_subscribe" then
-    screenSubscribers[sender] = (nowMs and nowMs() or math.floor(os.clock() * 1000)) + 15000
+    screenSubscribers[sender] = (currentMs()) + 15000
     reply(sender, message, true, {subscribed=true})
 
   elseif action == "screen_keepalive" then
-    screenSubscribers[sender] = (nowMs and nowMs() or math.floor(os.clock() * 1000)) + 15000
+    screenSubscribers[sender] = (currentMs()) + 15000
     reply(sender, message, true, {subscribed=true})
 
   elseif action == "screen_unsubscribe" then
