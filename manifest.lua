@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.2.3",
+  version = "0.3.0",
   protocol_version = 2,
   files = {
     "install.lua",
