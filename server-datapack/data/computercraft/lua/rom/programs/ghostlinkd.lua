@@ -170,6 +170,13 @@ local function allowedMethod(method)
   method = string.lower(tostring(method or ""))
   if method == "" then return false end
 
+  local exact = {
+    ["write"] = true,
+    ["newpage"] = true,
+    ["endpage"] = true
+  }
+  if exact[method] then return true end
+
   local prefixes = {
     "get", "is", "has", "list", "read",
     "set", "enable", "disable", "activate", "deactivate",
@@ -303,39 +310,110 @@ local function handleCommand(sender, message)
   end
 end
 
-if not openWireless() then
+local modemName = openWireless()
+if not modemName then
   return
 end
 
+local modem = peripheral.wrap(modemName)
+local lastSpread = {}
+
+local function nowMs()
+  if os.epoch then return os.epoch("utc") end
+  return math.floor(os.clock() * 1000)
+end
+
+local function proximitySettings()
+  local p = policy() or {}
+  return {
+    enabled = p.ghostlink_proximity_spread == true,
+    distance = tonumber(p.ghostlink_proximity_distance) or 2.5,
+    interval = math.max(2, tonumber(p.ghostlink_beacon_seconds) or 5),
+    cooldown = math.max(5, tonumber(p.ghostlink_spread_cooldown_seconds) or 15)
+  }
+end
+
+local function sendBeacon()
+  if not modem then return end
+  modem.transmit(CHANNEL, CHANNEL, {
+    magic = "GHOSTLINK_GAMEPLAY",
+    type = "BEACON",
+    computer_id = os.getComputerID()
+  })
+end
+
+local function handleBeacon(message, distance)
+  local cfg = proximitySettings()
+  if not cfg.enabled or not infected or not spreadEnabled then return end
+  if type(distance) ~= "number" or distance > cfg.distance then return end
+  if type(message) ~= "table"
+    or message.magic ~= "GHOSTLINK_GAMEPLAY"
+    or message.type ~= "BEACON" then
+    return
+  end
+
+  local targetId = tonumber(message.computer_id)
+  if not targetId or targetId == os.getComputerID() or isImmune(targetId) then
+    return
+  end
+
+  local now = nowMs()
+  local last = lastSpread[targetId] or 0
+  if now - last < cfg.cooldown * 1000 then return end
+  lastSpread[targetId] = now
+
+  pcall(request, "SPREAD_TO", {target_id=targetId}, 1.0)
+end
+
 refreshState()
-local timer = os.startTimer(CHECK_SECONDS)
+sendBeacon()
+
+local stateTimer = os.startTimer(CHECK_SECONDS)
+local beaconTimer = os.startTimer(proximitySettings().interval)
 
 while true do
-  local event, a, message, protocol = os.pullEvent()
+  local event, a, b, c, d, e = os.pullEvent()
 
-  if event == "timer" and a == timer then
+  if event == "timer" and a == stateTimer then
     refreshState()
-    timer = os.startTimer(CHECK_SECONDS)
+    stateTimer = os.startTimer(CHECK_SECONDS)
+
+  elseif event == "timer" and a == beaconTimer then
+    sendBeacon()
+    beaconTimer = os.startTimer(proximitySettings().interval)
 
   elseif event == "disk" or event == "disk_eject" or event == "peripheral"
     or event == "peripheral_detach" then
     refreshState()
 
-  elseif event == "rednet_message"
-    and protocol == PROTOCOL
-    and type(message) == "table"
-    and message.magic == "GHOSTLINK_GAMEPLAY" then
+  elseif event == "modem_message" then
+    local channel = b
+    local message = d
+    local distance = e
+    if channel == CHANNEL then
+      pcall(handleBeacon, message, distance)
+    end
 
-    if message.type == "STATE_PUSH" then
-      local server = merId()
-      if server and tonumber(a) == tonumber(server) then
-        local payload = message.payload or {}
-        infected = payload.infected == true and not isImmune(os.getComputerID())
-        spreadEnabled = infected and payload.spread == true
+  elseif event == "rednet_message" then
+    local sender = a
+    local message = b
+    local protocol = c
+
+    if protocol == PROTOCOL
+      and type(message) == "table"
+      and message.magic == "GHOSTLINK_GAMEPLAY" then
+
+      if message.type == "STATE_PUSH" then
+        local server = merId()
+        if server and tonumber(sender) == tonumber(server) then
+          local payload = message.payload or {}
+          infected = payload.infected == true and not isImmune(os.getComputerID())
+          spreadEnabled = infected and payload.spread == true
+        end
+
+      elseif message.type == "COMMAND" then
+        pcall(handleCommand, sender, message)
       end
-
-    elseif message.type == "COMMAND" then
-      pcall(handleCommand, a, message)
     end
   end
 end
