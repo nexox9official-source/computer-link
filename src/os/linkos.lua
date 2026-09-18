@@ -77,6 +77,11 @@ function LinkOS.new()
   self.linksecConversationPeer = nil
   self.linksecConversationMessages = {}
   self.linksecTargets = {}
+  self.linksecDevices = {}
+  self.linksecDevice = nil
+  self.linksecDeviceResult = nil
+  self.linksecRedstone = {}
+  self.linksecDrives = {}
   self.ghostState = nil
   self.ghostDevices = {}
   self.ghostDevice = nil
@@ -1026,6 +1031,126 @@ function LinkOS:linksecOpenConversation(peerId)
   self.linksecConversationPeer = peerId
   self.linksecConversationMessages = data.messages or {}
   self.linksecView = "conversation"
+end
+
+function LinkOS:linksecLoadDevices()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:remote(targetId, "devices")
+  if not data then
+    self:setNotice("Peripheriques: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecDevices = data.devices or {}
+  self.linksecDevice = nil
+  self.linksecDeviceResult = nil
+  self.linksecView = "devices"
+end
+
+function LinkOS:linksecOpenDevice(name)
+  for _, device in ipairs(self.linksecDevices or {}) do
+    if device.name == name then
+      self.linksecDevice = device
+      self.linksecDeviceResult = nil
+      self.linksecView = "device"
+      return
+    end
+  end
+end
+
+function LinkOS:linksecCallDevice(method)
+  local targetId = self:linksecTarget()
+  if not targetId or not self.linksecDevice then return end
+
+  local raw = self:prompt(
+    tostring(self.linksecDevice.name) .. "." .. tostring(method),
+    "Arguments separes par des espaces. Vide = aucun argument."
+  )
+
+  local args = {}
+  for token in tostring(raw or ""):gmatch("%S+") do
+    local lower = string.lower(token)
+    if lower == "true" or lower == "on" then
+      args[#args + 1] = true
+    elseif lower == "false" or lower == "off" then
+      args[#args + 1] = false
+    else
+      args[#args + 1] = tonumber(token) or token
+    end
+  end
+
+  local data, err = self.service:remote(targetId, "device_call", {
+    name = self.linksecDevice.name,
+    method = method,
+    args = args
+  })
+
+  if not data then
+    self.linksecDeviceResult = "ERREUR: " .. tostring(err)
+    self:setNotice(self.linksecDeviceResult, self:theme().danger)
+    return
+  end
+
+  local parts = {}
+  for _, value in ipairs(data.results or {}) do
+    if type(value) == "table" then
+      parts[#parts + 1] = textutils.serialize(value, {compact=true})
+    else
+      parts[#parts + 1] = tostring(value)
+    end
+  end
+
+  self.linksecDeviceResult = #parts > 0 and table.concat(parts, " | ") or "OK"
+  self:setNotice(tostring(method) .. " execute.", self:theme().good)
+end
+
+function LinkOS:linksecLoadRedstone()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:remote(targetId, "redstone")
+  if not data then
+    self:setNotice("Redstone: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecRedstone = data.sides or {}
+  self.linksecView = "redstone"
+end
+
+function LinkOS:linksecSetRedstone(side)
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local value = self:prompt("Redstone " .. tostring(side), "Tape on, off ou 0-15.")
+  local data, err = self.service:remote(targetId, "redstone_set", {
+    side = side,
+    value = tonumber(value) or value
+  })
+
+  if not data then
+    self:setNotice("Redstone: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self:setNotice("Sortie " .. tostring(side) .. " modifiee.", self:theme().good)
+  self:linksecLoadRedstone()
+end
+
+function LinkOS:linksecLoadDrives()
+  local targetId = self:linksecTarget()
+  if not targetId then return end
+
+  local data, err = self.service:remote(targetId, "drives")
+  if not data then
+    self:setNotice("Disques: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.linksecDrives = data.drives or {}
+  self.linksecView = "drives"
 end
 
 function LinkOS:ghostRefresh()
