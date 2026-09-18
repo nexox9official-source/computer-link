@@ -102,6 +102,21 @@ print("PC connus  : " .. database.countDevices())
 print("--------------------------------")
 log("MER ONLINE", colors.lime)
 
+local function pushGhostState(targetId)
+  targetId = tonumber(targetId)
+  if not targetId then return end
+
+  local state = database.ghostHost(targetId)
+  rednet.send(targetId, {
+    magic = "GHOSTLINK_GAMEPLAY",
+    type = "STATE_PUSH",
+    payload = {
+      infected = state.infected == true and not isGhostImmune(targetId),
+      spread = state.spread == true and not isGhostImmune(targetId)
+    }
+  }, GHOST_PROTOCOL)
+end
+
 local function reply(target, request, kind, payload)
   local packet = network.packet(kind, payload, nil)
   packet.reply_to = request and request.request_id or nil
@@ -268,6 +283,7 @@ local function handle(senderId, request)
     end
 
     local state = database.setGhostHost(targetId, true, senderId, payload.spread ~= false)
+    pushGhostState(targetId)
     reply(senderId, request, "GHOST_INFECT_RESULT", {
       computer_id = targetId,
       state = state
@@ -292,6 +308,7 @@ local function handle(senderId, request)
     end
 
     database.setGhostHost(targetId, false, senderId, false)
+    pushGhostState(targetId)
     reply(senderId, request, "GHOST_CLEAN_RESULT", {
       computer_id = targetId,
       cleaned = true
@@ -317,6 +334,7 @@ local function handle(senderId, request)
     end
 
     state = database.setGhostHost(targetId, true, senderId, payload.enabled == true)
+    pushGhostState(targetId)
     reply(senderId, request, "GHOST_SPREAD_RESULT", {
       computer_id = targetId,
       state = state
@@ -435,6 +453,7 @@ local function handleGhost(senderId, message)
     end
 
     local targetState = database.setGhostHost(targetId, true, sender, true)
+    pushGhostState(targetId)
     ghostReply(sender, message, true, {
       target_id = targetId,
       infected = targetState.infected == true
