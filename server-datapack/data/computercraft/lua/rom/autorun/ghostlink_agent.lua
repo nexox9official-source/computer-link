@@ -1,4 +1,4 @@
--- GhostLink gameplay launcher for CC:Tweaked / Astralium.
+-- Malcraft gameplay launcher for CC:Tweaked / Astralium.
 -- Minecraft-only. The actual daemon lives in ROM and is not stored in the
 -- player's writable Computer filesystem.
 
@@ -25,5 +25,5 @@ if multishell and multishell.launch then
 end
 
 -- Standard Computers without multishell cannot keep a background ROM daemon
--- while the normal shell is active. Their GhostLink state is still stored by
+-- while the normal shell is active. Their Malcraft state is still stored by
 -- the MER and will become active again when LinkOS runs or on an Advanced PC.
