@@ -1670,7 +1670,10 @@ function LinkOS:uiLoop()
       self:render()
 
     elseif event == "terminate" then
-      self.running = false
+      -- Ctrl+T must never drop a player into CraftOS/shell.
+      self.lastActivity = os.clock()
+      self:setNotice("Sortie systeme bloquee. Utilise ARRET ou REBOOT.", self:theme().warn)
+      self:render()
     end
   end
 end
