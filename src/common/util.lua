@@ -8,9 +8,9 @@ end
 function util.now()
   if os.epoch then
     local ok, value = pcall(os.epoch, "utc")
-    if ok then return value end
+    if ok then return math.floor(value / 1000) end
   end
-  return os.time()
+  return math.floor(os.time() * 3600)
 end
 
 function util.count(tbl)
@@ -68,22 +68,10 @@ function util.saveTable(path, value)
   return util.writeAll(path, textutils.serialize(value))
 end
 
-function util.validUsername(username, minLen, maxLen)
-  username = util.trim(username)
-
-  if #username < minLen or #username > maxLen then
-    return false, username
-  end
-
-  if not username:match("^[%w_%-]+$") then
-    return false, username
-  end
-
-  return true, username
-end
-
 function util.requestId()
-  return tostring(os.getComputerID()) .. "-" .. tostring(util.now()) .. "-" .. tostring(math.random(1000, 9999))
+  return tostring(os.getComputerID())
+    .. "-" .. tostring(util.now())
+    .. "-" .. tostring(math.random(100000, 999999))
 end
 
 return util
