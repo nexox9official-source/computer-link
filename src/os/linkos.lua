@@ -1695,6 +1695,23 @@ function LinkOS:renderHacker(target, l)
 
     local bw = math.min(18, math.max(11, math.floor((w - 2) / 2)))
 
+    if self.hackerConsole.target then
+      local currentId = tonumber(self.hackerConsole.target)
+      draw.button(target, x, y, bw, "CIBLE #" .. tostring(currentId), colors.white, t.panel)
+      self:addButton("malcraft:current", x, y, bw, 1, function()
+        self:malcraftSelectHost(currentId)
+        self:render()
+      end)
+
+      if w >= bw * 2 + 2 then
+        draw.text(target, x + bw + 2, y,
+          "Verifier / infecter / controler cette cible",
+          t.muted, t.bg, math.max(1, w - bw - 2))
+      end
+
+      y = y + 2
+    end
+
     draw.button(target, x, y, bw, "RESEAU INFECTE", colors.white, colors.red)
     self:addButton("malcraft:hosts", x, y, bw, 1, function()
       self:malcraftOpenHosts()
