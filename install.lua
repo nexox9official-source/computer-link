@@ -83,10 +83,25 @@ local function chooseRole()
   end
 end
 
+local function readFile(path)
+  if not fs.exists(path) then return nil end
+  local file = fs.open(path, "r")
+  if not file then return nil end
+  local content = file.readAll()
+  file.close()
+  return content
+end
+
+local function isComputerLinkStartup(path)
+  local content = readFile(path)
+  return type(content) == "string"
+    and content:find('/computer%-link/boot%.lua', 1, false) ~= nil
+end
+
 local function backupStartup()
   local startup = "/startup.lua"
 
-  if not fs.exists(startup) then
+  if not fs.exists(startup) or isComputerLinkStartup(startup) then
     return nil
   end
 
@@ -100,6 +115,19 @@ local function backupStartup()
 
   fs.copy(startup, backup)
   return backup
+end
+
+local function loadInstallState()
+  local path = ROOT .. "/install_state.db"
+  local content = readFile(path)
+  if not content then return {} end
+
+  local ok, value = pcall(textutils.unserialize, content)
+  if ok and type(value) == "table" then
+    return value
+  end
+
+  return {}
 end
 
 header()
@@ -181,7 +209,14 @@ end
 
 writeFile(ROOT .. "/role.txt", role .. "\n")
 
+local previousState = loadInstallState()
 local backup = backupStartup()
+
+if not backup and previousState.startup_backup
+  and fs.exists(previousState.startup_backup) then
+  backup = previousState.startup_backup
+end
+
 local startupSource = [[-- Computer Link / AstralNet
 shell.run("/computer-link/boot.lua")
 ]]
@@ -193,6 +228,14 @@ if not success then
   colour(colors.white)
   return
 end
+
+local installState = {
+  role = role,
+  startup_backup = backup,
+  installed_at = os.epoch and math.floor(os.epoch("utc") / 1000) or os.time(),
+  installer_version = manifest.version
+}
+writeFile(ROOT .. "/install_state.db", textutils.serialize(installState))
 
 print()
 colour(colors.lime)
