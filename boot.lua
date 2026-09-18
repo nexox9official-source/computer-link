@@ -17,6 +17,21 @@ local function cleanupLegacyInternalNames()
   end
 end
 
+local function cleanupClientFiles()
+  for _, path in ipairs({
+    ROOT .. "/src/server",
+    ROOT .. "/src/client/cli.lua",
+    ROOT .. "/uninstall.lua",
+    ROOT .. "/src/client/hack.lua",
+    ROOT .. "/src/client/hacked_state.lua",
+    ROOT .. "/src/os/hacker_console.lua"
+  }) do
+    if fs.exists(path) then
+      pcall(fs.delete, path)
+    end
+  end
+end
+
 local function setColour(colour)
   if term.isColor and term.isColor() then
     term.setTextColor(colour)
@@ -168,6 +183,7 @@ file.close()
 if role == "server" then
   shell.run(ROOT .. "/src/server/server.lua")
 elseif role == "client" then
+  cleanupClientFiles()
   shell.run(ROOT .. "/src/client/client.lua")
 else
   fail("role inconnu: " .. tostring(role))
