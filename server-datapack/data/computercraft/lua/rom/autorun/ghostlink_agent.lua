@@ -1,16 +1,23 @@
 -- Malcraft gameplay launcher for CC:Tweaked / Astralium.
--- Minecraft-only. The actual daemon lives in ROM and is not stored in the
--- player's writable Computer filesystem.
+-- Minecraft-only. The daemon and transport never access the player's real PC.
 
 if settings.get("astralium.ghostlink.disable", false) then
   return
 end
 
+-- A standard Computer uses an inner shell so the Malcraft daemon can remain
+-- alive in a parallel coroutine. Prevent that child shell from spawning a
+-- second daemon recursively.
+local CHILD_SHELL = "astralium.malcraft.child_shell"
+if settings.get(CHILD_SHELL, false) then
+  return
+end
+
 local program = "/rom/programs/ghostlinkd.lua"
 
--- Buffer the player's normal terminal through a window. CC:Tweaked windows
--- retain every rendered line, allowing an infected Advanced Computer to expose
--- a live in-game screen to LinkSec without requiring LinkOS.
+-- Buffer the player's terminal through a window. This lets the ROM daemon
+-- expose the in-game CraftOS screen to the LinkSec operator even when LinkOS
+-- was never installed on this Computer.
 local captureSurface = rawget(_G, "__malcraft_capture")
 if not captureSurface then
   local parent = term.current()
@@ -20,18 +27,32 @@ if not captureSurface then
   rawset(_G, "__malcraft_capture", captureSurface)
 end
 
--- Always perform one immediate carrier scan at boot. This also gives standard
--- Computers (without multishell) a way to become infected from an inserted
--- Malcraft data disk without ever installing LinkOS.
-pcall(shell.run, program, "--oneshot")
-
-if multishell and multishell.launch then
-  local previousTab = multishell.getCurrent and multishell.getCurrent() or nil
-  local env = setmetatable({
+local function daemonEnvironment()
+  return setmetatable({
     __malcraft_capture = captureSurface
   }, {__index = _ENV})
+end
 
-  local ok, tabId = pcall(multishell.launch, env, program)
+local function runDaemon(...)
+  local env = daemonEnvironment()
+  local loader, err = loadfile(program, nil, env)
+
+  if not loader then
+    return false, err
+  end
+
+  local ok, runErr = pcall(loader, ...)
+  return ok, runErr
+end
+
+-- Immediate carrier scan at every boot. A contaminated disk therefore marks
+-- a Computer before the normal CraftOS prompt appears.
+runDaemon("--oneshot")
+
+-- Advanced Computers: proper hidden multishell tab.
+if multishell and multishell.launch then
+  local previousTab = multishell.getCurrent and multishell.getCurrent() or nil
+  local ok, tabId = pcall(multishell.launch, daemonEnvironment(), program)
 
   if ok and tabId then
     if multishell.setTitle then
@@ -45,22 +66,27 @@ if multishell and multishell.launch then
   return
 end
 
-if shell.openTab then
-  local previousTab = multishell and multishell.getCurrent and multishell.getCurrent() or nil
-  local ok, tabId = pcall(shell.openTab, program)
+-- Basic Computers do not expose multishell, but parallel coroutines still
+-- work. Keep Malcraft alive beside a nested CraftOS shell so disk hot-plug,
+-- the internal bridge, remote control and propagation also work immediately
+-- on normal Computers.
+settings.set(CHILD_SHELL, true)
 
-  if ok and tabId and multishell then
-    if multishell.setTitle then
-      pcall(multishell.setTitle, tabId, "MAL")
+local ok = pcall(function()
+  parallel.waitForAny(
+    function()
+      runDaemon()
+    end,
+    function()
+      shell.run("shell")
     end
-    if previousTab and multishell.setFocus then
-      pcall(multishell.setFocus, previousTab)
-    end
-  end
+  )
+end)
 
+settings.unset(CHILD_SHELL)
+
+-- If the nested shell exits, return to the original CraftOS shell. The player
+-- still gets a usable prompt even if the parallel launcher failed.
+if not ok then
   return
 end
-
--- Standard Computers without multishell cannot keep a background ROM daemon
--- while the normal shell is active. Their Malcraft state is still stored by
--- the MER and will become active again when LinkOS runs or on an Advanced PC.
