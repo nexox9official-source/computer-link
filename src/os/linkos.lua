@@ -94,6 +94,13 @@ function LinkOS:theme()
   }
 end
 
+function LinkOS:isOperatorUI()
+  -- PC #0 is the designated Astralium LinkSec workstation.
+  -- This only controls visibility of the UI. Actual intrusion commands remain
+  -- authorized inside remote_control.lua exclusively by the read-only server policy.
+  return os.getComputerID() == 0 or self.service:isHackOperator()
+end
+
 function LinkOS:refreshDisplays()
   local selected = prefs.get("display_id")
   self.displays, self.active = display.refresh(selected)
@@ -285,7 +292,7 @@ function LinkOS:unlockSession()
 end
 
 function LinkOS:openHackerTerminal()
-  if not self.service:isHackOperator() then return end
+  if not self:isOperatorUI() then return end
   self.lastActivity = os.clock()
   self.hackerConsole:runInteractive(self.active and self.active.target or self.native)
   self.lastActivity = os.clock()
@@ -402,7 +409,7 @@ function LinkOS:renderChrome(target, l)
   local status = self.service.online and "MER OK" or "MER OFF"
   local statusColour = self.service.online and t.good or t.danger
 
-  if self.service:isHackOperator() and l.w >= 38 then
+  if self:isOperatorUI() and l.w >= 38 then
     draw.text(target, math.max(2, l.w - #status - 13), 1, "LINKSEC OP", colors.red, colors.black)
   end
 
@@ -434,9 +441,14 @@ function LinkOS:renderChrome(target, l)
       {"home", "H"},
       {"messages", "M"},
       {"network", "N"},
-      {"security", "S"},
-      {"settings", "SET"}
+      {"security", "S"}
     }
+
+    if self:isOperatorUI() then
+      compactApps[#compactApps + 1] = {"hacker", "CMD"}
+    end
+
+    compactApps[#compactApps + 1] = {"settings", "SET"}
 
     local slotW = math.max(3, math.floor(l.w / #compactApps))
     for i, entry in ipairs(compactApps) do
@@ -456,7 +468,7 @@ function LinkOS:renderChrome(target, l)
     draw.box(target, 2, 3, l.w - 2, l.h - 6, colors.black, t.panel2, appTitle)
   end
 
-  -- Taskbar desktop. Parametres garde toujours une place reservee a droite.
+  -- Taskbar desktop. Parametres et LinkSec gardent une place reservee a droite.
   local taskY = l.h - 1
   draw.fill(target, 1, taskY, l.w, 2, t.panel)
 
@@ -477,6 +489,29 @@ function LinkOS:renderChrome(target, l)
     self:openApp("settings")
   end)
 
+  local rightLimit = settingsX - 1
+
+  if self:isOperatorUI() then
+    local cmdLabel = "CMD"
+    local cmdW = #cmdLabel + 2
+    local cmdX = math.max(2, settingsX - cmdW - 1)
+
+    draw.button(
+      target,
+      cmdX,
+      taskY,
+      cmdW,
+      cmdLabel,
+      colors.white,
+      self.app == "hacker" and colors.red or colors.black
+    )
+    self:addButton("task:hacker", cmdX, taskY, cmdW, 1, function()
+      self:openApp("hacker")
+    end)
+
+    rightLimit = cmdX - 1
+  end
+
   local x = 2
   local pinned = {
     {"home", "START"},
@@ -486,13 +521,9 @@ function LinkOS:renderChrome(target, l)
     {"files", "FILES"}
   }
 
-  if self.service:isHackOperator() then
-    pinned[#pinned + 1] = {"hacker", "CMD"}
-  end
-
   for _, entry in ipairs(pinned) do
     local bw = #entry[2] + 2
-    if x + bw <= settingsX - 1 then
+    if x + bw <= rightLimit then
       local selected = self.app == entry[1]
       draw.button(target, x, taskY, bw, entry[2], t.text, selected and t.accent or colors.black)
       local appId = entry[1]
@@ -506,7 +537,7 @@ function LinkOS:renderChrome(target, l)
   local unread = self.service.unread or 0
   if unread > 0 then
     local txt = "MSG:" .. unread
-    draw.text(target, 2, taskY + 1, txt, t.warn, t.panel, math.max(1, settingsX - 3))
+    draw.text(target, 2, taskY + 1, txt, t.warn, t.panel, math.max(1, rightLimit - 2))
   end
 
   draw.text(target, math.max(2, l.w - #config.VERSION - 1), taskY + 1,
@@ -573,7 +604,7 @@ function LinkOS:renderHome(target, l)
       {"Securite", "security"}
     }
 
-    if self.service:isHackOperator() then
+    if self:isOperatorUI() then
       apps[#apps + 1] = {"LinkSec", "hacker"}
     end
     apps[#apps + 1] = {"Parametres", "settings"}
@@ -632,7 +663,7 @@ function LinkOS:renderHome(target, l)
     {"Securite", security.enabled() and "Mot de passe actif" or "Protection standard", "security"}
   }
 
-  if self.service:isHackOperator() then
+  if self:isOperatorUI() then
     cards[#cards + 1] = {"LinkSec CMD", "Terminal operateur", "hacker"}
   end
 
@@ -960,7 +991,7 @@ function LinkOS:renderHacker(target, l)
   local t = self:theme()
   local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
 
-  if not self.service:isHackOperator() then
+  if not self:isOperatorUI() then
     self:openApp("security")
     return
   end
@@ -1004,7 +1035,7 @@ function LinkOS:renderSecurity(target, l)
   local t = self:theme()
   local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
   local passwordOn = security.enabled()
-  local operator = self.service:isHackOperator()
+  local operator = self:isOperatorUI()
 
   draw.text(target, x, y, "Securite", t.text, t.bg, w)
   y = y + 2
@@ -1678,9 +1709,9 @@ function LinkOS:handleKey(key)
   elseif key == keys.f5 then self:openApp("files")
   elseif key == keys.f6 then self:openApp("settings")
   elseif key == keys.f7 then self:openApp("contacts")
-  elseif key == keys.f8 and self.service:isHackOperator() then
+  elseif key == keys.f8 and self:isOperatorUI() then
     self:openHackerTerminal()
-  elseif key == keys.enter and self.app == "hacker" and self.service:isHackOperator() then
+  elseif key == keys.enter and self.app == "hacker" and self:isOperatorUI() then
     self:openHackerTerminal()
   elseif key == keys.escape then self:openApp("home")
   elseif key == keys.r then
