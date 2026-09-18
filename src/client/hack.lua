@@ -1,0 +1,503 @@
+local config = dofile("/computer-link/src/common/config.lua")
+local util = dofile("/computer-link/src/common/util.lua")
+local network = dofile("/computer-link/src/common/network.lua")
+
+local hack = {}
+
+local pending = {}
+local sessions = {}
+
+local function hash(value)
+  local h = 7
+  for i = 1, #value do
+    h = (h * 131 + string.byte(value, i)) % 2147483647
+  end
+  return h
+end
+
+local function directTransmit(modemName, payload)
+  peripheral.call(
+    modemName,
+    "transmit",
+    config.HACK_CHANNEL,
+    config.HACK_CHANNEL,
+    payload
+  )
+end
+
+local function hackPacket(kind, payload)
+  return {
+    magic = config.HACK_MAGIC,
+    version = config.HACK_PROTOCOL_VERSION,
+    type = kind,
+    source_id = os.getComputerID(),
+    payload = payload or {},
+    sent_at = util.now()
+  }
+end
+
+local function isHackPacket(value)
+  return type(value) == "table"
+    and value.magic == config.HACK_MAGIC
+    and value.version == config.HACK_PROTOCOL_VERSION
+    and type(value.type) == "string"
+end
+
+local function cleanPath(path)
+  path = tostring(path or "/")
+  if path == "" then path = "/" end
+  if string.sub(path, 1, 1) ~= "/" then path = "/" .. path end
+
+  local combined = fs.combine("/", path)
+  if combined == "." then combined = "/" end
+  return combined
+end
+
+local function listFiles(path)
+  path = cleanPath(path)
+
+  if path == "/rom" or string.sub(path, 1, 5) == "/rom/" then
+    return nil, "ROM protegee."
+  end
+
+  if not fs.exists(path) then
+    return nil, "Chemin introuvable."
+  end
+
+  if not fs.isDir(path) then
+    return nil, "Ce chemin n'est pas un dossier."
+  end
+
+  local entries = fs.list(path)
+  table.sort(entries)
+
+  local result = {}
+  for i = 1, math.min(#entries, config.HACK_MAX_LIST_ENTRIES) do
+    local child = fs.combine(path, entries[i])
+    result[#result + 1] = {
+      name = entries[i],
+      dir = fs.isDir(child),
+      size = fs.isDir(child) and 0 or fs.getSize(child)
+    }
+  end
+
+  return result
+end
+
+local function readTextFile(path)
+  path = cleanPath(path)
+
+  if path == "/rom" or string.sub(path, 1, 5) == "/rom/" then
+    return nil, "ROM protegee."
+  end
+
+  if not fs.exists(path) then
+    return nil, "Fichier introuvable."
+  end
+
+  if fs.isDir(path) then
+    return nil, "C'est un dossier."
+  end
+
+  local file = fs.open(path, "r")
+  if not file then
+    return nil, "Lecture impossible."
+  end
+
+  local content = file.read(config.HACK_MAX_READ_BYTES)
+  file.close()
+  return content or ""
+end
+
+local function sessionFor(sourceId, token)
+  local session = sessions[tonumber(sourceId)]
+  if not session then return nil end
+  if session.expires_at < util.now() then
+    sessions[tonumber(sourceId)] = nil
+    return nil
+  end
+  if session.token ~= token then return nil end
+  return session
+end
+
+local function sendHackResult(targetId, requestId, success, data, message)
+  rednet.send(targetId, {
+    magic = config.HACK_MAGIC,
+    version = config.HACK_PROTOCOL_VERSION,
+    type = "HACK_RESULT",
+    source_id = os.getComputerID(),
+    reply_to = requestId,
+    success = success,
+    data = data,
+    message = message
+  }, config.HACK_PROTOCOL)
+end
+
+function hack.openChannel(modemName)
+  local modem = peripheral.wrap(modemName)
+  if modem and not modem.isOpen(config.HACK_CHANNEL) then
+    modem.open(config.HACK_CHANNEL)
+  end
+end
+
+function hack.handleModem(modemName, channel, replyChannel, message, distance)
+  if channel ~= config.HACK_CHANNEL or not isHackPacket(message) then
+    return
+  end
+
+  local sourceId = tonumber(message.source_id)
+  if not sourceId or sourceId == os.getComputerID() then
+    return
+  end
+
+  local payload = message.payload or {}
+  local targetId = tonumber(payload.target_id)
+
+  if message.type == "SCAN" then
+    if type(distance) ~= "number" or distance > config.HACK_MAX_DISTANCE then
+      return
+    end
+
+    directTransmit(modemName, hackPacket("SCAN_REPLY", {
+      target_id = sourceId,
+      scan_id = payload.scan_id,
+      label = os.getComputerLabel(),
+      security = config.HACK_DEFAULT_SECURITY
+    }))
+    return
+  end
+
+  if targetId ~= os.getComputerID() then
+    return
+  end
+
+  if type(distance) ~= "number" or distance > config.HACK_MAX_DISTANCE then
+    return
+  end
+
+  if message.type == "CHALLENGE_REQUEST" then
+    local requestId = tostring(payload.request_id or "")
+    local nonce = tostring(util.now()) .. ":" .. tostring(math.random(100000, 999999)) .. ":" .. tostring(sourceId)
+    local difficulty = config.HACK_BASE_DIFFICULTY * config.HACK_DEFAULT_SECURITY
+
+    pending[sourceId] = {
+      request_id = requestId,
+      nonce = nonce,
+      difficulty = difficulty,
+      expires_at = util.now() + config.HACK_CHALLENGE_SECONDS
+    }
+
+    directTransmit(modemName, hackPacket("CHALLENGE", {
+      target_id = sourceId,
+      request_id = requestId,
+      nonce = nonce,
+      difficulty = difficulty,
+      security = config.HACK_DEFAULT_SECURITY
+    }))
+    return
+  end
+
+  if message.type == "HACK_PROOF" then
+    local challenge = pending[sourceId]
+    if not challenge then return end
+
+    if challenge.expires_at < util.now() then
+      pending[sourceId] = nil
+      return
+    end
+
+    if tostring(payload.request_id or "") ~= challenge.request_id then
+      return
+    end
+
+    local proof = tonumber(payload.proof)
+    if not proof then return end
+
+    local valid = hash(challenge.nonce .. ":" .. tostring(proof)) % challenge.difficulty == 0
+    pending[sourceId] = nil
+
+    if not valid then
+      rednet.send(sourceId, {
+        magic = config.HACK_MAGIC,
+        version = config.HACK_PROTOCOL_VERSION,
+        type = "HACK_DENIED",
+        source_id = os.getComputerID(),
+        reply_to = challenge.request_id,
+        message = "Exploit refuse."
+      }, config.HACK_PROTOCOL)
+      return
+    end
+
+    local token = tostring(hash(
+      challenge.nonce
+      .. ":" .. tostring(proof)
+      .. ":" .. tostring(math.random(100000, 999999))
+      .. ":" .. tostring(util.now())
+    ))
+
+    sessions[sourceId] = {
+      token = token,
+      expires_at = util.now() + config.HACK_SESSION_SECONDS,
+      distance = distance
+    }
+
+    rednet.send(sourceId, {
+      magic = config.HACK_MAGIC,
+      version = config.HACK_PROTOCOL_VERSION,
+      type = "HACK_GRANTED",
+      source_id = os.getComputerID(),
+      reply_to = challenge.request_id,
+      token = token,
+      expires_at = sessions[sourceId].expires_at
+    }, config.HACK_PROTOCOL)
+  end
+end
+
+function hack.handleRednet(senderId, message, protocol, storage)
+  if protocol ~= config.HACK_PROTOCOL or not isHackPacket(message) then
+    return false
+  end
+
+  if message.type ~= "HACK_COMMAND" then
+    return false
+  end
+
+  local payload = message.payload or {}
+  local session = sessionFor(senderId, payload.token)
+
+  if not session then
+    sendHackResult(senderId, message.request_id, false, nil, "Session pirate invalide ou expiree.")
+    return true
+  end
+
+  local action = string.lower(tostring(payload.action or ""))
+
+  if action == "info" then
+    sendHackResult(senderId, message.request_id, true, {
+      computer_id = os.getComputerID(),
+      label = os.getComputerLabel(),
+      messages = storage.count(),
+      free_space = fs.getFreeSpace("/")
+    })
+
+  elseif action == "conversations" then
+    sendHackResult(senderId, message.request_id, true, {
+      messages = storage.recent(config.HACK_DUMP_MESSAGES)
+    })
+
+  elseif action == "ls" then
+    local entries, err = listFiles(payload.argument or "/")
+    sendHackResult(senderId, message.request_id, entries ~= nil, {
+      path = cleanPath(payload.argument or "/"),
+      entries = entries
+    }, err)
+
+  elseif action == "cat" then
+    local content, err = readTextFile(payload.argument)
+    sendHackResult(senderId, message.request_id, content ~= nil, {
+      path = cleanPath(payload.argument),
+      content = content
+    }, err)
+
+  elseif action == "crash" then
+    util.writeAll(config.CRASH_FLAG, textutils.serialize({
+      source_id = senderId,
+      at = util.now()
+    }))
+
+    sendHackResult(senderId, message.request_id, true, {
+      rebooting = true,
+      recovery_seconds = config.CRASH_RECOVERY_SECONDS
+    })
+
+    sleep(0.4)
+    os.reboot()
+
+  else
+    sendHackResult(senderId, message.request_id, false, nil, "Action distante inconnue.")
+  end
+
+  return true
+end
+
+function hack.scan(modemName, duration)
+  duration = tonumber(duration) or 2
+  local scanId = util.requestId()
+  local found = {}
+
+  directTransmit(modemName, hackPacket("SCAN", {
+    scan_id = scanId
+  }))
+
+  local timer = os.startTimer(duration)
+
+  while true do
+    local event, side, channel, replyChannel, message, distance = os.pullEvent()
+
+    if event == "timer" and side == timer then
+      break
+    end
+
+    if event == "modem_message"
+      and channel == config.HACK_CHANNEL
+      and isHackPacket(message)
+      and message.type == "SCAN_REPLY"
+      and tostring((message.payload or {}).scan_id or "") == scanId
+      and tonumber((message.payload or {}).target_id) == os.getComputerID() then
+
+      local id = tonumber(message.source_id)
+      if id and id ~= os.getComputerID() then
+        found[id] = {
+          id = id,
+          label = (message.payload or {}).label,
+          security = (message.payload or {}).security,
+          distance = distance
+        }
+      end
+    end
+  end
+
+  local list = {}
+  for _, entry in pairs(found) do
+    list[#list + 1] = entry
+  end
+
+  table.sort(list, function(a, b)
+    return (a.distance or 999999) < (b.distance or 999999)
+  end)
+
+  return list
+end
+
+function hack.attack(modemName, targetId)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID PC invalide." end
+
+  local requestId = util.requestId()
+
+  directTransmit(modemName, hackPacket("CHALLENGE_REQUEST", {
+    target_id = targetId,
+    request_id = requestId
+  }))
+
+  local challenge
+  local timer = os.startTimer(3)
+
+  while true do
+    local event, a, channel, replyChannel, message = os.pullEvent()
+
+    if event == "timer" and a == timer then
+      return nil, "PC cible hors de portee ou ne repond pas."
+    end
+
+    if event == "modem_message"
+      and channel == config.HACK_CHANNEL
+      and isHackPacket(message)
+      and message.type == "CHALLENGE"
+      and tonumber(message.source_id) == targetId
+      and tostring((message.payload or {}).request_id or "") == requestId then
+      challenge = message.payload
+      break
+    end
+  end
+
+  local difficulty = tonumber(challenge.difficulty) or config.HACK_BASE_DIFFICULTY
+  local proof
+
+  for candidate = 0, config.HACK_MAX_PROOF do
+    if hash(tostring(challenge.nonce) .. ":" .. tostring(candidate)) % difficulty == 0 then
+      proof = candidate
+      break
+    end
+
+    if candidate % 5000 == 0 then
+      os.queueEvent("computer_link_yield")
+      os.pullEvent("computer_link_yield")
+    end
+  end
+
+  if not proof then
+    return nil, "Aucun exploit trouve."
+  end
+
+  directTransmit(modemName, hackPacket("HACK_PROOF", {
+    target_id = targetId,
+    request_id = requestId,
+    proof = proof
+  }))
+
+  local replyTimer = os.startTimer(3)
+
+  while true do
+    local event, a, message, protocol = os.pullEvent()
+
+    if event == "timer" and a == replyTimer then
+      return nil, "La cible n'a pas valide l'exploit."
+    end
+
+    if event == "rednet_message"
+      and tonumber(a) == targetId
+      and protocol == config.HACK_PROTOCOL
+      and type(message) == "table"
+      and message.magic == config.HACK_MAGIC
+      and message.reply_to == requestId then
+
+      if message.type == "HACK_GRANTED" then
+        return {
+          target_id = targetId,
+          token = message.token,
+          expires_at = message.expires_at
+        }
+      end
+
+      return nil, message.message or "Intrusion refusee."
+    end
+  end
+end
+
+function hack.remote(targetId, token, action, argument)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID PC invalide." end
+
+  local requestId = util.requestId()
+
+  rednet.send(targetId, {
+    magic = config.HACK_MAGIC,
+    version = config.HACK_PROTOCOL_VERSION,
+    type = "HACK_COMMAND",
+    source_id = os.getComputerID(),
+    request_id = requestId,
+    payload = {
+      token = token,
+      action = action,
+      argument = argument
+    }
+  }, config.HACK_PROTOCOL)
+
+  local timer = os.startTimer(5)
+
+  while true do
+    local event, a, message, protocol = os.pullEvent()
+
+    if event == "timer" and a == timer then
+      return nil, "Connexion distante expiree."
+    end
+
+    if event == "rednet_message"
+      and tonumber(a) == targetId
+      and protocol == config.HACK_PROTOCOL
+      and type(message) == "table"
+      and message.magic == config.HACK_MAGIC
+      and message.type == "HACK_RESULT"
+      and message.reply_to == requestId then
+
+      if message.success then
+        return message.data or {}
+      end
+
+      return nil, message.message or "Action distante refusee."
+    end
+  end
+end
+
+return hack
