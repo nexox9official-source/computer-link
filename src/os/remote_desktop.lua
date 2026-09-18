@@ -24,6 +24,14 @@ local function crop(value, width)
   return value
 end
 
+local function cropColour(value, width, fill)
+  value = tostring(value or "")
+  fill = tostring(fill or "0")
+  if #value > width then return string.sub(value, 1, width) end
+  if #value < width then return value .. string.rep(fill, width - #value) end
+  return value
+end
+
 local function renderFrame(targetId, frame, control, status)
   local target = term.current()
   local width, height = target.getSize()
@@ -52,9 +60,14 @@ local function renderFrame(targetId, frame, control, status)
         and type(row.foreground) == "string"
         and type(row.background) == "string" then
 
-        local fg = crop(row.foreground, width)
-        local bg = crop(row.background, width)
-        pcall(target.blit, text, fg, bg)
+        local fg = cropColour(row.foreground, width, "0")
+        local bg = cropColour(row.background, width, "f")
+        local ok = pcall(target.blit, text, fg, bg)
+        if not ok then
+          target.setBackgroundColor(colors.black)
+          target.setTextColor(colors.white)
+          target.write(text)
+        end
       else
         target.setBackgroundColor(colors.black)
         target.setTextColor(colors.white)
