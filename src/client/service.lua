@@ -7,6 +7,25 @@ local hack = dofile("/computer-link/src/client/remote_control.lua")
 local service = {}
 service.__index = service
 
+local function malcraftBusAvailable()
+  return type(malcraft_bus) == "table"
+    and type(malcraft_bus.version) == "function"
+    and type(malcraft_bus.listInfected) == "function"
+end
+
+local function jsonDecode(value)
+  if type(value) ~= "string" or value == "" then return nil end
+  local ok, decoded = pcall(textutils.unserializeJSON, value)
+  if ok then return decoded end
+  return nil
+end
+
+local function jsonEncode(value)
+  local ok, encoded = pcall(textutils.serializeJSON, value or {})
+  if ok then return encoded end
+  return "{}"
+end
+
 local function packetError(packet)
   if packet and packet.type == "ERROR" then
     return (packet.payload or {}).message or "Erreur MER."
@@ -302,22 +321,67 @@ function service:ensureGhostSupport()
 end
 
 function service:ghostStatus(targetId)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID cible invalide." end
+
+  if malcraftBusAvailable() then
+    local registry = jsonDecode(malcraft_bus.listInfected()) or {hosts={}}
+    local found = nil
+
+    for _, item in ipairs(registry.hosts or {}) do
+      if tonumber(item.computer_id) == targetId then
+        found = item
+        break
+      end
+    end
+
+    return {
+      computer_id = targetId,
+      state = {
+        infected = found ~= nil,
+        spread = found and found.spread == true or false,
+        online = found and found.online == true or false,
+        source = found and found.source or nil,
+        label = found and found.label or nil
+      },
+      immune = targetId == 0,
+      transport = "malcraft_bridge"
+    }
+  end
+
   local supported, supportErr = self:ensureGhostSupport()
   if not supported then return nil, supportErr end
 
   local packet, err = self:request("GHOST_STATUS", {
-    target_id = tonumber(targetId)
+    target_id = targetId
   })
   if not packet then return nil, err end
   return packet.payload
 end
 
 function service:ghostInstall(targetId, spread)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID cible invalide." end
+
+  if malcraftBusAvailable() then
+    local ok = malcraft_bus.infectTarget(
+      targetId,
+      "operator:" .. tostring(os.getComputerID())
+    )
+    if not ok then return nil, "Malcraft Bridge a refuse la contamination." end
+
+    if type(malcraft_bus.setSpreadTarget) == "function" then
+      pcall(malcraft_bus.setSpreadTarget, targetId, spread ~= false)
+    end
+
+    return self:ghostStatus(targetId)
+  end
+
   local supported, supportErr = self:ensureGhostSupport()
   if not supported then return nil, supportErr end
 
   local packet, err = self:request("GHOST_INFECT", {
-    target_id = tonumber(targetId),
+    target_id = targetId,
     spread = spread ~= false
   })
   if not packet then return nil, err end
@@ -325,22 +389,44 @@ function service:ghostInstall(targetId, spread)
 end
 
 function service:ghostClean(targetId)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID cible invalide." end
+
+  if malcraftBusAvailable() then
+    local ok = malcraft_bus.cleanTarget(targetId)
+    if not ok then return nil, "Nettoyage Malcraft refuse." end
+    return {
+      computer_id = targetId,
+      cleaned = true,
+      transport = "malcraft_bridge"
+    }
+  end
+
   local supported, supportErr = self:ensureGhostSupport()
   if not supported then return nil, supportErr end
 
   local packet, err = self:request("GHOST_CLEAN", {
-    target_id = tonumber(targetId)
+    target_id = targetId
   })
   if not packet then return nil, err end
   return packet.payload
 end
 
 function service:ghostSetSpread(targetId, enabled)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID cible invalide." end
+
+  if malcraftBusAvailable() and type(malcraft_bus.setSpreadTarget) == "function" then
+    local ok = malcraft_bus.setSpreadTarget(targetId, enabled == true)
+    if not ok then return nil, "Modification de propagation refusee." end
+    return self:ghostStatus(targetId)
+  end
+
   local supported, supportErr = self:ensureGhostSupport()
   if not supported then return nil, supportErr end
 
   local packet, err = self:request("GHOST_SPREAD", {
-    target_id = tonumber(targetId),
+    target_id = targetId,
     enabled = enabled == true
   })
   if not packet then return nil, err end
@@ -348,6 +434,21 @@ function service:ghostSetSpread(targetId, enabled)
 end
 
 function service:ghostList()
+  if malcraftBusAvailable() then
+    local data = jsonDecode(malcraft_bus.listInfected())
+    if data then
+      -- Keep the legacy MER disk registry when it is reachable, but the host
+      -- list always comes from the server-internal Malcraft Bridge.
+      if self.serverId then
+        local packet = self:request("GHOST_LIST", nil, 1)
+        if packet and packet.payload and type(packet.payload.disks) == "table" then
+          data.disks = packet.payload.disks
+        end
+      end
+      return data
+    end
+  end
+
   local supported, supportErr = self:ensureGhostSupport()
   if not supported then return nil, supportErr end
 
@@ -358,7 +459,18 @@ end
 
 function service:ghostDiskSet(diskId, infected)
   local supported, supportErr = self:ensureGhostSupport()
-  if not supported then return nil, supportErr end
+  if not supported then
+    -- A physical Malcraft carrier marker still works without the MER. The
+    -- caller writes/removes that marker locally before reaching this function.
+    if malcraftBusAvailable() then
+      return {
+        disk_id = tonumber(diskId),
+        state = {infected = infected ~= false},
+        transport = "physical_carrier"
+      }
+    end
+    return nil, supportErr
+  end
 
   local packet, err = self:request("GHOST_DISK_SET", {
     disk_id = tonumber(diskId),
@@ -372,6 +484,57 @@ function service:ghostRemote(targetId, action, argument)
   targetId = tonumber(targetId)
   if not targetId then return nil, "ID cible invalide." end
 
+  action = tostring(action or "")
+  argument = argument or {}
+
+  if malcraftBusAvailable() and type(malcraft_bus.send) == "function" then
+    if action == "turn_on" or action == "power_on" then
+      local ok = malcraft_bus.power(targetId, "on")
+      return ok and {action="on", transport="malcraft_bridge"}
+        or nil, ok and nil or "Impossible d'allumer cette cible."
+    end
+
+    local requestId = util.requestId()
+    local sent = malcraft_bus.send(
+      targetId,
+      requestId,
+      action,
+      jsonEncode(argument)
+    )
+
+    if sent then
+      local timer = os.startTimer(4)
+
+      while true do
+        local event, a, b, d, e, f = os.pullEvent()
+
+        if event == "timer" and a == timer then
+          return nil, "Malcraft Bridge: cible hors ligne ou sans agent actif."
+        end
+
+        if event == "malcraft_bus_response"
+          and tonumber(a) == targetId
+          and tostring(b) == tostring(requestId) then
+
+          local ok = d == true
+          local payload = jsonDecode(e) or {}
+
+          if ok then return payload end
+          return nil, tostring(f or "Commande Malcraft refusee.")
+        end
+
+        if event == "rednet_message" then
+          local sender, message, protocol = a, b, d
+          if protocol == config.HACK_PROTOCOL then
+            hack.handleRednet(sender, message, protocol, storage)
+          end
+        elseif event == "modem_message" then
+          hack.handleModem(self.modemName, b, d, e, f)
+        end
+      end
+    end
+  end
+
   local requestId = util.requestId()
   rednet.send(targetId, {
     magic = "GHOSTLINK_GAMEPLAY",
@@ -379,8 +542,8 @@ function service:ghostRemote(targetId, action, argument)
     source_id = os.getComputerID(),
     request_id = requestId,
     payload = {
-      action = tostring(action or ""),
-      argument = argument or {}
+      action = action,
+      argument = argument
     }
   }, "astralnet.ghostlink.v1")
 
