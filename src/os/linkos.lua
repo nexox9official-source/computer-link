@@ -3104,9 +3104,24 @@ function LinkOS:uiLoop()
 end
 
 function LinkOS:daemonLoop()
+  local reconnectTimer = os.startTimer(5)
+
   while self.running do
     local event, a, b, c, d, e = os.pullEventRaw()
-    self.service:handleEvent(event, a, b, c, d, e)
+
+    if event == "timer" and a == reconnectTimer then
+      if not self.service.online then
+        local ok = self.service:reconnect()
+        if ok then
+          self.connectionError = nil
+          os.queueEvent("linkos_refresh")
+        end
+      end
+
+      reconnectTimer = os.startTimer(5)
+    else
+      self.service:handleEvent(event, a, b, c, d, e)
+    end
   end
 end
 
