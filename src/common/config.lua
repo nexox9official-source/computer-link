@@ -1,7 +1,7 @@
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
-  VERSION = "0.6.0",
+  VERSION = "0.6.1",
   PROTOCOL_VERSION = 2,
 
   MAGIC = "COMPUTER_LINK",
@@ -36,7 +36,7 @@ return {
   -- Seuls ces Computer IDs peuvent lancer des commandes d'intrusion.
   -- Les autres PC restent des cibles potentielles mais ne peuvent pas attaquer.
   HACK_OPERATOR_IDS = {
-    [1] = true
+    [0] = true
   },
 
   CRASH_RECOVERY_SECONDS = 10,
