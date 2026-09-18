@@ -8,6 +8,11 @@ end
 
 local program = "/rom/programs/ghostlinkd.lua"
 
+-- Always perform one immediate carrier scan at boot. This also gives standard
+-- Computers (without multishell) a way to become infected from an inserted
+-- Malcraft data disk without ever installing LinkOS.
+pcall(shell.run, program, "--oneshot")
+
 if shell.openTab then
   local previousTab = multishell and multishell.getCurrent and multishell.getCurrent() or nil
   local ok, tabId = pcall(shell.openTab, program)
