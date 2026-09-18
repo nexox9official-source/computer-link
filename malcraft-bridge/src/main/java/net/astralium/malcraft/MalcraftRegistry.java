@@ -81,6 +81,19 @@ final class MalcraftRegistry {
         return record != null && record.infected;
     }
 
+    static String selfStateJson(IComputerSystem computer) {
+        ensureLoaded(computer);
+
+        var record = INFECTED.get(computer.getID());
+        var root = new LinkedHashMap<String, Object>();
+
+        root.put("known", record != null);
+        root.put("infected", record != null && record.infected);
+        root.put("spread", record != null && record.spread);
+        root.put("source", record == null ? "" : safe(record.source));
+        return GSON.toJson(root);
+    }
+
     static boolean infect(IComputerSystem caller, int targetId, String source, boolean spread) {
         ensureLoaded(caller);
 
@@ -120,7 +133,11 @@ final class MalcraftRegistry {
 
         if (!isOperator(caller)) return false;
 
-        INFECTED.remove(targetId);
+        var record = INFECTED.computeIfAbsent(targetId, HostRecord::new);
+        record.infected = false;
+        record.spread = false;
+        record.source = "cleaned";
+        record.lastSeen = System.currentTimeMillis();
         SCREENS.remove(targetId);
 
         var live = LIVE.get(targetId);
