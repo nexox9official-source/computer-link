@@ -45,12 +45,13 @@ end
 
 local function cleanPath(path)
   path = tostring(path or "/")
-  if path == "" then path = "/" end
-  if string.sub(path, 1, 1) ~= "/" then path = "/" .. path end
+  local combined = fs.combine("", path)
 
-  local combined = fs.combine("/", path)
-  if combined == "." then combined = "/" end
-  return combined
+  if combined == "" or combined == "." then
+    return "/"
+  end
+
+  return "/" .. combined
 end
 
 local function listFiles(path)
