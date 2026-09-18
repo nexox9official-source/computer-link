@@ -2,6 +2,9 @@
 -- This is strictly an in-game ComputerCraft mechanic. It never accesses the
 -- player's real operating system or any network outside Minecraft.
 
+local argv = { ... }
+local ONE_SHOT = argv[1] == "--oneshot"
+
 local PROTOCOL = "astralnet.ghostlink.v1" -- kept for 0.9.x compatibility
 local HOST = "MER-GHOST"
 local CHANNEL = 55124
@@ -581,6 +584,14 @@ end
 
 syncState()
 sendBeacon()
+
+-- Standard Computers do not have multishell. The autorun launcher executes
+-- this one-shot pass at boot so a contaminated disk can infect a Computer
+-- which has never installed LinkOS. Advanced Computers then keep the daemon
+-- alive in the background for hot-plug and proximity propagation.
+if ONE_SHOT then
+  return
+end
 
 local stateTimer = os.startTimer(CHECK_SECONDS)
 local beaconTimer = os.startTimer(propagationSettings().interval)
