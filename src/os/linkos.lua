@@ -1236,17 +1236,20 @@ end
 
 function LinkOS:malcraftOpenHub()
   local registry, err = self.service:ghostList()
-  if not registry then
-    self:setNotice("Malcraft: " .. tostring(err), self:theme().danger)
-    return
-  end
 
-  self.malcraftHosts = registry.hosts or {}
+  self.malcraftHosts = registry and (registry.hosts or {}) or {}
   self.malcraftLocalDisks = self:malcraftLocalDiskList()
   self.ghostDiskStates = {}
 
-  for _, item in ipairs(registry.disks or {}) do
+  for _, item in ipairs((registry and registry.disks) or {}) do
     self.ghostDiskStates[tonumber(item.disk_id)] = true
+  end
+
+  if not registry then
+    self:setNotice(
+      "MER indisponible: les disques locaux restent utilisables. " .. tostring(err or ""),
+      self:theme().warn
+    )
   end
 
   self.linksecView = "malcraft_hub"
@@ -1280,17 +1283,22 @@ function LinkOS:malcraftSelectHost(computerId)
 end
 
 function LinkOS:malcraftOpenLocalDisks()
-  local registry, err = self.service:ghostList()
-  if not registry then
-    self:setNotice("Malcraft: " .. tostring(err), self:theme().danger)
-    return
-  end
+  local registry = self.service:ghostList()
 
   self.malcraftLocalDisks = self:malcraftLocalDiskList()
   self.ghostDiskStates = {}
 
-  for _, item in ipairs(registry.disks or {}) do
+  for _, item in ipairs((registry and registry.disks) or {}) do
     self.ghostDiskStates[tonumber(item.disk_id)] = true
+  end
+
+  -- Detect the physical Malcraft marker too, so the screen remains accurate
+  -- even while the MER is offline.
+  for _, drive in ipairs(self.malcraftLocalDisks) do
+    local path = self:malcraftCarrierPath(drive)
+    if path and fs.exists(path) then
+      self.ghostDiskStates[tonumber(drive.id)] = true
+    end
   end
 
   self.linksecView = "malcraft_local_disks"
