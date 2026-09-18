@@ -22,6 +22,7 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/os/operator_console.lua",
+    "src/os/remote_desktop.lua",
     "src/os/linkos.lua",
     "src/client/client.lua"
   },
@@ -48,6 +49,7 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/os/operator_console.lua",
+    "src/os/remote_desktop.lua",
     "src/os/linkos.lua",
     "src/client/client.lua",
     "src/server/database.lua",
@@ -64,6 +66,7 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/os/operator_console.lua",
+    "src/os/remote_desktop.lua",
     "src/os/linkos.lua",
     "src/client/client.lua"
   }
