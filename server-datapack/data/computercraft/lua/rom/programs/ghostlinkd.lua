@@ -1,10 +1,27 @@
 -- Malcraft background gameplay daemon for CC:Tweaked / Astralium.
--- Minecraft-only simulation. Runs in a hidden multishell tab on Advanced Computers.
+-- This is strictly an in-game ComputerCraft mechanic. It never accesses the
+-- player's real operating system or any network outside Minecraft.
 
-local PROTOCOL = "astralnet.ghostlink.v1"
+local PROTOCOL = "astralnet.ghostlink.v1" -- kept for 0.9.x compatibility
 local HOST = "MER-GHOST"
 local CHANNEL = 55124
-local CHECK_SECONDS = 60
+local CHECK_SECONDS = 30
+
+local LOCAL_INFECTED = "astralium.malcraft.infected"
+local LOCAL_SPREAD = "astralium.malcraft.spread"
+local LOCAL_SOURCE = "astralium.malcraft.source"
+
+local MARKER_DIR = ".malcraft"
+local MARKER_FILE = "carrier.dat"
+local MARKER_MAGIC = "ASTRALIUM_MALCRAFT_CARRIER_V1"
+
+local infected = settings.get(LOCAL_INFECTED, false) == true
+local spreadEnabled = settings.get(LOCAL_SPREAD, false) == true
+local networkModemName = nil
+local wirelessModemName = nil
+local networkModem = nil
+local wirelessModem = nil
+local lastSpread = {}
 
 local function policy()
   local ok, value = pcall(require, "computer_link_policy")
@@ -22,28 +39,92 @@ end
 local function isImmune(id)
   local p = policy()
   if not p then return false end
+
   id = tonumber(id)
   if isOperator(id) then return true end
+
   return type(p.ghostlink_immune_ids) == "table"
     and p.ghostlink_immune_ids[id] == true
 end
 
-local function openWireless()
+local function saveSettings()
+  pcall(settings.save)
+end
+
+local function setLocalState(value, spread, source)
+  if isImmune(os.getComputerID()) then
+    value = false
+    spread = false
+    source = nil
+  end
+
+  infected = value == true
+  spreadEnabled = infected and spread == true
+
+  settings.set(LOCAL_INFECTED, infected)
+  settings.set(LOCAL_SPREAD, spreadEnabled)
+
+  if source and source ~= "" then
+    settings.set(LOCAL_SOURCE, tostring(source))
+  else
+    settings.unset(LOCAL_SOURCE)
+  end
+
+  saveSettings()
+end
+
+local function hasPeripheralType(name, wanted)
+  local types = {peripheral.getType(name)}
+  for _, value in ipairs(types) do
+    if value == wanted then return true end
+  end
+  return false
+end
+
+local function findModems()
+  networkModemName = nil
+  wirelessModemName = nil
+  networkModem = nil
+  wirelessModem = nil
+
+  local fallback = nil
+
   for _, name in ipairs(peripheral.getNames()) do
-    if peripheral.getType(name) == "modem" then
+    if hasPeripheralType(name, "modem") then
       local modem = peripheral.wrap(name)
       local okWireless, wireless = pcall(modem.isWireless)
+
       if okWireless and wireless then
-        if not rednet.isOpen(name) then pcall(rednet.open, name) end
-        if not modem.isOpen(CHANNEL) then pcall(modem.open, CHANNEL) end
-        return name
+        wirelessModemName = wirelessModemName or name
+        networkModemName = networkModemName or name
+      elseif not fallback then
+        fallback = name
       end
     end
   end
-  return nil
+
+  networkModemName = networkModemName or fallback
+
+  if networkModemName then
+    networkModem = peripheral.wrap(networkModemName)
+    if not rednet.isOpen(networkModemName) then
+      pcall(rednet.open, networkModemName)
+    end
+  end
+
+  if wirelessModemName then
+    wirelessModem = peripheral.wrap(wirelessModemName)
+    if not rednet.isOpen(wirelessModemName) then
+      pcall(rednet.open, wirelessModemName)
+    end
+    if wirelessModem and not wirelessModem.isOpen(CHANNEL) then
+      pcall(wirelessModem.open, CHANNEL)
+    end
+  end
 end
 
 local function merId()
+  if not networkModemName then return nil end
   return rednet.lookup(PROTOCOL, HOST)
 end
 
@@ -82,23 +163,164 @@ local function request(kind, payload, timeout)
   end
 end
 
-local function diskIds()
+local function drives()
   local out = {}
-  for _, side in ipairs(peripheral.getNames()) do
-    if peripheral.getType(side) == "drive" and disk.isPresent(side) then
-      local id = disk.getID(side)
-      if id then out[#out + 1] = id end
+
+  for _, name in ipairs(peripheral.getNames()) do
+    if hasPeripheralType(name, "drive") and disk.isPresent(name) then
+      out[#out + 1] = {
+        name = name,
+        id = disk.getID(name),
+        has_data = disk.hasData(name),
+        mount = disk.hasData(name) and disk.getMountPath(name) or nil,
+        label = disk.getLabel(name)
+      }
     end
   end
+
   return out
+end
+
+local function diskIds()
+  local out = {}
+  for _, drive in ipairs(drives()) do
+    if drive.id then out[#out + 1] = drive.id end
+  end
+  return out
+end
+
+local function markerPath(mount)
+  return fs.combine(fs.combine(mount, MARKER_DIR), MARKER_FILE)
+end
+
+local function diskHasMarker(drive)
+  if not drive or not drive.has_data or not drive.mount then return false end
+  local path = markerPath(drive.mount)
+  if not fs.exists(path) or fs.isDir(path) then return false end
+
+  local file = fs.open(path, "r")
+  if not file then return false end
+  local value = file.readAll()
+  file.close()
+
+  return tostring(value or ""):find(MARKER_MAGIC, 1, true) ~= nil
+end
+
+local function writeMarker(drive)
+  if not drive or not drive.has_data or not drive.mount then
+    return false
+  end
+
+  local dir = fs.combine(drive.mount, MARKER_DIR)
+  if not fs.exists(dir) then
+    local ok = pcall(fs.makeDir, dir)
+    if not ok then return false end
+  end
+
+  local file = fs.open(markerPath(drive.mount), "w")
+  if not file then return false end
+
+  file.writeLine(MARKER_MAGIC)
+  file.writeLine("disk=" .. tostring(drive.id or "unknown"))
+  file.writeLine("source=" .. tostring(os.getComputerID()))
+  file.close()
+  return true
+end
+
+local function carrierPresent()
+  for _, drive in ipairs(drives()) do
+    if diskHasMarker(drive) then
+      return true, drive
+    end
+  end
+  return false, nil
+end
+
+local function localCarrierInfection()
+  if isImmune(os.getComputerID()) then
+    if infected or spreadEnabled then setLocalState(false, false, nil) end
+    return false
+  end
+
+  local present, drive = carrierPresent()
+  if present then
+    setLocalState(true, true, "disk:" .. tostring(drive.id or "?"))
+    return true
+  end
+
+  return false
+end
+
+local function propagationSettings()
+  local p = policy() or {}
+  return {
+    proximity = p.ghostlink_proximity_spread == true,
+    operator_emitter = p.malcraft_operator_proximity_emitter ~= false,
+    auto_disks = p.malcraft_auto_infect_disks ~= false,
+    distance = tonumber(p.ghostlink_proximity_distance) or 2.5,
+    interval = math.max(2, tonumber(p.ghostlink_beacon_seconds) or 5),
+    cooldown = math.max(5, tonumber(p.ghostlink_spread_cooldown_seconds) or 15)
+  }
+end
+
+local function canSpreadFromHere()
+  local cfg = propagationSettings()
+  if isOperator(os.getComputerID()) then
+    return cfg.operator_emitter == true
+  end
+  return infected and spreadEnabled
+end
+
+local function infectConnectedDisks()
+  local cfg = propagationSettings()
+  if not cfg.auto_disks or not (infected and spreadEnabled) then return end
+
+  for _, drive in ipairs(drives()) do
+    if drive.has_data and writeMarker(drive) and drive.id then
+      pcall(request, "INFECT_DISK", {disk_id=drive.id}, 0.8)
+    end
+  end
+end
+
+local function syncState()
+  if isImmune(os.getComputerID()) then
+    setLocalState(false, false, nil)
+  else
+    localCarrierInfection()
+  end
+
+  if not networkModemName then return end
+
+  local reply = request("STATE", {
+    disk_ids = diskIds(),
+    local_infected = infected,
+    local_spread = spreadEnabled,
+    local_source = settings.get(LOCAL_SOURCE),
+    carrier_present = carrierPresent()
+  }, 1.2)
+
+  if reply and type(reply.payload) == "table" then
+    local payload = reply.payload
+    setLocalState(
+      payload.infected == true,
+      payload.spread == true,
+      payload.infected and (settings.get(LOCAL_SOURCE) or "mer") or nil
+    )
+  end
+
+  if infected and spreadEnabled then
+    infectConnectedDisks()
+  end
 end
 
 local function safeValue(value, depth)
   depth = depth or 0
   local kind = type(value)
+
   if kind == "nil" or kind == "boolean" or kind == "number" or kind == "string" then
     return value
   end
+
   if kind ~= "table" or depth >= 2 then return tostring(value) end
 
   local out, count = {}, 0
@@ -112,20 +334,24 @@ end
 
 local function devices()
   local out = {}
+
   for _, name in ipairs(peripheral.getNames()) do
     local methods = peripheral.getMethods(name) or {}
     table.sort(methods)
+
     out[#out + 1] = {
       name = name,
       types = {peripheral.getType(name)},
       methods = methods
     }
   end
+
   return out
 end
 
 local function redstoneInfo()
   local out = {}
+
   for _, side in ipairs(redstone.getSides()) do
     out[#out + 1] = {
       side = side,
@@ -135,6 +361,7 @@ local function redstoneInfo()
       analog_output = redstone.getAnalogOutput and redstone.getAnalogOutput(side) or nil
     }
   end
+
   return out
 end
 
@@ -146,9 +373,11 @@ local function setRedstone(payload)
   for _, candidate in ipairs(redstone.getSides()) do
     if candidate == side then valid = true break end
   end
+
   if not valid then return nil, "Face redstone invalide." end
 
   local numeric = tonumber(value)
+
   if numeric and redstone.setAnalogOutput then
     redstone.setAnalogOutput(side, math.max(0, math.min(15, math.floor(numeric))))
   else
@@ -156,6 +385,7 @@ local function setRedstone(payload)
       or tostring(value) == "1"
       or string.lower(tostring(value)) == "on"
       or string.lower(tostring(value)) == "true"
+
     redstone.setOutput(side, on)
   end
 
@@ -188,6 +418,7 @@ local function allowedMethod(method)
   for _, prefix in ipairs(prefixes) do
     if string.sub(method, 1, #prefix) == prefix then return true end
   end
+
   return false
 end
 
@@ -210,35 +441,24 @@ local function callDevice(payload)
 
   local args = type(payload.args) == "table" and payload.args or {}
   local result = table.pack(pcall(peripheral.call, name, method, table.unpack(args)))
+
   if not result[1] then return nil, tostring(result[2]) end
 
   local values = {}
-  for i = 2, result.n do values[#values + 1] = safeValue(result[i]) end
+  for i = 2, result.n do
+    values[#values + 1] = safeValue(result[i])
+  end
+
   return {name=name, method=method, results=values}
 end
 
-local infected = false
-local spreadEnabled = false
+local function reply(target, requestMessage, ok, payload, err)
+  if not networkModemName then return end
 
-local function refreshState()
-  if isImmune(os.getComputerID()) then
-    infected = false
-    spreadEnabled = false
-    return
-  end
-
-  local reply = request("STATE", {disk_ids=diskIds()})
-  if reply and type(reply.payload) == "table" then
-    infected = reply.payload.infected == true
-    spreadEnabled = reply.payload.spread == true
-  end
-end
-
-local function reply(target, request, ok, payload, err)
   rednet.send(target, {
     magic = "GHOSTLINK_GAMEPLAY",
     type = "COMMAND_RESULT",
-    reply_to = request.request_id,
+    reply_to = requestMessage.request_id,
     ok = ok == true,
     payload = payload or {},
     error = err
@@ -290,7 +510,7 @@ local function handleCommand(sender, message)
       return
     end
 
-    local response = request("SPREAD_TO", {target_id=targetId})
+    local response = request("SPREAD_TO", {target_id=targetId}, 1.0)
     reply(sender, message, response ~= nil, response and response.payload or nil,
       response and response.error or "MER indisponible.")
 
@@ -301,61 +521,24 @@ local function handleCommand(sender, message)
       return
     end
 
-    local response = request("INFECT_DISK", {disk_id=diskId})
+    local response = request("INFECT_DISK", {disk_id=diskId}, 1.0)
     reply(sender, message, response ~= nil, response and response.payload or nil,
       response and response.error or "MER indisponible.")
 
   else
-    reply(sender, message, false, nil, "Commande GhostLink inconnue.")
+    reply(sender, message, false, nil, "Commande Malcraft inconnue.")
   end
 end
-
-local modemName = openWireless()
-if not modemName then
-  return
-end
-
-local modem = peripheral.wrap(modemName)
-local lastSpread = {}
 
 local function nowMs()
   if os.epoch then return os.epoch("utc") end
   return math.floor(os.clock() * 1000)
 end
 
-local function propagationSettings()
-  local p = policy() or {}
-  return {
-    proximity = p.ghostlink_proximity_spread == true,
-    operator_emitter = p.malcraft_operator_proximity_emitter ~= false,
-    auto_disks = p.malcraft_auto_infect_disks ~= false,
-    distance = tonumber(p.ghostlink_proximity_distance) or 2.5,
-    interval = math.max(2, tonumber(p.ghostlink_beacon_seconds) or 5),
-    cooldown = math.max(5, tonumber(p.ghostlink_spread_cooldown_seconds) or 15)
-  }
-end
-
-local function canSpreadFromHere()
-  local cfg = propagationSettings()
-  if isOperator(os.getComputerID()) then
-    return cfg.operator_emitter == true
-  end
-  return infected and spreadEnabled
-end
-
-local function infectConnectedDisks()
-  local cfg = propagationSettings()
-  if not cfg.auto_disks then return end
-  if not (infected and spreadEnabled) then return end
-
-  for _, diskId in ipairs(diskIds()) do
-    pcall(request, "INFECT_DISK", {disk_id=diskId}, 1.0)
-  end
-end
-
 local function sendBeacon()
-  if not modem then return end
-  modem.transmit(CHANNEL, CHANNEL, {
+  if not wirelessModem then return end
+
+  wirelessModem.transmit(CHANNEL, CHANNEL, {
     magic = "GHOSTLINK_GAMEPLAY",
     type = "BEACON",
     computer_id = os.getComputerID()
@@ -364,8 +547,10 @@ end
 
 local function handleBeacon(message, distance)
   local cfg = propagationSettings()
+
   if not cfg.proximity or not canSpreadFromHere() then return end
   if type(distance) ~= "number" or distance > cfg.distance then return end
+
   if type(message) ~= "table"
     or message.magic ~= "GHOSTLINK_GAMEPLAY"
     or message.type ~= "BEACON" then
@@ -379,14 +564,22 @@ local function handleBeacon(message, distance)
 
   local now = nowMs()
   local last = lastSpread[targetId] or 0
+
   if now - last < cfg.cooldown * 1000 then return end
   lastSpread[targetId] = now
 
   pcall(request, "SPREAD_TO", {target_id=targetId}, 1.0)
 end
 
-refreshState()
-infectConnectedDisks()
+findModems()
+
+if isImmune(os.getComputerID()) then
+  setLocalState(false, false, nil)
+else
+  localCarrierInfection()
+end
+
+syncState()
 sendBeacon()
 
 local stateTimer = os.startTimer(CHECK_SECONDS)
@@ -396,8 +589,8 @@ while true do
   local event, a, b, c, d, e = os.pullEvent()
 
   if event == "timer" and a == stateTimer then
-    refreshState()
-    infectConnectedDisks()
+    findModems()
+    syncState()
     stateTimer = os.startTimer(CHECK_SECONDS)
 
   elseif event == "timer" and a == beaconTimer then
@@ -405,16 +598,20 @@ while true do
     beaconTimer = os.startTimer(propagationSettings().interval)
 
   elseif event == "disk" or event == "peripheral" then
-    refreshState()
+    findModems()
+    localCarrierInfection()
+    syncState()
     infectConnectedDisks()
 
   elseif event == "disk_eject" or event == "peripheral_detach" then
-    refreshState()
+    findModems()
+    syncState()
 
   elseif event == "modem_message" then
     local channel = b
     local message = d
     local distance = e
+
     if channel == CHANNEL then
       pcall(handleBeacon, message, distance)
     end
@@ -432,8 +629,13 @@ while true do
         local server = merId()
         if server and tonumber(sender) == tonumber(server) then
           local payload = message.payload or {}
-          infected = payload.infected == true and not isImmune(os.getComputerID())
-          spreadEnabled = infected and payload.spread == true
+
+          setLocalState(
+            payload.infected == true,
+            payload.spread == true,
+            payload.infected and (settings.get(LOCAL_SOURCE) or "mer") or nil
+          )
+
           if infected and spreadEnabled then
             infectConnectedDisks()
           end
