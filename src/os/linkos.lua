@@ -435,7 +435,7 @@ function LinkOS:renderChrome(target, l)
       {"messages", "M"},
       {"network", "N"},
       {"security", "S"},
-      {"settings", "*"}
+      {"settings", "SET"}
     }
 
     local slotW = math.max(3, math.floor(l.w / #compactApps))
@@ -456,9 +456,26 @@ function LinkOS:renderChrome(target, l)
     draw.box(target, 2, 3, l.w - 2, l.h - 6, colors.black, t.panel2, appTitle)
   end
 
-  -- Taskbar style desktop.
+  -- Taskbar desktop. Parametres garde toujours une place reservee a droite.
   local taskY = l.h - 1
   draw.fill(target, 1, taskY, l.w, 2, t.panel)
+
+  local settingsLabel = "SET"
+  local settingsW = #settingsLabel + 2
+  local settingsX = math.max(2, l.w - settingsW)
+
+  draw.button(
+    target,
+    settingsX,
+    taskY,
+    settingsW,
+    settingsLabel,
+    t.text,
+    self.app == "settings" and t.accent or colors.black
+  )
+  self:addButton("task:settings", settingsX, taskY, settingsW, 1, function()
+    self:openApp("settings")
+  end)
 
   local x = 2
   local pinned = {
@@ -473,11 +490,9 @@ function LinkOS:renderChrome(target, l)
     pinned[#pinned + 1] = {"hacker", "CMD"}
   end
 
-  pinned[#pinned + 1] = {"settings", "SET"}
-
   for _, entry in ipairs(pinned) do
     local bw = #entry[2] + 2
-    if x + bw < l.w - 12 then
+    if x + bw <= settingsX - 1 then
       local selected = self.app == entry[1]
       draw.button(target, x, taskY, bw, entry[2], t.text, selected and t.accent or colors.black)
       local appId = entry[1]
@@ -491,7 +506,7 @@ function LinkOS:renderChrome(target, l)
   local unread = self.service.unread or 0
   if unread > 0 then
     local txt = "MSG:" .. unread
-    draw.text(target, math.max(2, l.w - #txt - 1), taskY, txt, t.warn, t.panel)
+    draw.text(target, 2, taskY + 1, txt, t.warn, t.panel, math.max(1, settingsX - 3))
   end
 
   draw.text(target, math.max(2, l.w - #config.VERSION - 1), taskY + 1,
@@ -528,6 +543,16 @@ function LinkOS:renderHome(target, l)
   local x, y, w = l.contentX, l.contentY, l.contentW
 
   draw.text(target, x, y, "Bureau LinkOS", t.text, t.bg, w)
+
+  if l.mode ~= "compact" and w >= 24 then
+    local sw = 12
+    local sx = x + w - sw
+    draw.button(target, sx, y, sw, "PARAMETRES", t.text, t.panel)
+    self:addButton("home:settings:quick", sx, y, sw, 1, function()
+      self:openApp("settings")
+    end)
+  end
+
   y = y + 2
 
   local info = self.service:identity()
@@ -1221,11 +1246,14 @@ function LinkOS:renderSettings(target, l)
       end)
     end
 
-    -- Toujours visible sur le petit Computer.
-    local uninstallY = math.max(y + 2, l.h - 2)
+    -- Toujours visible au-dessus de la barre de navigation.
+    local uninstallY = l.h - 2
+    if uninstallY < y + 2 then uninstallY = y + 2 end
     if uninstallY >= l.h then uninstallY = l.h - 1 end
-    draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
-    self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
+
+    draw.text(target, x, uninstallY - 1, "Maintenance", t.muted, t.bg, w)
+    draw.button(target, x, uninstallY, math.min(16, w), "DESINSTALLER", colors.white, colors.red)
+    self:addButton("set:uninstall", x, uninstallY, math.min(16, w), 1, function()
       self:runUninstallAction()
     end)
     return
@@ -1312,11 +1340,13 @@ function LinkOS:renderSettings(target, l)
     end
   end
 
-  -- Zone reservee en bas: jamais masquee par les autres reglages.
-  local uninstallY = l.h - 4
-  if uninstallY < 4 then uninstallY = 4 end
-  draw.button(target, x, uninstallY, math.min(14, w), "DESINSTALLER", colors.white, colors.red)
-  self:addButton("set:uninstall", x, uninstallY, math.min(14, w), 1, function()
+  -- Zone reservee en bas: toujours dans la zone utile, au-dessus du bandeau de notification.
+  local uninstallY = math.min(l.contentY + l.contentH - 2, l.h - 5)
+  if uninstallY < l.contentY + 1 then uninstallY = l.contentY + 1 end
+
+  draw.text(target, x, uninstallY - 1, "Maintenance", t.muted, t.bg, w)
+  draw.button(target, x, uninstallY, math.min(16, w), "DESINSTALLER", colors.white, colors.red)
+  self:addButton("set:uninstall", x, uninstallY, math.min(16, w), 1, function()
     self:runUninstallAction()
   end)
 end
