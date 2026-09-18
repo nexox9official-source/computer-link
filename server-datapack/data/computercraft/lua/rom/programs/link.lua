@@ -112,7 +112,8 @@ if command == "" then
     print("1 - Demarrer")
     print("2 - Mettre a jour")
     print("3 - Statut")
-    print("4 - Quitter")
+    print("4 - Desinstaller")
+    print("5 - Quitter")
     write("Choix: ")
     local choice = read()
 
@@ -122,6 +123,12 @@ if command == "" then
       shell.run(ROOT .. "/update.lua")
     elseif choice == "3" then
       status()
+    elseif choice == "4" then
+      if fs.exists(ROOT .. "/uninstall.lua") then
+        shell.run(ROOT .. "/uninstall.lua")
+      else
+        print("Mets d'abord Computer Link a jour avec: link update")
+      end
     end
     return
   end
@@ -159,6 +166,16 @@ elseif command == "start" then
   else
     print("Computer Link n'est pas installe.")
   end
+elseif command == "uninstall" or command == "remove" then
+  title()
+  if not installed() then
+    print("Computer Link n'est pas installe.")
+  elseif fs.exists(ROOT .. "/uninstall.lua") then
+    shell.run(ROOT .. "/uninstall.lua")
+  else
+    print("Desinstallateur absent.")
+    print("Utilise d'abord: link update")
+  end
 elseif command == "status" or command == "id" then
   status()
 elseif command == "help" then
@@ -168,6 +185,7 @@ elseif command == "help" then
   print("link server     installer le MER")
   print("link update     mise a jour manuelle")
   print("link start      demarrer Computer Link")
+  print("link uninstall  desinstaller Computer Link")
   print("link status     statut du PC")
 else
   print("Commande inconnue. Utilise: link help")
