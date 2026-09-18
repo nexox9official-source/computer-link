@@ -23,7 +23,47 @@ function service.new()
   self.hackSessions = {}
   self.lastError = nil
   self.startedAt = util.now()
+  self.updateAvailable = false
+  self.remoteVersion = config.VERSION
+  self.updateTimer = nil
   return self
+end
+
+function service:checkUpdate()
+  if not http or not http.get then
+    return false, "HTTP indisponible."
+  end
+
+  local url = config.GITHUB_RAW .. "manifest.lua?t=" .. tostring(util.now())
+  local response, err = http.get(url)
+
+  if not response then
+    return false, err or "Manifest distant inaccessible."
+  end
+
+  local source = response.readAll()
+  response.close()
+
+  local loader, loadErr = load(source, "@remote_manifest.lua", "t", {})
+  if not loader then
+    return false, loadErr
+  end
+
+  local ok, manifest = pcall(loader)
+  if not ok or type(manifest) ~= "table" then
+    return false, "Manifest distant invalide."
+  end
+
+  self.remoteVersion = tostring(manifest.version or config.VERSION)
+  self.updateAvailable = self.remoteVersion ~= tostring(config.VERSION)
+  os.queueEvent("linkos_refresh")
+  return true, self.updateAvailable
+end
+
+function service:startUpdateMonitor()
+  if not self.updateTimer then
+    self.updateTimer = os.startTimer(60)
+  end
 end
 
 function service:start()
@@ -319,7 +359,13 @@ function service:remote(targetId, action, argument)
 end
 
 function service:handleEvent(event, a, b, c, d, e)
-  if event == "modem_message" then
+  if event == "timer" and self.updateTimer and a == self.updateTimer then
+    self.updateTimer = nil
+    self:checkUpdate()
+    self:startUpdateMonitor()
+    return true
+
+  elseif event == "modem_message" then
     hack.handleModem(self.modemName, b, c, d, e)
     return true
 
