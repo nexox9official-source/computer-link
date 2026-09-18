@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.8.0",
+  version = "0.8.1",
   protocol_version = 2,
 
   common_files = {
