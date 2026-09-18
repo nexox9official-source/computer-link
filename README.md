@@ -2,7 +2,7 @@
 
 Réseau ComputerCraft / CC:Tweaked pour Astralium.
 
-## Version 0.2.3 — réseau par Computer ID
+## Version 0.3.0 — serveur intégré + réseau par Computer ID
 
 Computer Link n'utilise plus de "comptes" pour la messagerie. **L'identité réseau principale est directement l'ID du ComputerCraft**.
 
@@ -24,7 +24,59 @@ Le MER conserve uniquement les messages encore en attente de récupération et j
 
 > C'est un système de confidentialité **dans l'univers ComputerCraft**. Ce n'est pas une implémentation cryptographique destinée à protéger de vraies données sensibles hors du jeu.
 
-## Installation
+## Installation serveur recommandée
+
+Pour Astralium, la méthode recommandée est maintenant le **datapack serveur Computer Link**.
+
+Place le ZIP du datapack dans :
+
+```text
+<monde>/datapacks/
+```
+
+puis exécute :
+
+```text
+/reload
+```
+
+CC:Tweaked charge alors depuis le serveur :
+
+- le programme ROM `link` ;
+- un petit message d'aide sur les PC non configurés ;
+- la politique serveur Computer Link (dont les Computer IDs autorisés pour le hacking).
+
+Sur n'importe quel nouveau PC, plus besoin de recopier l'URL GitHub :
+
+```text
+link
+```
+
+ou directement :
+
+```text
+link client
+```
+
+Pour créer le serveur mère :
+
+```text
+link server
+```
+
+Autres commandes de bootstrap :
+
+```text
+link status
+link update
+link start
+link help
+```
+
+Les fichiers placés dans la ROM CraftOS par le datapack sont côté serveur et ne sont pas modifiables depuis le disque normal d'un ComputerCraft.
+
+### Installation manuelle de secours
+
 
 ### Serveur mère MER
 
@@ -96,7 +148,7 @@ Aucune commande normale ne permet d'obtenir la liste complète des PC enregistr�
 
 ### Autorisation
 
-Les commandes spéciales d'intrusion sont réservées au **Computer ID #1**.
+Les commandes spéciales d'intrusion sont réservées au **Computer ID #1**. Avec le datapack serveur, cette autorisation est fournie par la ROM serveur plutôt que par un simple fichier local modifiable.
 
 Les autres PC peuvent utiliser AstralNet normalement et peuvent être ciblés, mais ils ne peuvent pas lancer `scan`, `hack` ou `remote`.
 
@@ -252,3 +304,29 @@ La fondation actuelle permet maintenant de construire au-dessus :
 - réseau militaire ;
 - radar et alertes ;
 - Create / Create Big Cannons.
+
+
+## Architecture cible
+
+Computer Link doit évoluer vers un véritable OS réseau pour Astralium, pas seulement un terminal de commandes. La base 0.3.0 est organisée pour accueillir :
+
+- bureau graphique sur Advanced Computer ;
+- application Messages avec conversations privées par Computer ID ;
+- carnet de contacts et alias locaux ;
+- groupes, pays, coalitions et canaux militaires ;
+- système de fichiers et pièces jointes ComputerCraft ;
+- notifications temps réel ;
+- statut en ligne/hors ligne ;
+- chiffrement de gameplay des communications ;
+- niveaux de sécurité et pare-feu ;
+- logs d'intrusion et antivirus ;
+- hacking de proximité avec plusieurs exploits/minijeux ;
+- backdoors et sessions temporaires ;
+- économie, banque, boutiques et marché ;
+- actualités et faux sites AstralNet ;
+- cartes/radar et alertes militaires ;
+- contrôle Create, Create Big Cannons et autres périphériques compatibles ;
+- permissions serveur centralisées ;
+- mises à jour automatiques à chaque démarrage.
+
+Le serveur **MER** reste le cœur de routage et de services, tandis que les conversations privées sont adressées par Computer ID.
