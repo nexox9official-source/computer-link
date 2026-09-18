@@ -1,192 +1,42 @@
-local INSTALL_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/install.lua"
-local ROOT = "/computer-link"
+local URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/bootstrap/link.lua"
 local args = { ... }
 
 local function colour(c)
   if term.isColor and term.isColor() then term.setTextColor(c) end
 end
 
-local function title()
-  colour(colors.cyan)
-  print("================================")
-  print("        COMPUTER LINK")
-  print("       SERVER BOOTSTRAP")
-  print("================================")
+if not http or not http.get then
+  colour(colors.red)
+  print("Computer Link: HTTP indisponible.")
   colour(colors.white)
-  print("PC ID : #" .. os.getComputerID())
-  print()
+  return
 end
 
-local function installed()
-  return fs.exists(ROOT .. "/role.txt")
-end
-
-local function role()
-  if not installed() then return nil end
-  local f = fs.open(ROOT .. "/role.txt", "r")
-  if not f then return nil end
-  local value = f.readAll():gsub("%s+", "")
-  f.close()
-  return value
-end
-
-local function version()
-  if not fs.exists(ROOT .. "/src/common/config.lua") then return nil end
-  local ok, cfg = pcall(dofile, ROOT .. "/src/common/config.lua")
-  if ok and type(cfg) == "table" then return cfg.VERSION end
-  return nil
-end
-
-local function runInstaller(targetRole)
-  if not http or not http.get then
-    colour(colors.red)
-    print("HTTP est desactive sur ce serveur.")
-    colour(colors.white)
-    return false
-  end
-
-  print("Telechargement du bootstrap officiel...")
-  local response, err = http.get(INSTALL_URL)
-  if not response then
-    colour(colors.red)
-    print("GitHub inaccessible: " .. tostring(err))
-    colour(colors.white)
-    return false
-  end
-
-  local source = response.readAll()
-  response.close()
-
-  local loader, loadErr = load(source, "@computer_link_install.lua", "t", _ENV)
-  if not loader then
-    colour(colors.red)
-    print("Installateur invalide: " .. tostring(loadErr))
-    colour(colors.white)
-    return false
-  end
-
-  local oldArgs = _G.arg
-  _G.arg = { targetRole }
-  local ok, runErr = pcall(loader, targetRole)
-  _G.arg = oldArgs
-
-  if not ok then
-    colour(colors.red)
-    print("Installation impossible: " .. tostring(runErr))
-    colour(colors.white)
-    return false
-  end
-
-  return true
-end
-
-local function status()
-  title()
-  if not installed() then
-    colour(colors.yellow)
-    print("Etat    : NON INSTALLE")
-    colour(colors.white)
-    print("Tape 'link client' pour rejoindre AstralNet.")
-    print("Tape 'link server' pour creer le MER.")
-    return
-  end
-
-  colour(colors.lime)
-  print("Etat    : INSTALLE")
+local response, err = http.get(URL)
+if not response then
+  colour(colors.red)
+  print("Computer Link bootstrap inaccessible:")
+  print(tostring(err))
   colour(colors.white)
-  print("Role    : " .. tostring(role() or "?"))
-  print("Version : " .. tostring(version() or "?"))
-  print()
-  print("Mise a jour automatique active au demarrage.")
+  return
 end
 
-local command = string.lower(tostring(args[1] or ""))
+local source = response.readAll()
+response.close()
 
-if command == "" then
-  title()
-  if installed() then
-    print("Computer Link est deja installe.")
-    print("Role    : " .. tostring(role() or "?"))
-    print("Version : " .. tostring(version() or "?"))
-    print()
-    print("1 - Demarrer")
-    print("2 - Mettre a jour")
-    print("3 - Statut")
-    print("4 - Desinstaller")
-    print("5 - Quitter")
-    write("Choix: ")
-    local choice = read()
-
-    if choice == "1" then
-      shell.run(ROOT .. "/boot.lua")
-    elseif choice == "2" then
-      shell.run(ROOT .. "/update.lua")
-    elseif choice == "3" then
-      status()
-    elseif choice == "4" then
-      if fs.exists(ROOT .. "/uninstall.lua") then
-        shell.run(ROOT .. "/uninstall.lua")
-      else
-        print("Mets d'abord Computer Link a jour avec: link update")
-      end
-    end
-    return
-  end
-
-  print("1 - Rejoindre AstralNet (CLIENT)")
-  print("2 - Installer le serveur MER")
-  print("3 - Quitter")
-  write("Choix: ")
-  local choice = read()
-
-  if choice == "1" then
-    command = "client"
-  elseif choice == "2" then
-    command = "server"
-  else
-    return
-  end
+local loader, loadErr = load(source, "@link_bootstrap.lua", "t", _ENV)
+if not loader then
+  colour(colors.red)
+  print("Bootstrap LinkOS invalide:")
+  print(tostring(loadErr))
+  colour(colors.white)
+  return
 end
 
-if command == "client" or command == "server" then
-  title()
-  runInstaller(command)
-elseif command == "update" then
-  title()
-  if not installed() then
-    print("Computer Link n'est pas installe.")
-    print("Utilise: link client")
-  else
-    shell.run(ROOT .. "/update.lua")
-  end
-elseif command == "start" then
-  title()
-  if installed() then
-    shell.run(ROOT .. "/boot.lua")
-  else
-    print("Computer Link n'est pas installe.")
-  end
-elseif command == "uninstall" or command == "remove" then
-  title()
-  if not installed() then
-    print("Computer Link n'est pas installe.")
-  elseif fs.exists(ROOT .. "/uninstall.lua") then
-    shell.run(ROOT .. "/uninstall.lua")
-  else
-    print("Desinstallateur absent.")
-    print("Utilise d'abord: link update")
-  end
-elseif command == "status" or command == "id" then
-  status()
-elseif command == "help" then
-  title()
-  print("link            menu")
-  print("link client     installer un PC client")
-  print("link server     installer le MER")
-  print("link update     mise a jour manuelle")
-  print("link start      demarrer Computer Link")
-  print("link uninstall  desinstaller Computer Link")
-  print("link status     statut du PC")
-else
-  print("Commande inconnue. Utilise: link help")
+local ok, runErr = pcall(loader, table.unpack(args))
+if not ok then
+  colour(colors.red)
+  print("Erreur LinkOS:")
+  print(tostring(runErr))
+  colour(colors.white)
 end
