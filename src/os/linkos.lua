@@ -1193,6 +1193,47 @@ function LinkOS:malcraftLocalDiskList()
   return out
 end
 
+function LinkOS:malcraftCarrierPath(drive)
+  if not drive or not drive.mount then return nil end
+  return fs.combine(fs.combine(drive.mount, ".malcraft"), "carrier.dat")
+end
+
+function LinkOS:malcraftWriteCarrier(drive, active)
+  if not drive or not drive.mount then
+    return false, "Ce disque n'a pas de stockage de donnees."
+  end
+
+  local path = self:malcraftCarrierPath(drive)
+  if not path then return false, "Chemin disque indisponible." end
+
+  if active then
+    local dir = fs.getDir(path)
+    if dir and dir ~= "" and not fs.exists(dir) then
+      local ok = pcall(fs.makeDir, dir)
+      if not ok then return false, "Impossible de preparer le disque." end
+    end
+
+    local file = fs.open(path, "w")
+    if not file then return false, "Ecriture du disque impossible." end
+    file.writeLine("ASTRALIUM_MALCRAFT_CARRIER_V1")
+    file.writeLine("disk=" .. tostring(drive.id or "unknown"))
+    file.writeLine("source=" .. tostring(os.getComputerID()))
+    file.close()
+  else
+    if fs.exists(path) then
+      pcall(fs.delete, path)
+    end
+
+    local dir = fs.getDir(path)
+    if dir and dir ~= "" and fs.exists(dir) and fs.isDir(dir) then
+      local entries = fs.list(dir)
+      if #entries == 0 then pcall(fs.delete, dir) end
+    end
+  end
+
+  return true
+end
+
 function LinkOS:malcraftOpenHub()
   local registry, err = self.service:ghostList()
   if not registry then
@@ -1259,15 +1300,44 @@ function LinkOS:malcraftToggleLocalDisk(diskId)
   diskId = tonumber(diskId)
   if not diskId then return end
 
-  local active = self.ghostDiskStates[diskId] == true
-  local data, err = self.service:ghostDiskSet(diskId, not active)
+  local drive = nil
+  for _, candidate in ipairs(self.malcraftLocalDisks or {}) do
+    if tonumber(candidate.id) == diskId then
+      drive = candidate
+      break
+    end
+  end
 
-  if not data then
-    self:setNotice("Malcraft disque: " .. tostring(err), self:theme().danger)
+  if not drive then
+    self:setNotice("Disque local introuvable.", self:theme().danger)
     return
   end
 
-  self.ghostDiskStates[diskId] = not active
+  local active = self.ghostDiskStates[diskId] == true
+  local nextState = not active
+
+  -- Le marqueur est physiquement ecrit dans le disque CC:Tweaked. Ainsi un
+  -- Computer sans LinkOS peut le detecter uniquement via la ROM du datapack.
+  local markerOk, markerErr = self:malcraftWriteCarrier(drive, nextState)
+  if not markerOk then
+    self:setNotice("Malcraft disque: " .. tostring(markerErr), self:theme().danger)
+    return
+  end
+
+  local data, err = self.service:ghostDiskSet(diskId, nextState)
+
+  if not data then
+    self.ghostDiskStates[diskId] = nextState
+    self:setNotice(
+      "Marqueur " .. (nextState and "Malcraft ecrit" or "Malcraft retire")
+        .. " sur Disk #" .. tostring(diskId)
+        .. ", mais MER indisponible: " .. tostring(err),
+      self:theme().warn
+    )
+    return
+  end
+
+  self.ghostDiskStates[diskId] = nextState
   self:setNotice(
     "Disk #" .. tostring(diskId)
       .. (active and " nettoye." or " contamine par Malcraft."),
