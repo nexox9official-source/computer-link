@@ -252,9 +252,9 @@ local function help()
   print("MODULE INTRUSION (jeu)")
   setColour(colors.white)
   if hack.isOperator() then
-    print(" Autorisation : OUI (PC #1)")
+    print(" Autorisation : OUI (PC #0)")
   else
-    print(" Autorisation : NON - reserve au PC #1")
+    print(" Autorisation : NON - reserve au PC #0")
   end
   print(" scan")
   print(" hack <PC_ID>")
