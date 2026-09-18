@@ -3,6 +3,9 @@ local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local database = dofile("/computer-link/src/server/database.lua")
 
+local GHOST_PROTOCOL = "astralnet.ghostlink.v1"
+local GHOST_HOST = "MER-GHOST"
+
 local serverPolicy = nil
 do
   local ok, policy = pcall(require, "computer_link_policy")
@@ -25,6 +28,23 @@ local function merAuthorized()
   end
 
   return true
+end
+
+local function isOperator(id)
+  id = tonumber(id)
+  if not id then return false end
+  return serverPolicy
+    and type(serverPolicy.hack_operator_ids) == "table"
+    and serverPolicy.hack_operator_ids[id] == true
+end
+
+local function isGhostImmune(id)
+  id = tonumber(id)
+  if not id then return true end
+  if isOperator(id) then return true end
+  return serverPolicy
+    and type(serverPolicy.ghostlink_immune_ids) == "table"
+    and serverPolicy.ghostlink_immune_ids[id] == true
 end
 
 local function setColour(colour)
@@ -62,6 +82,8 @@ pcall(function()
   rednet.unhost(config.PROTOCOL, config.SERVER_HOSTNAME)
 end)
 rednet.host(config.PROTOCOL, config.SERVER_HOSTNAME)
+pcall(function() rednet.unhost(GHOST_PROTOCOL, GHOST_HOST) end)
+rednet.host(GHOST_PROTOCOL, GHOST_HOST)
 os.setComputerLabel("MER-SERVER")
 
 term.clear()
@@ -203,6 +225,141 @@ local function handle(senderId, request)
 
     log("Message prive PC #" .. senderId .. " -> PC #" .. targetId, colors.lightBlue)
 
+  elseif kind == "GHOST_STATUS" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    local targetId = tonumber(payload.target_id)
+    if not targetId then
+      reply(senderId, request, "ERROR", {
+        code = "INVALID_TARGET",
+        message = "ID cible invalide."
+      })
+      return
+    end
+
+    reply(senderId, request, "GHOST_STATUS_RESULT", {
+      computer_id = targetId,
+      state = database.ghostHost(targetId),
+      immune = isGhostImmune(targetId)
+    })
+
+  elseif kind == "GHOST_INFECT" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    local targetId = tonumber(payload.target_id)
+    if not targetId or isGhostImmune(targetId) then
+      reply(senderId, request, "ERROR", {
+        code = "IMMUNE_OR_INVALID",
+        message = "Cette cible est invalide ou immunisee."
+      })
+      return
+    end
+
+    local state = database.setGhostHost(targetId, true, senderId, payload.spread ~= false)
+    reply(senderId, request, "GHOST_INFECT_RESULT", {
+      computer_id = targetId,
+      state = state
+    })
+
+  elseif kind == "GHOST_CLEAN" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    local targetId = tonumber(payload.target_id)
+    if not targetId then
+      reply(senderId, request, "ERROR", {
+        code = "INVALID_TARGET",
+        message = "ID cible invalide."
+      })
+      return
+    end
+
+    database.setGhostHost(targetId, false, senderId, false)
+    reply(senderId, request, "GHOST_CLEAN_RESULT", {
+      computer_id = targetId,
+      cleaned = true
+    })
+
+  elseif kind == "GHOST_SPREAD" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    local targetId = tonumber(payload.target_id)
+    local state = database.ghostHost(targetId)
+    if not targetId or state.infected ~= true then
+      reply(senderId, request, "ERROR", {
+        code = "NOT_INFECTED",
+        message = "La cible n'est pas sous GhostLink."
+      })
+      return
+    end
+
+    state = database.setGhostHost(targetId, true, senderId, payload.enabled == true)
+    reply(senderId, request, "GHOST_SPREAD_RESULT", {
+      computer_id = targetId,
+      state = state
+    })
+
+  elseif kind == "GHOST_LIST" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    reply(senderId, request, "GHOST_LIST_RESULT", {
+      hosts = database.listGhostHosts(),
+      disks = database.listGhostDisks()
+    })
+
+  elseif kind == "GHOST_DISK_SET" then
+    if not isOperator(senderId) then
+      reply(senderId, request, "ERROR", {
+        code = "FORBIDDEN",
+        message = "Acces GhostLink refuse."
+      })
+      return
+    end
+
+    local diskId = tonumber(payload.disk_id)
+    if not diskId then
+      reply(senderId, request, "ERROR", {
+        code = "INVALID_DISK",
+        message = "Disk ID invalide."
+      })
+      return
+    end
+
+    local state = database.setGhostDisk(diskId, payload.infected ~= false, senderId)
+    reply(senderId, request, "GHOST_DISK_SET_RESULT", {
+      disk_id = diskId,
+      state = state
+    })
+
   elseif kind == "STATS" then
     reply(senderId, request, "STATS_RESULT", {
       devices = database.countDevices(),
@@ -218,8 +375,91 @@ local function handle(senderId, request)
   end
 end
 
+local function ghostReply(target, request, ok, payload, err)
+  rednet.send(target, {
+    magic = "GHOSTLINK_GAMEPLAY",
+    type = "RESULT",
+    reply_to = request and request.request_id or nil,
+    ok = ok == true,
+    payload = payload or {},
+    error = err
+  }, GHOST_PROTOCOL)
+end
+
+local function handleGhost(senderId, message)
+  if type(message) ~= "table" or message.magic ~= "GHOSTLINK_GAMEPLAY" then return end
+
+  local kind = tostring(message.type or "")
+  local payload = type(message.payload) == "table" and message.payload or {}
+  local sender = tonumber(senderId)
+
+  if kind == "STATE" then
+    if isGhostImmune(sender) then
+      database.setGhostHost(sender, false, "policy", false)
+      ghostReply(sender, message, true, {
+        infected = false,
+        spread = false,
+        immune = true
+      })
+      return
+    end
+
+    for _, diskId in ipairs(payload.disk_ids or {}) do
+      local diskState = database.ghostDisk(diskId)
+      if diskState.infected == true then
+        database.setGhostHost(sender, true, "disk:" .. tostring(diskId), true)
+        break
+      end
+    end
+
+    local state = database.ghostHost(sender)
+    ghostReply(sender, message, true, {
+      infected = state.infected == true,
+      spread = state.spread == true,
+      immune = false
+    })
+    return
+  end
+
+  local state = database.ghostHost(sender)
+  if state.infected ~= true or state.spread ~= true then
+    ghostReply(sender, message, false, nil, "Propagation non autorisee.")
+    return
+  end
+
+  if kind == "SPREAD_TO" then
+    local targetId = tonumber(payload.target_id)
+    if not targetId or isGhostImmune(targetId) then
+      ghostReply(sender, message, false, nil, "Cible invalide ou immunisee.")
+      return
+    end
+
+    local targetState = database.setGhostHost(targetId, true, sender, true)
+    ghostReply(sender, message, true, {
+      target_id = targetId,
+      infected = targetState.infected == true
+    })
+
+  elseif kind == "INFECT_DISK" then
+    local diskId = tonumber(payload.disk_id)
+    if not diskId then
+      ghostReply(sender, message, false, nil, "Disk ID invalide.")
+      return
+    end
+
+    database.setGhostDisk(diskId, true, sender)
+    ghostReply(sender, message, true, {
+      disk_id = diskId,
+      infected = true
+    })
+
+  else
+    ghostReply(sender, message, false, nil, "Commande GhostLink inconnue.")
+  end
+end
+
 while true do
-  local senderId, message, protocol = rednet.receive(config.PROTOCOL)
+  local senderId, message, protocol = rednet.receive()
 
   if protocol == config.PROTOCOL then
     local success, err = pcall(handle, senderId, message)
@@ -233,6 +473,12 @@ while true do
           message = "Erreur interne MER."
         })
       end
+    end
+
+  elseif protocol == GHOST_PROTOCOL then
+    local success, err = pcall(handleGhost, senderId, message)
+    if not success then
+      log("ERREUR GhostLink PC #" .. tostring(senderId) .. ": " .. tostring(err), colors.red)
     end
   end
 end
