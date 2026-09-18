@@ -4,7 +4,35 @@ local RemoteDesktop = {}
 
 local PROTOCOL = "astralnet.ghostlink.v1"
 
+local function bridgeAvailable()
+  return type(malcraft_bus) == "table"
+    and type(malcraft_bus.getScreen) == "function"
+    and type(malcraft_bus.send) == "function"
+end
+
+local function decodeJson(value)
+  if type(value) ~= "string" or value == "" then return nil end
+  local ok, decoded = pcall(textutils.unserializeJSON, value)
+  if ok then return decoded end
+  return nil
+end
+
+local function encodeJson(value)
+  local ok, encoded = pcall(textutils.serializeJSON, value or {})
+  if ok then return encoded end
+  return "{}"
+end
+
 local function sendCommand(targetId, action, argument)
+  if bridgeAvailable() then
+    return malcraft_bus.send(
+      targetId,
+      util.requestId(),
+      tostring(action or ""),
+      encodeJson(argument or {})
+    )
+  end
+
   rednet.send(targetId, {
     magic = "GHOSTLINK_GAMEPLAY",
     type = "COMMAND",
@@ -15,6 +43,8 @@ local function sendCommand(targetId, action, argument)
       argument = argument or {}
     }
   }, PROTOCOL)
+
+  return true
 end
 
 local function crop(value, width)
@@ -114,20 +144,40 @@ function RemoteDesktop.run(service, targetId)
   targetId = tonumber(targetId)
   if not targetId then return false, "ID cible invalide." end
 
-  local snapshot, err = service:ghostRemote(targetId, "screen_snapshot")
-  if not snapshot then
-    return false, err or "Ecran Malcraft indisponible."
-  end
+  local useBridge = bridgeAvailable()
+  local frame = nil
 
-  local subscribed, subErr = service:ghostRemote(targetId, "screen_subscribe")
-  if not subscribed then
-    return false, subErr or "Impossible d'ouvrir le flux Malcraft."
+  if useBridge then
+    local screen = malcraft_bus.getScreen(targetId)
+    if type(screen) == "table" then
+      frame = decodeJson(screen.frame)
+    end
+
+    if not frame then
+      local snapshot, err = service:ghostRemote(targetId, "screen_snapshot")
+      if not snapshot then
+        return false, err or "Ecran Malcraft indisponible."
+      end
+      frame = snapshot
+    end
+  else
+    local snapshot, err = service:ghostRemote(targetId, "screen_snapshot")
+    if not snapshot then
+      return false, err or "Ecran Malcraft indisponible."
+    end
+
+    local subscribed, subErr = service:ghostRemote(targetId, "screen_subscribe")
+    if not subscribed then
+      return false, subErr or "Impossible d'ouvrir le flux Malcraft."
+    end
+
+    frame = snapshot
   end
 
   local control = false
-  local frame = snapshot
   local lastFrameAt = os.clock()
-  local keepalive = os.startTimer(5)
+  local keepalive = useBridge and nil or os.startTimer(5)
+  local bridgeTimer = useBridge and os.startTimer(0.1) or nil
   local watchdog = os.startTimer(1)
 
   renderFrame(targetId, frame, control)
@@ -136,7 +186,22 @@ function RemoteDesktop.run(service, targetId)
   while running do
     local event, a, b, c, d, e = os.pullEventRaw()
 
-    if event == "rednet_message"
+    if useBridge and event == "timer" and a == bridgeTimer then
+      local screen = malcraft_bus.getScreen(targetId)
+
+      if type(screen) == "table" and type(screen.frame) == "string" then
+        local nextFrame = decodeJson(screen.frame)
+        if nextFrame then
+          frame = nextFrame
+          lastFrameAt = os.clock()
+          renderFrame(targetId, frame, control)
+        end
+      end
+
+      bridgeTimer = os.startTimer(0.1)
+
+    elseif not useBridge
+      and event == "rednet_message"
       and tonumber(a) == targetId
       and c == PROTOCOL
       and type(b) == "table"
@@ -147,7 +212,7 @@ function RemoteDesktop.run(service, targetId)
       lastFrameAt = os.clock()
       renderFrame(targetId, frame, control)
 
-    elseif event == "timer" and a == keepalive then
+    elseif not useBridge and event == "timer" and a == keepalive then
       sendCommand(targetId, "screen_keepalive")
       keepalive = os.startTimer(5)
 
@@ -215,7 +280,10 @@ function RemoteDesktop.run(service, targetId)
     end
   end
 
-  sendCommand(targetId, "screen_unsubscribe")
+  if not useBridge then
+    sendCommand(targetId, "screen_unsubscribe")
+  end
+
   pcall(term.setCursorBlink, false)
   return true
 end
