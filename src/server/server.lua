@@ -3,6 +3,30 @@ local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local database = dofile("/computer-link/src/server/database.lua")
 
+local serverPolicy = nil
+do
+  local ok, policy = pcall(require, "computer_link_policy")
+  if ok and type(policy) == "table" then serverPolicy = policy end
+end
+
+local function merAuthorized()
+  if not serverPolicy then return false, "Politique serveur absente." end
+
+  local id = os.getComputerID()
+  if type(serverPolicy.deny_mer_ids) == "table"
+    and serverPolicy.deny_mer_ids[id] == true then
+    return false, "Ce Computer ID est interdit pour le role MER."
+  end
+
+  local trusted = serverPolicy.trusted_mer_ids
+  if type(trusted) == "table" and next(trusted) ~= nil
+    and trusted[id] ~= true then
+    return false, "Ce Computer n'est pas le MER autorise."
+  end
+
+  return true
+end
+
 local function setColour(colour)
   if term.isColor and term.isColor() then
     term.setTextColor(colour)
@@ -13,6 +37,14 @@ local function log(message, colour)
   if colour then setColour(colour) end
   print("[" .. textutils.formatTime(os.time(), true) .. "] " .. message)
   setColour(colors.white)
+end
+
+local allowedMer, merError = merAuthorized()
+if not allowedMer then
+  if term.isColor and term.isColor() then term.setTextColor(colors.red) end
+  print("MER BLOQUE: " .. tostring(merError))
+  if term.isColor and term.isColor() then term.setTextColor(colors.white) end
+  return
 end
 
 local ok, modemOrError = network.open()
