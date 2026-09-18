@@ -53,6 +53,11 @@ public final class MalcraftApi implements ILuaAPI {
     }
 
     @LuaFunction
+    public final String state() {
+        return MalcraftRegistry.selfStateJson(computer);
+    }
+
+    @LuaFunction
     public final boolean infectSelf(String source) {
         return MalcraftRegistry.infect(computer, computer.getID(), source, true);
     }
