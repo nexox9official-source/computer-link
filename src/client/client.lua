@@ -1,6 +1,17 @@
 local LINKOS = "/computer-link/src/os/linkos.lua"
 local CLI = "/computer-link/src/client/cli.lua"
 
+-- Nettoyage immediat des anciens noms internes trop explicites.
+for _, path in ipairs({
+  "/computer-link/src/client/hack.lua",
+  "/computer-link/src/client/hacked_state.lua",
+  "/computer-link/src/os/hacker_console.lua"
+}) do
+  if fs.exists(path) then
+    pcall(fs.delete, path)
+  end
+end
+
 local function colour(c)
   if term.isColor and term.isColor() then
     term.setTextColor(c)
