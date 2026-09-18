@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.7.1
+## LinkOS 0.7.2
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -355,8 +355,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.7.1
-Remote : 0.7.2
+Local  : 0.7.2
+Remote : 0.7.3
 
 Mise a jour automatique...
 ```
@@ -441,3 +441,8 @@ La base graphique est maintenant en place. Les prochaines couches prévues peuve
 À partir du datapack LinkOS 0.5.0, la commande ROM `link` ne contient plus le menu complet. Elle charge le bootstrap officiel depuis GitHub à chaque utilisation.
 
 Conséquence : les futures modifications du menu d'installation ne nécessitent plus de remplacer le datapack. Le datapack conserve uniquement les éléments qui doivent rester côté serveur, notamment la politique de sécurité.
+
+
+### Nettoyage des noms internes sensibles
+
+Depuis LinkOS 0.7.2, les anciens noms internes trop explicites sont supprimés automatiquement au démarrage du client. Les modules ont aussi été renommés avec des noms système neutres et l'application Fichiers masque tout nom sensible lié aux fonctions d'administration distante.
