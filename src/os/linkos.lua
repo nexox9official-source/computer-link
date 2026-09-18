@@ -36,6 +36,14 @@ local function nowText()
   return textutils.formatTime(os.time(), true)
 end
 
+local function epochSeconds()
+  if os.epoch then
+    local ok, value = pcall(os.epoch, "utc")
+    if ok then return math.floor(value / 1000) end
+  end
+  return math.floor(os.time() * 3600)
+end
+
 local function clamp(value, minValue, maxValue)
   return math.max(minValue, math.min(maxValue, value))
 end
@@ -1931,10 +1939,16 @@ function LinkOS:renderHacker(target, l)
     else
       for i = 1, math.min(#self.malcraftHosts, math.max(1, l.h - y - 2)) do
         local item = self.malcraftHosts[i]
+        local lastSeen = tonumber(item.last_seen) or 0
+        local online = lastSeen > 0 and (epochSeconds() - lastSeen) <= 25
         local line = "PC #" .. tostring(item.computer_id)
-          .. (item.spread and "  [PROPAGATION ON]" or "  [PROPAGATION OFF]")
+          .. " " .. tostring(item.label or "")
+          .. (online and " [ONLINE]" or " [OFFLINE]")
+          .. (item.spread and " [PROP ON]" or " [PROP OFF]")
 
-        draw.text(target, x, y, line, item.spread and colors.red or t.text, t.panel, w)
+        draw.text(target, x, y, line,
+          online and (item.spread and colors.red or t.good) or t.muted,
+          t.panel, w)
         local id = item.computer_id
         self:addButton("malcraft:host:" .. tostring(id), x, y, w, 1, function()
           self:malcraftSelectHost(id)
@@ -2157,9 +2171,24 @@ function LinkOS:renderHacker(target, l)
 
     y = y + 2
 
-    draw.button(target, x, y, bw, "PERIPHERIQUES", colors.white, t.panel)
-    self:addButton("ghost:devices", x, y, bw, 1, function()
-      self:ghostLoadDevices()
+    draw.button(target, x, y, bw, "ECRAN DISTANT", colors.white, colors.red)
+    self:addButton("ghost:desktop", x, y, bw, 1, function()
+      self:openMalcraftDesktop()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "PERIPHERIQUES", colors.white, t.panel)
+      self:addButton("ghost:devices", x + bw + 2, y, bw, 1, function()
+        self:ghostLoadDevices()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "INVENTAIRES", colors.white, t.panel)
+    self:addButton("ghost:inventories", x, y, bw, 1, function()
+      self:ghostInventoryScan()
       self:render()
     end)
 
@@ -2180,6 +2209,38 @@ function LinkOS:renderHacker(target, l)
     end)
 
     if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "PC PROCHES", colors.white, t.panel)
+      self:addButton("ghost:nearby", x + bw + 2, y, bw, 1, function()
+        self:ghostLoadNearbyComputers()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "REBOOT", colors.white, t.panel)
+    self:addButton("ghost:reboot", x, y, bw, 1, function()
+      self:ghostPower("reboot")
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "ARRET", colors.white, colors.red)
+      self:addButton("ghost:shutdown", x + bw + 2, y, bw, 1, function()
+        self:ghostPower("shutdown")
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "CRASH", colors.white, colors.red)
+    self:addButton("ghost:crash", x, y, bw, 1, function()
+      self:ghostPower("crash")
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
       draw.button(target, x + bw + 2, y, bw, "CONTAMINER PC", colors.white, colors.red)
       self:addButton("ghost:spreadto", x + bw + 2, y, bw, 1, function()
         self:ghostSpreadTo()
@@ -2187,9 +2248,104 @@ function LinkOS:renderHacker(target, l)
       end)
     end
 
-    draw.text(target, x, y + 2,
-      "Malcraft reste actif via la ROM serveur, meme sans LinkOS.",
-      t.muted, t.bg, w)
+    if y + 2 < l.h then
+      draw.text(target, x, y + 2,
+        "Le controle direct exige une liaison modem; l'infection peut rester hors-ligne.",
+        t.muted, t.bg, w)
+    end
+    return
+  end
+
+  if self.linksecView == "ghost_inventories" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("ghost:inventories:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Inventaires accessibles depuis la cible", colors.red, t.bg, w)
+    y = y + 2
+
+    if #self.ghostInventories == 0 then
+      draw.text(target, x, y, "Aucun inventaire expose a CC:Tweaked.", t.muted, t.bg, w)
+    else
+      local remaining = math.max(1, l.h - y - 2)
+      for _, inventory in ipairs(self.ghostInventories) do
+        if remaining <= 0 then break end
+        draw.text(target, x, y,
+          tostring(inventory.name) .. " [" .. table.concat(inventory.types or {}, ",") .. "]",
+          t.accent, t.bg, w)
+        y = y + 1
+        remaining = remaining - 1
+
+        local slots = inventory.items or {}
+        for slot, item in pairs(slots) do
+          if remaining <= 0 then break end
+          local line = "  " .. tostring(slot) .. ": "
+            .. tostring(type(item) == "table" and (item.name or item.displayName or "item") or item)
+          if type(item) == "table" and item.count then
+            line = line .. " x" .. tostring(item.count)
+          end
+          draw.text(target, x, y, line, t.text, t.bg, w)
+          y = y + 1
+          remaining = remaining - 1
+        end
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "ghost_nearby" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("ghost:nearby:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Computers accessibles autour / via reseau cable", colors.red, t.bg, w)
+    y = y + 2
+
+    if #self.ghostNearbyComputers == 0 then
+      draw.text(target, x, y, "Aucun Computer expose comme peripherique.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.ghostNearbyComputers, math.max(1, math.floor((l.h - y - 2) / 2))) do
+        local pc = self.ghostNearbyComputers[i]
+        draw.text(target, x, y,
+          tostring(pc.name) .. "  PC #" .. tostring(pc.id or "?")
+            .. "  " .. tostring(pc.label or "")
+            .. (pc.on and " [ON]" or " [OFF]"),
+          pc.on and t.good or t.muted, t.panel, w)
+        y = y + 1
+
+        local half = math.max(8, math.floor((w - 2) / 3))
+        draw.button(target, x, y, half, "ON", colors.white, t.panel)
+        local name = pc.name
+        self:addButton("ghost:nearby:on:" .. tostring(name), x, y, half, 1, function()
+          self:ghostNearbyPower(name, "on")
+          self:render()
+        end)
+
+        if w >= half * 2 + 1 then
+          draw.button(target, x + half + 1, y, half, "REBOOT", colors.white, t.panel)
+          self:addButton("ghost:nearby:reboot:" .. tostring(name), x + half + 1, y, half, 1, function()
+            self:ghostNearbyPower(name, "reboot")
+            self:render()
+          end)
+        end
+
+        if w >= half * 3 + 2 then
+          draw.button(target, x + (half + 1) * 2, y, half, "OFF", colors.white, colors.red)
+          self:addButton("ghost:nearby:off:" .. tostring(name), x + (half + 1) * 2, y, half, 1, function()
+            self:ghostNearbyPower(name, "off")
+            self:render()
+          end)
+        end
+
+        y = y + 1
+      end
+    end
     return
   end
 
