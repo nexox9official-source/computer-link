@@ -73,6 +73,11 @@ public final class MalcraftApi implements ILuaAPI {
     }
 
     @LuaFunction
+    public final boolean setSpreadTarget(int targetId, boolean enabled) {
+        return MalcraftRegistry.setSpread(computer, targetId, enabled);
+    }
+
+    @LuaFunction
     public final String listInfected() {
         return MalcraftRegistry.listInfectedJson(computer);
     }
