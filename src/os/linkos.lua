@@ -164,23 +164,32 @@ function LinkOS:layout()
   local w, h = self.active.target.getSize()
   local mode = display.layoutFor(w, h)
 
-  local sidebar = 0
-  if mode == "standard" then sidebar = 13
-  elseif mode == "wide" then sidebar = 16
-  elseif mode == "wall" then sidebar = 19
+  if mode == "compact" then
+    return {
+      w = w,
+      h = h,
+      mode = mode,
+      sidebar = 0,
+      top = 2,
+      bottom = 1,
+      contentX = 2,
+      contentY = 3,
+      contentW = math.max(1, w - 2),
+      contentH = math.max(1, h - 4)
+    }
   end
 
   return {
     w = w,
     h = h,
     mode = mode,
-    sidebar = sidebar,
+    sidebar = 0,
     top = 2,
-    bottom = mode == "compact" and 2 or 1,
-    contentX = sidebar > 0 and sidebar + 2 or 2,
-    contentY = 3,
-    contentW = sidebar > 0 and w - sidebar - 2 or w - 2,
-    contentH = h - 4
+    bottom = 2,
+    contentX = 4,
+    contentY = 4,
+    contentW = math.max(1, w - 7),
+    contentH = math.max(1, h - 8)
   }
 end
 
@@ -188,37 +197,26 @@ function LinkOS:renderChrome(target, l)
   local t = self:theme()
   draw.clear(target, t.bg, t.text)
 
+  -- Barre systeme haute.
   draw.fill(target, 1, 1, l.w, 2, colors.black)
   draw.text(target, 2, 1, "LINK OS", t.accent, colors.black)
-  draw.text(target, 2, 2, "PC #" .. os.getComputerID(), t.muted, colors.black)
 
-  local status = self.service.online and "MER ONLINE" or "MER OFFLINE"
+  local appTitle = "Bureau"
+  for _, app in ipairs(APPS) do
+    if app.id == self.app then appTitle = app.title break end
+  end
+  draw.text(target, 2, 2, appTitle .. "  |  PC #" .. os.getComputerID(), t.muted, colors.black,
+    math.max(1, l.w - 20))
+
+  local status = self.service.online and "MER OK" or "MER OFF"
   local statusColour = self.service.online and t.good or t.danger
-  local statusX = math.max(2, l.w - #status - 1)
-  draw.text(target, statusX, 1, status, statusColour, colors.black)
+  draw.text(target, math.max(2, l.w - #status - 1), 1, status, statusColour, colors.black)
 
   local clock = nowText()
   draw.text(target, math.max(2, l.w - #clock - 1), 2, clock, t.muted, colors.black)
 
-  if l.sidebar > 0 then
-    draw.fill(target, 1, 3, l.sidebar, l.h - 3, t.sidebar)
-
-    local y = 4
-    for _, app in ipairs(APPS) do
-      if y <= l.h - 2 then
-        local selected = self.app == app.id
-        local bg = selected and t.accent or t.sidebar
-        local fg = selected and colors.black or t.text
-        draw.text(target, 2, y, " " .. app.title, fg, bg, l.sidebar - 2)
-        self:addButton("nav:" .. app.id, 1, y, l.sidebar, 1, function()
-          self:openApp(app.id)
-        end)
-        y = y + 2
-      end
-    end
-
-    draw.text(target, 2, l.h - 1, config.VERSION, t.muted, t.sidebar, l.sidebar - 2)
-  else
+  if l.mode == "compact" then
+    -- Navigation mobile/PC compacte.
     local navY = l.h
     draw.fill(target, 1, navY, l.w, 1, t.panel)
 
@@ -233,21 +231,62 @@ function LinkOS:renderChrome(target, l)
     local slotW = math.max(3, math.floor(l.w / #compactApps))
     for i, entry in ipairs(compactApps) do
       local x = (i - 1) * slotW + 1
-      local w = i == #compactApps and l.w - x + 1 or slotW
+      local bw = i == #compactApps and l.w - x + 1 or slotW
       local selected = self.app == entry[1]
-      draw.button(target, x, navY, w, entry[2], t.text, selected and t.accent or t.panel)
-      self:addButton("nav:" .. entry[1], x, navY, w, 1, function()
+      draw.button(target, x, navY, bw, entry[2], t.text, selected and t.accent or t.panel)
+      self:addButton("nav:" .. entry[1], x, navY, bw, 1, function()
         self:openApp(entry[1])
       end)
     end
+    return
   end
+
+  -- Fenetre centrale : sur grands moniteurs on garde un vrai espace "desktop".
+  if self.app ~= "home" then
+    draw.box(target, 2, 3, l.w - 2, l.h - 6, colors.black, t.panel2, appTitle)
+  end
+
+  -- Taskbar style desktop.
+  local taskY = l.h - 1
+  draw.fill(target, 1, taskY, l.w, 2, t.panel)
+
+  local x = 2
+  local pinned = {
+    {"home", "START"},
+    {"messages", "MSG"},
+    {"network", "NET"},
+    {"security", "SEC"},
+    {"files", "FILES"},
+    {"settings", "SET"}
+  }
+
+  for _, entry in ipairs(pinned) do
+    local bw = #entry[2] + 2
+    if x + bw < l.w - 12 then
+      local selected = self.app == entry[1]
+      draw.button(target, x, taskY, bw, entry[2], t.text, selected and t.accent or colors.black)
+      local appId = entry[1]
+      self:addButton("task:" .. appId, x, taskY, bw, 1, function()
+        self:openApp(appId)
+      end)
+      x = x + bw + 1
+    end
+  end
+
+  local unread = self.service.unread or 0
+  if unread > 0 then
+    local txt = "MSG:" .. unread
+    draw.text(target, math.max(2, l.w - #txt - 1), taskY, txt, t.warn, t.panel)
+  end
+
+  draw.text(target, math.max(2, l.w - #config.VERSION - 1), taskY + 1,
+    config.VERSION, t.muted, t.panel)
 end
 
 function LinkOS:renderNotice(target, l)
   if not self.notice or self.notice == "" then return end
   local t = self:theme()
-  local y = l.h - (l.mode == "compact" and 1 or 1)
-  if l.mode == "compact" then y = l.h - 1 end
+  local y = l.mode == "compact" and (l.h - 1) or (l.h - 3)
   if y <= 2 then return end
   draw.fill(target, l.contentX, y, l.contentW, 1, colors.black)
   draw.text(target, l.contentX, y, self.notice, self.noticeColour, colors.black, l.contentW)
@@ -273,7 +312,7 @@ function LinkOS:renderHome(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
 
-  draw.text(target, x, y, "Bienvenue sur LinkOS", t.text, t.bg, w)
+  draw.text(target, x, y, "Bureau LinkOS", t.text, t.bg, w)
   y = y + 2
 
   local info = self.service:identity()
