@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.7.0
+## LinkOS 0.7.1
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -220,6 +220,10 @@ Tout cela reste **strictement dans Minecraft/CC:Tweaked**.
 
 Explorateur de fichiers local :
 
+### Fichiers utilisateur protégés
+
+L'application **Fichiers** n'affiche plus les fichiers internes de LinkOS. Les dossiers système, le code Computer Link, la ROM et les fichiers de démarrage sont masqués de l'explorateur graphique afin de garder une interface propre et de ne pas exposer l'implémentation interne de sécurité aux joueurs.
+
 - navigation dans les dossiers ;
 - aperçu de fichiers texte ;
 - taille des fichiers ;
@@ -241,6 +245,10 @@ Gestion de LinkOS :
 - arrêt ;
 - vérification des mises à jour ;
 - reboot et arrêt.
+
+### Mise à jour rapide
+
+Un bouton **MAJ** est maintenant présent directement dans la barre supérieure du Computer et du moniteur principal. Il devient jaune lorsqu'une nouvelle version est disponible. Les moniteurs tactiles secondaires affichent aussi un bouton **MISE A JOUR** lorsque nécessaire.
 
 ### Indicateur de mise à jour
 
@@ -347,8 +355,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.7.0
-Remote : 0.7.1
+Local  : 0.7.1
+Remote : 0.7.2
 
 Mise a jour automatique...
 ```
