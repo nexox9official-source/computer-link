@@ -2,7 +2,7 @@ local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local storage = dofile("/computer-link/src/client/storage.lua")
-local hack = dofile("/computer-link/src/client/hack.lua")
+local hack = dofile("/computer-link/src/client/remote_control.lua")
 
 local service = {}
 service.__index = service
