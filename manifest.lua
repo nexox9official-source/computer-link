@@ -3,6 +3,7 @@ return {
   version = "0.1.0",
   protocol_version = 1,
   files = {
+    "install.lua",
     "manifest.lua",
     "boot.lua",
     "update.lua",
