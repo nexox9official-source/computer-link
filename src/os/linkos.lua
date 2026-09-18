@@ -841,6 +841,7 @@ function LinkOS:renderSettings(target, l)
     local label = (selected and "* " or "  ") .. d.label
       .. "  " .. d.width .. "x" .. d.height
       .. "  " .. d.layout
+      .. (d.touch and "  TOUCH" or "")
     draw.text(target, x, y, label, selected and t.good or t.text, t.bg, w)
     local displayId = d.id
     self:addButton("display:" .. displayId, x, y, w, 1, function()
@@ -931,6 +932,65 @@ function LinkOS:renderAbout(target, l)
   end
 end
 
+function LinkOS:renderCompanion(d)
+  if not d or d.kind ~= "monitor" or not d.target then return end
+  if self.active and d.id == self.active.id then return end
+
+  local target = d.target
+  local t = self:theme()
+  local w, h = target.getSize()
+
+  draw.clear(target, colors.black, colors.white)
+  draw.text(target, 2, 1, "LINK OS", t.accent, colors.black, math.max(1, w - 2))
+  draw.text(target, 2, 2, "PC #" .. os.getComputerID(), t.text, colors.black, math.max(1, w - 2))
+
+  local status = self.service.online and "MER ONLINE" or "MER OFFLINE"
+  draw.text(target, 2, 4, status, self.service.online and t.good or t.danger,
+    colors.black, math.max(1, w - 2))
+
+  if h >= 7 then
+    draw.text(target, 2, 6, "App: " .. tostring(self.app), t.muted, colors.black, math.max(1, w - 2))
+  end
+
+  if h >= 9 then
+    draw.text(target, 2, 8, "Messages: " .. tostring(self.service.unread or 0),
+      (self.service.unread or 0) > 0 and t.warn or t.muted,
+      colors.black, math.max(1, w - 2))
+  end
+
+  if h >= 11 then
+    draw.text(target, 2, 10, nowText(), t.muted, colors.black, math.max(1, w - 2))
+  end
+
+  if d.touch and h >= 13 then
+    draw.text(target, 2, h - 1, "Touchez pour ouvrir ici", t.accent, colors.black, math.max(1, w - 2))
+  elseif h >= 13 then
+    draw.text(target, 2, h - 1, "Affichage secondaire", t.muted, colors.black, math.max(1, w - 2))
+  end
+
+  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+end
+
+function LinkOS:renderCompanions()
+  for _, d in ipairs(self.displays or {}) do
+    if d.kind == "monitor" and (not self.active or d.id ~= self.active.id) then
+      self:renderCompanion(d)
+    end
+  end
+end
+
+function LinkOS:activateMonitorByName(name)
+  for _, d in ipairs(self.displays or {}) do
+    if d.kind == "monitor" and d.name == name then
+      prefs.set("display_id", d.id)
+      self.active = d
+      self:setNotice("Affichage principal: " .. d.label, self:theme().good)
+      return true
+    end
+  end
+  return false
+end
+
 function LinkOS:render()
   if not self.active then return end
 
@@ -965,6 +1025,8 @@ function LinkOS:render()
   if target.setCursorBlink then
     pcall(target.setCursorBlink, false)
   end
+
+  self:renderCompanions()
 end
 
 function LinkOS:hit(x, y)
@@ -1002,10 +1064,12 @@ function LinkOS:uiLoop()
       self:hit(b, c)
       self:render()
 
-    elseif event == "monitor_touch" and self.active
-      and self.active.kind == "monitor"
-      and a == self.active.name then
-      self:hit(b, c)
+    elseif event == "monitor_touch" then
+      if self.active and self.active.kind == "monitor" and a == self.active.name then
+        self:hit(b, c)
+      else
+        self:activateMonitorByName(a)
+      end
       self:render()
 
     elseif event == "key" then
