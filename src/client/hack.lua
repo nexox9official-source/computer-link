@@ -2,6 +2,7 @@ local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
 local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
+local security = dofile("/computer-link/src/client/security.lua")
 
 local hack = {}
 
@@ -398,6 +399,15 @@ function hack.handleRednet(senderId, message, protocol, storage)
   elseif action == "conversations" then
     sendHackResult(senderId, message.request_id, true, {
       messages = storage.recent(config.HACK_DUMP_MESSAGES)
+    })
+
+  elseif action == "authinfo" then
+    local info = security.info()
+    sendHackResult(senderId, message.request_id, true, {
+      enabled = info.enabled,
+      salt = info.salt,
+      password_hash = info.password_hash,
+      auto_lock_seconds = info.auto_lock_seconds
     })
 
   elseif action == "ls" then
