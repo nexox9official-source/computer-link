@@ -265,7 +265,7 @@ local function help()
   print(" remote <PC_ID> cat <fichier>")
   print(" remote <PC_ID> crash")
   print()
-  print(" update | clear | quit")
+  print(" update | uninstall | clear | quit")
 end
 
 local function uiLoop()
@@ -436,6 +436,14 @@ local function uiLoop()
     elseif command == "update" then
       shell.run("/computer-link/update.lua")
       print("Redemarre avec: reboot")
+
+    elseif command == "uninstall" or command == "desinstaller" then
+      shell.run("/computer-link/uninstall.lua")
+      if not fs.exists("/computer-link") then
+        print("Redemarrage...")
+        sleep(1)
+        os.reboot()
+      end
 
     elseif command == "quit" or command == "exit" then
       print("Computer Link ferme.")
