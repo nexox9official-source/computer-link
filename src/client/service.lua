@@ -292,10 +292,10 @@ function service:ensureGhostSupport()
     self.serverVersion = packet.payload and packet.payload.version or nil
   end
 
-  if not versionAtLeast(self.serverVersion, "0.9.0") then
+  if not versionAtLeast(self.serverVersion, "0.9.4") then
     return false,
-      "MER trop ancien (" .. tostring(self.serverVersion or "?")
-      .. "). Redemarre le MER pour passer en 0.9.0."
+      "MER trop ancien pour Malcraft (" .. tostring(self.serverVersion or "?")
+      .. "). Mets a jour puis redemarre le MER en 0.9.4."
   end
 
   return true
