@@ -1470,7 +1470,7 @@ function LinkOS:renderHacker(target, l)
     end)
     y = y + 2
 
-    draw.text(target, x, y, "Peripheriques connectes", t.text, t.bg, w)
+    draw.text(target, x, y, "Peripheriques connectes - clique pour controler", t.text, t.bg, w)
     y = y + 2
 
     if #self.ghostDevices == 0 then
@@ -1478,12 +1478,56 @@ function LinkOS:renderHacker(target, l)
     else
       for i = 1, math.min(#self.ghostDevices, math.max(1, l.h - y - 2)) do
         local device = self.ghostDevices[i]
-        draw.text(target, x, y,
-          tostring(device.name) .. " [" .. table.concat(device.types or {}, ",") .. "]"
-            .. "  " .. tostring(#(device.methods or {})) .. " methodes",
-          t.text, t.panel, w)
+        local line = tostring(device.name)
+          .. " [" .. table.concat(device.types or {}, ",") .. "]"
+          .. "  " .. tostring(#(device.methods or {})) .. " methodes"
+
+        draw.text(target, x, y, line, t.text, t.panel, w)
+
+        local deviceName = device.name
+        self:addButton("ghost:device:" .. tostring(deviceName), x, y, w, 1, function()
+          self:ghostOpenDevice(deviceName)
+          self:render()
+        end)
+
         y = y + 1
       end
+    end
+    return
+  end
+
+  if self.linksecView == "ghost_device" and self.ghostDevice then
+    draw.text(target, x, y, "< PERIPHERIQUES", t.accent, t.bg, w)
+    self:addButton("ghost:device:back", x, y, math.min(18, w), 1, function()
+      self.linksecView = "ghost_devices"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y,
+      tostring(self.ghostDevice.name)
+        .. " [" .. table.concat(self.ghostDevice.types or {}, ",") .. "]",
+      colors.red, t.bg, w)
+    y = y + 2
+
+    local methods = self.ghostDevice.methods or {}
+    local maxRows = math.max(1, l.h - y - 4)
+
+    for i = 1, math.min(#methods, maxRows) do
+      local method = methods[i]
+      draw.text(target, x, y, tostring(method), t.text, t.panel, w)
+
+      local methodName = method
+      self:addButton("ghost:method:" .. tostring(methodName), x, y, w, 1, function()
+        self:ghostCallDevice(methodName)
+        self:render()
+      end)
+
+      y = y + 1
+    end
+
+    if self.ghostDeviceResult and y < l.h - 1 then
+      draw.text(target, x, y + 1, tostring(self.ghostDeviceResult), t.good, t.bg, w)
     end
     return
   end
