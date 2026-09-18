@@ -1,10 +1,13 @@
-name: Build Malcraft Bridge
+name: Build Malcraft Server Pack
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - "malcraft-bridge/**"
+      - "server-datapack/**"
+      - "src/**"
+      - "manifest.lua"
       - ".github/workflows/malcraft-bridge.yml"
   workflow_dispatch:
 
@@ -26,12 +29,62 @@ jobs:
         with:
           gradle-version: "8.1.1"
 
-      - name: Build
+      - name: Build Malcraft Bridge
         working-directory: malcraft-bridge
         run: gradle build --stacktrace
 
-      - name: Upload jar
+      - name: Package server files
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.10.0"
+          OUT="$GITHUB_WORKSPACE/dist"
+          mkdir -p "$OUT/combined/mods" "$OUT/combined/datapacks"
+
+          cp malcraft-bridge/build/libs/malcraft-bridge-${VERSION}.jar             "$OUT/malcraft-bridge-${VERSION}.jar"
+
+          (
+            cd server-datapack
+            zip -qr "$OUT/Computer-Link-Server-Datapack-1.20.1-v${VERSION}.zip" .
+          )
+
+          cp "$OUT/malcraft-bridge-${VERSION}.jar"             "$OUT/combined/mods/malcraft-bridge-${VERSION}.jar"
+          cp "$OUT/Computer-Link-Server-Datapack-1.20.1-v${VERSION}.zip"             "$OUT/combined/datapacks/Computer-Link-Server-Datapack-1.20.1-v${VERSION}.zip"
+
+          cat > "$OUT/combined/INSTALLATION.txt" <<'EOF'
+          ASTRALIUM MALCRAFT / COMPUTER LINK 0.10.0
+
+          1. Arreter completement le serveur Minecraft.
+          2. Copier mods/malcraft-bridge-0.10.0.jar dans le dossier mods/ du serveur.
+             Ce mod est serveur uniquement : ne pas l'ajouter aux clients.
+          3. Remplacer l'ancien datapack Computer Link par :
+             Computer-Link-Server-Datapack-1.20.1-v0.10.0.zip
+             dans <monde>/datapacks/.
+          4. Demarrer completement le serveur.
+          5. Redemarrer le MER puis le PC operateur #0.
+          6. Les Computers cibles n'ont pas besoin d'avoir LinkOS.
+             Le runtime Malcraft est injecte par la ROM CC:Tweaked du datapack.
+          EOF
+
+          (
+            cd "$OUT/combined"
+            zip -qr "$OUT/Computer-Link-Malcraft-Server-v${VERSION}.zip" .
+          )
+
+      - name: Upload Malcraft Bridge
         uses: actions/upload-artifact@v4
         with:
-          name: malcraft-bridge-1.20.1
-          path: malcraft-bridge/build/libs/*.jar
+          name: malcraft-bridge-1.20.1-v0.10.0
+          path: dist/malcraft-bridge-0.10.0.jar
+
+      - name: Upload Computer Link datapack
+        uses: actions/upload-artifact@v4
+        with:
+          name: computer-link-datapack-1.20.1-v0.10.0
+          path: dist/Computer-Link-Server-Datapack-1.20.1-v0.10.0.zip
+
+      - name: Upload complete Malcraft server pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: computer-link-malcraft-server-v0.10.0
+          path: dist/Computer-Link-Malcraft-Server-v0.10.0.zip
