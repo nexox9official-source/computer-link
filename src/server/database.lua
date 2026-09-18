@@ -4,17 +4,15 @@ local util = dofile("/computer-link/src/common/util.lua")
 local database = {}
 
 local state = {
-  schema = 1,
-  users = {},
-  computers = {},
-  inboxes = {}
+  schema = 2,
+  devices = {},
+  queues = {}
 }
 
 local function normalise()
-  state.schema = state.schema or 1
-  state.users = state.users or {}
-  state.computers = state.computers or {}
-  state.inboxes = state.inboxes or {}
+  state.schema = 2
+  state.devices = state.devices or {}
+  state.queues = state.queues or {}
 end
 
 function database.load()
@@ -33,93 +31,76 @@ function database.get()
   return state
 end
 
-function database.usernameForComputer(computerId)
-  return state.computers[tostring(computerId)]
+function database.getDevice(computerId)
+  return state.devices[tostring(tonumber(computerId) or computerId)]
 end
 
-function database.getUser(username)
-  return state.users[username]
-end
+function database.registerDevice(computerId, label)
+  computerId = tonumber(computerId)
+  if not computerId then return nil end
 
-function database.register(computerId, username)
-  local valid
-  valid, username = util.validUsername(username, config.USERNAME_MIN, config.USERNAME_MAX)
+  local key = tostring(computerId)
+  local now = util.now()
+  local device = state.devices[key]
 
-  if not valid then
-    return false, "Pseudo invalide: " .. config.USERNAME_MIN .. "-" .. config.USERNAME_MAX .. " caracteres, lettres/chiffres/_/-."
+  if not device then
+    device = {
+      computer_id = computerId,
+      first_seen = now
+    }
+    state.devices[key] = device
   end
 
-  local bound = database.usernameForComputer(computerId)
-  if bound then
-    if bound == username then
-      return true, "Ce PC est deja enregistre sous " .. username .. "."
-    end
-    return false, "Ce PC est deja lie au compte " .. bound .. "."
+  device.last_seen = now
+
+  if type(label) == "string" and label ~= "" then
+    device.label = string.sub(label, 1, 32)
   end
 
-  if state.users[username] then
-    return false, "Ce pseudo est deja utilise."
-  end
-
-  state.users[username] = {
-    username = username,
-    computer_id = computerId,
-    created_at = util.now(),
-    last_seen = util.now()
-  }
-
-  state.computers[tostring(computerId)] = username
-  state.inboxes[username] = state.inboxes[username] or {}
-
+  state.queues[key] = state.queues[key] or {}
   database.save()
-  return true, "Compte " .. username .. " cree."
+  return device
 end
 
 function database.touch(computerId)
-  local username = database.usernameForComputer(computerId)
-  if username and state.users[username] then
-    state.users[username].last_seen = util.now()
+  local device = database.getDevice(computerId)
+  if device then
+    device.last_seen = util.now()
   end
-  return username
+  return device
 end
 
-function database.listUsers()
-  local users = {}
-
-  for username, user in pairs(state.users) do
-    users[#users + 1] = {
-      username = username,
-      computer_id = user.computer_id,
-      last_seen = user.last_seen
-    }
-  end
-
-  table.sort(users, function(a, b)
-    return string.lower(a.username) < string.lower(b.username)
-  end)
-
-  return users
+function database.countDevices()
+  local count = 0
+  for _ in pairs(state.devices) do count = count + 1 end
+  return count
 end
 
-function database.pushMessage(fromUser, toUser, message)
-  state.inboxes[toUser] = state.inboxes[toUser] or {}
+function database.queueMessage(fromId, toId, body)
+  fromId = tonumber(fromId)
+  toId = tonumber(toId)
+  if not fromId or not toId then return nil end
+
+  local key = tostring(toId)
+  state.queues[key] = state.queues[key] or {}
 
   local entry = {
-    from = fromUser,
-    to = toUser,
-    message = message,
+    id = util.requestId(),
+    from_id = fromId,
+    to_id = toId,
+    body = body,
     sent_at = util.now()
   }
 
-  state.inboxes[toUser][#state.inboxes[toUser] + 1] = entry
+  state.queues[key][#state.queues[key] + 1] = entry
   database.save()
-
   return entry
 end
 
-function database.takeInbox(username)
-  local messages = state.inboxes[username] or {}
-  state.inboxes[username] = {}
+function database.takeQueue(computerId)
+  local key = tostring(tonumber(computerId) or computerId)
+  local messages = state.queues[key] or {}
+  state.queues[key] = {}
   database.save()
   return messages
 end
