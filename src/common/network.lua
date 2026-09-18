@@ -61,7 +61,20 @@ function network.isPacket(value)
 end
 
 function network.findServer()
-  return rednet.lookup(config.PROTOCOL, config.SERVER_HOSTNAME)
+  local serverId = rednet.lookup(config.PROTOCOL, config.SERVER_HOSTNAME)
+  if not serverId then return nil end
+
+  local ok, policy = pcall(require, "computer_link_policy")
+  if ok and type(policy) == "table"
+    and type(policy.trusted_mer_ids) == "table"
+    and next(policy.trusted_mer_ids) ~= nil then
+
+    if policy.trusted_mer_ids[tonumber(serverId)] ~= true then
+      return nil
+    end
+  end
+
+  return serverId
 end
 
 return network
