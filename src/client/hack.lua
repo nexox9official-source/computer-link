@@ -7,9 +7,24 @@ local hack = {}
 local pending = {}
 local sessions = {}
 
+local serverPolicy = nil
+do
+  local ok, policy = pcall(require, "computer_link_policy")
+  if ok and type(policy) == "table" then
+    serverPolicy = policy
+  end
+end
+
 local function isOperator(computerId)
+  computerId = tonumber(computerId)
+
+  if serverPolicy
+    and type(serverPolicy.hack_operator_ids) == "table" then
+    return serverPolicy.hack_operator_ids[computerId] == true
+  end
+
   return config.HACK_OPERATOR_IDS
-    and config.HACK_OPERATOR_IDS[tonumber(computerId)] == true
+    and config.HACK_OPERATOR_IDS[computerId] == true
 end
 
 function hack.isOperator(computerId)
