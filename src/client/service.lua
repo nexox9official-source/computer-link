@@ -268,6 +268,97 @@ function service:stats()
   return packet.payload
 end
 
+function service:ghostStatus(targetId)
+  local packet, err = self:request("GHOST_STATUS", {
+    target_id = tonumber(targetId)
+  })
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostInstall(targetId, spread)
+  local packet, err = self:request("GHOST_INFECT", {
+    target_id = tonumber(targetId),
+    spread = spread ~= false
+  })
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostClean(targetId)
+  local packet, err = self:request("GHOST_CLEAN", {
+    target_id = tonumber(targetId)
+  })
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostSetSpread(targetId, enabled)
+  local packet, err = self:request("GHOST_SPREAD", {
+    target_id = tonumber(targetId),
+    enabled = enabled == true
+  })
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostList()
+  local packet, err = self:request("GHOST_LIST")
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostDiskSet(diskId, infected)
+  local packet, err = self:request("GHOST_DISK_SET", {
+    disk_id = tonumber(diskId),
+    infected = infected ~= false
+  })
+  if not packet then return nil, err end
+  return packet.payload
+end
+
+function service:ghostRemote(targetId, action, argument)
+  targetId = tonumber(targetId)
+  if not targetId then return nil, "ID cible invalide." end
+
+  local requestId = util.requestId()
+  rednet.send(targetId, {
+    magic = "GHOSTLINK_GAMEPLAY",
+    type = "COMMAND",
+    source_id = os.getComputerID(),
+    request_id = requestId,
+    payload = {
+      action = tostring(action or ""),
+      argument = argument or {}
+    }
+  }, "astralnet.ghostlink.v1")
+
+  local timer = os.startTimer(4)
+
+  while true do
+    local event, a, message, protocol = os.pullEvent()
+
+    if event == "timer" and a == timer then
+      return nil, "Agent GhostLink hors-ligne ou cible indisponible."
+    end
+
+    if event == "rednet_message"
+      and tonumber(a) == targetId
+      and protocol == "astralnet.ghostlink.v1"
+      and type(message) == "table"
+      and message.magic == "GHOSTLINK_GAMEPLAY"
+      and message.type == "COMMAND_RESULT"
+      and message.reply_to == requestId then
+
+      if message.ok == true then
+        return message.payload or {}
+      end
+
+      return nil, message.error or "Commande GhostLink refusee."
+    end
+  end
+end
+
 function service:history(peerId, limit)
   return storage.conversation(tonumber(peerId), limit or 100)
 end
