@@ -1901,12 +1901,36 @@ function LinkOS:renderHacker(target, l)
     end)
 
     if w >= actionW * 2 + 2 then
-      draw.button(target, x + actionW + 2, y, actionW, "GHOSTLINK", colors.white, colors.red)
-      self:addButton("linksec:ghost", x + actionW + 2, y, actionW, 1, function()
-        self:ghostRefresh()
+      draw.button(target, x + actionW + 2, y, actionW, "PERIPHERIQUES", colors.white, t.panel)
+      self:addButton("linksec:devices", x + actionW + 2, y, actionW, 1, function()
+        self:linksecLoadDevices()
         self:render()
       end)
     end
+
+    y = y + 2
+
+    draw.button(target, x, y, actionW, "REDSTONE", colors.white, t.panel)
+    self:addButton("linksec:redstone", x, y, actionW, 1, function()
+      self:linksecLoadRedstone()
+      self:render()
+    end)
+
+    if w >= actionW * 2 + 2 then
+      draw.button(target, x + actionW + 2, y, actionW, "DISQUES", colors.white, t.panel)
+      self:addButton("linksec:drives", x + actionW + 2, y, actionW, 1, function()
+        self:linksecLoadDrives()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, actionW, "GHOSTLINK", colors.white, colors.red)
+    self:addButton("linksec:ghost", x, y, actionW, 1, function()
+      self:ghostRefresh()
+      self:render()
+    end)
 
     y = y + 2
 
