@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.7.2
+## LinkOS 0.8.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -355,8 +355,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.7.2
-Remote : 0.7.3
+Local  : 0.8.0
+Remote : 0.8.1
 
 Mise a jour automatique...
 ```
@@ -446,3 +446,25 @@ Conséquence : les futures modifications du menu d'installation ne nécessitent 
 ### Nettoyage des noms internes sensibles
 
 Depuis LinkOS 0.7.2, les anciens noms internes trop explicites sont supprimés automatiquement au démarrage du client. Les modules ont aussi été renommés avec des noms système neutres et l'application Fichiers masque tout nom sensible lié aux fonctions d'administration distante.
+
+
+## Durcissement des postes joueurs
+
+LinkOS 0.8.0 ajoute un mode de verrouillage renforcé fourni par le datapack serveur.
+
+- les privilèges LinkSec ne viennent plus jamais de la configuration locale ;
+- seul le Computer ID autorisé dans la politique ROM peut attaquer ;
+- modifier les fichiers locaux ne donne aucun privilège d'intrusion ;
+- les paquets distants doivent provenir du véritable Computer ID autorisé par rednet ;
+- Ctrl+T ne permet plus de sortir de LinkOS vers CraftOS ;
+- en cas d'erreur LinkOS, le poste passe par Recovery puis redémarre au lieu d'ouvrir un shell ;
+- les clients joueurs ne conservent ni code serveur, ni CLI de maintenance, ni désinstallateur ;
+- l'explorateur Fichiers est confiné à `/user` et reste en lecture seule ;
+- un guard installé dans la ROM CraftOS par le datapack réécrit le startup officiel et restaure les fichiers système modifiés depuis GitHub à chaque démarrage ;
+- les anciens fichiers internes ou fichiers ajoutés pour contourner LinkOS sont nettoyés des emplacements système connus.
+
+### Protection MER
+
+Le datapack supporte maintenant `trusted_mer_ids`. Dès que le Computer ID réel du MER est ajouté à cette liste, les clients refusent les faux MER et un autre Computer ne peut pas prendre le rôle de serveur central.
+
+Le PC opérateur reste **#0** et est explicitement interdit comme MER.
