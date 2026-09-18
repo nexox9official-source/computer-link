@@ -2255,35 +2255,43 @@ function LinkOS:renderHacker(target, l)
 
     local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
 
-    draw.button(target, x, y, bw, "REBOOT", colors.white, t.panel)
-    self:addButton("ghost:sys:reboot", x, y, bw, 1, function()
-      self:ghostPower("reboot")
+    draw.button(target, x, y, bw, "ALLUMER", colors.white, t.good)
+    self:addButton("ghost:sys:on", x, y, bw, 1, function()
+      self:ghostPower("turn_on")
       self:render()
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "ARRET", colors.white, colors.red)
-      self:addButton("ghost:sys:shutdown", x + bw + 2, y, bw, 1, function()
-        self:ghostPower("shutdown")
+      draw.button(target, x + bw + 2, y, bw, "REBOOT", colors.white, t.panel)
+      self:addButton("ghost:sys:reboot", x + bw + 2, y, bw, 1, function()
+        self:ghostPower("reboot")
         self:render()
       end)
     end
 
     y = y + 2
 
-    draw.button(target, x, y, bw, "CRASH", colors.white, colors.red)
-    self:addButton("ghost:sys:crash", x, y, bw, 1, function()
-      self:ghostPower("crash")
+    draw.button(target, x, y, bw, "ARRET", colors.white, colors.red)
+    self:addButton("ghost:sys:shutdown", x, y, bw, 1, function()
+      self:ghostPower("shutdown")
       self:render()
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "NETTOYER", colors.white, t.panel)
-      self:addButton("ghost:sys:clean", x + bw + 2, y, bw, 1, function()
-        self:ghostClean()
+      draw.button(target, x + bw + 2, y, bw, "CRASH", colors.white, colors.red)
+      self:addButton("ghost:sys:crash", x + bw + 2, y, bw, 1, function()
+        self:ghostPower("crash")
         self:render()
       end)
     end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "NETTOYER", colors.white, t.panel)
+    self:addButton("ghost:sys:clean", x, y, bw, 1, function()
+      self:ghostClean()
+      self:render()
+    end)
 
     y = y + 2
 
@@ -2295,7 +2303,7 @@ function LinkOS:renderHacker(target, l)
 
     if y + 2 < l.h then
       draw.text(target, x, y + 2,
-        "Un PC eteint ne peut etre rallume directement que via un Computer proche/cable.",
+        "Malcraft Bridge peut rallumer un Computer infecte charge, sans modem.",
         t.muted, t.bg, w)
     end
     return
