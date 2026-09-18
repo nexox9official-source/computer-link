@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.6.1",
+  version = "0.7.0",
   protocol_version = 2,
   files = {
     "install.lua",
@@ -15,6 +15,7 @@ return {
     "src/server/server.lua",
     "src/client/storage.lua",
     "src/client/hacked_state.lua",
+    "src/client/security.lua",
     "src/client/hack.lua",
     "src/client/service.lua",
     "src/client/cli.lua",
