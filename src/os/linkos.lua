@@ -19,6 +19,7 @@ local ACCENTS = {
 local APPS = {
   {id="home", title="Accueil", short="HOME"},
   {id="messages", title="Messages", short="MSG"},
+  {id="contacts", title="Contacts", short="CONT"},
   {id="network", title="Reseau", short="NET"},
   {id="security", title="Securite", short="SEC"},
   {id="files", title="Fichiers", short="FILES"},
@@ -325,6 +326,7 @@ function LinkOS:renderHome(target, l)
 
     local apps = {
       {"Messages", "messages", "Conversations privees"},
+      {"Contacts", "contacts", "Alias locaux par Computer ID"},
       {"Reseau", "network", "MER et modem"},
       {"Securite", "security", "Protection et intrusion"},
       {"Fichiers", "files", "Disque local"},
@@ -356,6 +358,7 @@ function LinkOS:renderHome(target, l)
 
   local cards = {
     {"Messages", self.service.unread > 0 and (self.service.unread .. " nouveau(x)") or "Conversations privees par ID", "messages"},
+    {"Contacts", "Alias locaux pour retrouver facilement les PC", "contacts"},
     {"Reseau", statusText, "network"},
     {"Securite", self.service:isHackOperator() and "Console speciale autorisee" or "Protection active", "security"},
     {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " libres", "files"},
@@ -527,6 +530,57 @@ function LinkOS:renderMessages(target, l)
   end
 end
 
+function LinkOS:renderContacts(target, l)
+  local t = self:theme()
+  local x, y, w = l.contentX, l.contentY, l.contentW
+
+  draw.text(target, x, y, "Contacts", t.text, t.bg, w)
+  self:button(target, "contact:add", math.max(x, x + w - 10), y, math.min(10, w), "+ Ajouter", function()
+    local id = tonumber(self:prompt("Computer ID du contact", "Exemple: 42"))
+    if not id then
+      self:setNotice("ID invalide.", t.danger)
+      return
+    end
+
+    local name = self:prompt("Nom local pour PC #" .. id, "Exemple: QG Nord")
+    if name and name ~= "" then
+      prefs.setAlias(id, name)
+      self:setNotice("Contact ajoute.", t.good)
+    end
+  end)
+  y = y + 2
+
+  local aliases = prefs.all().aliases or {}
+  local contacts = {}
+  for id, name in pairs(aliases) do
+    contacts[#contacts + 1] = {id=tonumber(id) or id, name=name}
+  end
+  table.sort(contacts, function(a,b)
+    return string.lower(tostring(a.name)) < string.lower(tostring(b.name))
+  end)
+
+  if #contacts == 0 then
+    draw.text(target, x, y, "Aucun contact enregistre.", t.muted, t.bg, w)
+    y = y + 2
+    draw.text(target, x, y, "Les contacts restent locaux a ce PC.", t.muted, t.bg, w)
+    return
+  end
+
+  for i, contact in ipairs(contacts) do
+    if y >= l.h - 3 then break end
+    local label = tostring(contact.name) .. "  |  PC #" .. tostring(contact.id)
+    draw.text(target, x, y, label, t.accent, t.bg, w)
+    local cid = tonumber(contact.id)
+    self:addButton("contact:" .. tostring(contact.id), x, y, w, 1, function()
+      if cid then
+        self.selectedPeer = cid
+        self:openApp("messages")
+      end
+    end)
+    y = y + 1
+  end
+end
+
 function LinkOS:renderNetwork(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
@@ -578,6 +632,13 @@ function LinkOS:renderNetwork(target, l)
         local label = self:prompt("Nouveau nom du PC", "Maximum 32 caracteres.")
         local ok, err = self.service:setLabel(label)
         self:setNotice(ok and "Nom du PC mis a jour." or tostring(err), ok and t.good or t.danger)
+      end)
+    end
+
+    if y + 2 < l.h - 1 then
+      self:button(target, "net:reconnect", x, y + 2, math.min(14, w), "RECONNECTER", function()
+        local ok, err = self.service:reconnect()
+        self:setNotice(ok and "Connexion MER retablie." or tostring(err), ok and t.good or t.danger)
       end)
     end
   end
@@ -885,6 +946,12 @@ function LinkOS:renderSettings(target, l)
         self.exitToCli = true
         self.running = false
       end},
+      {"REBOOT", function()
+        os.reboot()
+      end},
+      {"ARRET", function()
+        os.shutdown()
+      end},
       {"DESINSTALLER", function()
         if self:confirm("Desinstaller Computer Link ?") then
           shell.run("/computer-link/uninstall.lua", "yes")
@@ -922,7 +989,7 @@ function LinkOS:renderAbout(target, l)
     "Raccourcis :",
     "F1 Accueil   F2 Messages   F3 Reseau",
     "F4 Securite  F5 Fichiers   F6 Parametres",
-    "ESC Accueil"
+    "F7 Contacts   ESC Accueil"
   }
 
   for _, line in ipairs(text) do
@@ -1006,6 +1073,8 @@ function LinkOS:render()
 
   if self.app == "messages" then
     self:renderMessages(target, l)
+  elseif self.app == "contacts" then
+    self:renderContacts(target, l)
   elseif self.app == "network" then
     self:renderNetwork(target, l)
   elseif self.app == "security" then
@@ -1048,6 +1117,7 @@ function LinkOS:handleKey(key)
   elseif key == keys.f4 then self:openApp("security")
   elseif key == keys.f5 then self:openApp("files")
   elseif key == keys.f6 then self:openApp("settings")
+  elseif key == keys.f7 then self:openApp("contacts")
   elseif key == keys.escape then self:openApp("home")
   elseif key == keys.r then
     self:render()
