@@ -4,6 +4,12 @@ local STARTUP = "/startup.lua"
 
 local args = { ... }
 
+local security = nil
+if fs.exists(ROOT .. "/src/client/security.lua") then
+  local ok, module = pcall(dofile, ROOT .. "/src/client/security.lua")
+  if ok and type(module) == "table" then security = module end
+end
+
 local function colour(c)
   if term.isColor and term.isColor() then term.setTextColor(c) end
 end
@@ -89,30 +95,44 @@ if not fs.exists(ROOT) then
   return
 end
 
-local force = string.lower(tostring(args[1] or "")) == "yes"
-  or string.lower(tostring(args[1] or "")) == "force"
+print("Cette commande va supprimer LinkOS de ce PC.")
+print()
+print("Supprime :")
+print(" - application LinkOS")
+print(" - configuration locale")
+print(" - historique local des conversations")
+print(" - sessions et donnees locales")
+print()
+colour(colors.yellow)
+print("Le Computer ID ne change pas.")
+colour(colors.white)
+print()
 
-if not force then
-  print("Cette commande va supprimer Computer Link de ce PC.")
-  print()
-  print("Supprime :")
-  print(" - application Computer Link")
-  print(" - configuration locale")
-  print(" - historique local des conversations")
-  print(" - sessions et donnees locales")
-  print()
-  colour(colors.yellow)
-  print("Le Computer ID ne change pas.")
-  colour(colors.white)
-  print()
+if security and type(security.enabled) == "function" and security.enabled() then
+  print("Ce PC est protege par un mot de passe.")
+  write("Mot de passe LinkOS: ")
+  local password = read("*")
 
-  write("Confirmer la desinstallation ? [oui/non] : ")
-  local answer = string.lower(read() or "")
-
-  if answer ~= "oui" and answer ~= "o" and answer ~= "yes" and answer ~= "y" then
-    print("Desinstallation annulee.")
+  if not security.verify(password) then
+    colour(colors.red)
+    print("Mot de passe incorrect. Desinstallation annulee.")
+    colour(colors.white)
     return
   end
+
+  print()
+end
+
+colour(colors.red)
+print("ATTENTION: cette action est definitive pour cette installation.")
+colour(colors.white)
+print("Pour confirmer, tape exactement: DESINSTALLER")
+write("> ")
+
+local phrase = tostring(read() or "")
+if phrase ~= "DESINSTALLER" then
+  print("Desinstallation annulee.")
+  return
 end
 
 local state = loadState()
@@ -157,4 +177,6 @@ print()
 colour(colors.lime)
 print("Computer Link a ete desinstalle.")
 colour(colors.white)
-print("Tape 'reboot' pour redemarrer CraftOS proprement.")
+print("Redemarrage vers CraftOS...")
+sleep(1)
+os.reboot()
