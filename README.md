@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.6.0
+## LinkOS 0.6.1
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -21,7 +21,7 @@ Le client n'est plus seulement un terminal de commandes. Il démarre maintenant 
 L'identité réseau reste le **Computer ID**. Il n'existe pas de compte central obligatoire.
 
 ```text
-PC #1  <---- AstralNet / MER ---->  PC #42
+PC #0  <---- AstralNet / MER ---->  PC #42
 ```
 
 ## Interface adaptative
@@ -117,7 +117,7 @@ Les postes standards voient uniquement leur état de protection. Les outils d'in
 
 ## LinkSec CMD
 
-Sur un Computer autorisé par la politique serveur — actuellement **PC #1** — LinkOS ajoute une application supplémentaire : **LinkSec CMD**.
+Sur un Computer autorisé par la politique serveur — actuellement **PC #0** — LinkOS ajoute une application supplémentaire : **LinkSec CMD**.
 
 Elle n'existe visuellement que pour les opérateurs autorisés. Elle se comporte comme un terminal d'administration/intrusion intégré à l'OS et permet notamment :
 
@@ -156,7 +156,7 @@ La partie graphique Sécurité reste volontairement simple : état du poste, pol
 
 ### Gameplay d'intrusion ComputerCraft
 
-Le **Computer #1** est l'opérateur spécial autorisé par la politique serveur.
+Le **Computer #0** est l'opérateur spécial autorisé par la politique serveur.
 
 Les commandes et boutons d'intrusion ne sont affichés **que** sur un PC autorisé. Sur les autres postes, le Centre de sécurité reste une simple interface de protection sans commandes de hacking.
 
@@ -306,8 +306,8 @@ Les installations récentes vérifient GitHub automatiquement à chaque démarra
 COMPUTER LINK
 AUTO UPDATE
 
-Local  : 0.6.0
-Remote : 0.6.1
+Local  : 0.6.1
+Remote : 0.6.2
 
 Mise a jour automatique...
 ```
