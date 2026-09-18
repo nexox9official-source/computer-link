@@ -2,7 +2,7 @@
 
 Réseau ComputerCraft / CC:Tweaked pour Astralium.
 
-## Version 0.2.0 — réseau par Computer ID
+## Version 0.2.1 — réseau par Computer ID
 
 Computer Link n'utilise plus de "comptes" pour la messagerie. **L'identité réseau principale est directement l'ID du ComputerCraft**.
 
@@ -93,6 +93,14 @@ device 47
 Aucune commande normale ne permet d'obtenir la liste complète des PC enregistrés.
 
 ## Module d'intrusion — gameplay ComputerCraft
+
+### Autorisation
+
+Les commandes spéciales d'intrusion sont réservées au **Computer ID #1**.
+
+Les autres PC peuvent utiliser AstralNet normalement et peuvent être ciblés, mais ils ne peuvent pas lancer `scan`, `hack` ou `remote`.
+
+La restriction est vérifiée côté attaquant **et côté cible** : même si un autre joueur modifie son client, une cible Computer Link refusera les commandes d'intrusion provenant d'un ID non autorisé.
 
 La version 0.2.0 ajoute un premier système de hacking **entièrement dans Minecraft/ComputerCraft**.
 
