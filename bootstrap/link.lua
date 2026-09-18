@@ -109,8 +109,7 @@ if command == "" then
     print("1 - Demarrer LinkOS")
     print("2 - Mettre a jour")
     print("3 - Statut")
-    print("4 - Desinstaller")
-    print("5 - Quitter")
+    print("4 - Quitter")
     write("Choix: ")
 
     local choice = read()
@@ -121,12 +120,6 @@ if command == "" then
       shell.run(ROOT .. "/update.lua")
     elseif choice == "3" then
       status()
-    elseif choice == "4" then
-      if fs.exists(ROOT .. "/uninstall.lua") then
-        shell.run(ROOT .. "/uninstall.lua")
-      else
-        print("Mets d'abord LinkOS a jour avec: link update")
-      end
     end
     return
   end
@@ -176,14 +169,10 @@ elseif command == "start" then
 
 elseif command == "uninstall" or command == "remove" then
   title()
-  if not installed() then
-    print("LinkOS n'est pas installe.")
-  elseif fs.exists(ROOT .. "/uninstall.lua") then
-    shell.run(ROOT .. "/uninstall.lua")
-  else
-    print("Desinstallateur absent.")
-    print("Utilise d'abord: link update")
-  end
+  colour(colors.red)
+  print("ACTION BLOQUEE")
+  colour(colors.white)
+  print("La maintenance systeme n'est pas disponible depuis un poste joueur.")
 
 elseif command == "status" or command == "id" then
   status()
@@ -194,7 +183,6 @@ elseif command == "help" then
   print("link install    installer LinkOS")
   print("link update     mise a jour manuelle")
   print("link start      demarrer LinkOS")
-  print("link uninstall  desinstaller LinkOS")
   print("link status     statut du PC")
 
 else
