@@ -44,7 +44,7 @@ print("Version    : " .. config.VERSION)
 print("Computer ID: " .. os.getComputerID())
 print("Modem      : " .. tostring(modemOrError))
 print("Protocole  : " .. config.PROTOCOL)
-print("Comptes    : " .. util.count(database.get().users))
+print("PC connus  : " .. database.countDevices())
 print("--------------------------------")
 log("MER ONLINE", colors.lime)
 
@@ -54,28 +54,39 @@ local function reply(target, request, kind, payload)
   rednet.send(target, packet, config.PROTOCOL)
 end
 
-local function requireIdentity(senderId, request)
-  local username = database.usernameForComputer(senderId)
+local function ensureKnown(senderId, request)
+  local device = database.getDevice(senderId)
 
-  if not username then
+  if not device then
     reply(senderId, request, "ERROR", {
-      code = "NOT_REGISTERED",
-      message = "Ce PC n'est pas enregistre. Utilise: register <pseudo>"
+      code = "UNKNOWN_PC",
+      message = "PC non initialise. Redemarre Computer Link."
     })
     return nil
   end
 
   database.touch(senderId)
-  return username
+  return device
 end
 
 local function handle(senderId, request)
-  if not network.isPacket(request) then
-    return
-  end
+  if not network.isPacket(request) then return end
 
   local kind = request.type
   local payload = request.payload or {}
+
+  if kind == "HELLO" then
+    local device = database.registerDevice(senderId, payload.label)
+    reply(senderId, request, "HELLO_RESULT", {
+      computer_id = senderId,
+      label = device and device.label or nil,
+      server_id = os.getComputerID(),
+      version = config.VERSION
+    })
+
+    log("PC #" .. senderId .. " connecte" .. (device and device.label and (" [" .. device.label .. "]") or ""), colors.lime)
+    return
+  end
 
   if kind == "PING" then
     reply(senderId, request, "PONG", {
@@ -86,54 +97,59 @@ local function handle(senderId, request)
     return
   end
 
-  if kind == "REGISTER" then
-    local success, message = database.register(senderId, payload.username)
-    reply(senderId, request, "REGISTER_RESULT", {
-      success = success,
-      message = message,
-      username = success and database.usernameForComputer(senderId) or nil
+  local device = ensureKnown(senderId, request)
+  if not device then return end
+
+  if kind == "IDENTITY" then
+    reply(senderId, request, "IDENTITY_RESULT", {
+      computer_id = senderId,
+      label = device.label
     })
 
-    if success then
-      log("Compte: " .. tostring(database.usernameForComputer(senderId)) .. " [PC " .. senderId .. "]", colors.lime)
-    else
-      log("Inscription refusee pour PC " .. senderId .. ": " .. tostring(message), colors.orange)
-    end
-    return
-  end
+  elseif kind == "DEVICE_INFO" then
+    local targetId = tonumber(payload.computer_id)
+    local target = targetId and database.getDevice(targetId) or nil
 
-  local username = requireIdentity(senderId, request)
-  if not username then return end
-
-  if kind == "WHOAMI" then
-    reply(senderId, request, "IDENTITY", {
-      username = username,
-      computer_id = senderId
-    })
-
-  elseif kind == "USERS" then
-    reply(senderId, request, "USER_LIST", {
-      users = database.listUsers()
-    })
-
-  elseif kind == "INBOX" then
-    reply(senderId, request, "INBOX_RESULT", {
-      messages = database.takeInbox(username)
-    })
-
-  elseif kind == "SEND_MESSAGE" then
-    local target = util.trim(payload.target)
-    local message = util.trim(payload.message)
-
-    if target == "" or not database.getUser(target) then
+    if not target then
       reply(senderId, request, "ERROR", {
-        code = "UNKNOWN_USER",
-        message = "Utilisateur introuvable."
+        code = "UNKNOWN_TARGET",
+        message = "PC #" .. tostring(payload.computer_id) .. " inconnu du MER."
       })
       return
     end
 
-    if message == "" or #message > config.MESSAGE_MAX then
+    reply(senderId, request, "DEVICE_INFO_RESULT", {
+      computer_id = target.computer_id,
+      label = target.label,
+      last_seen = target.last_seen
+    })
+
+  elseif kind == "INBOX" then
+    reply(senderId, request, "INBOX_RESULT", {
+      messages = database.takeQueue(senderId)
+    })
+
+  elseif kind == "SEND_MESSAGE" then
+    local targetId = tonumber(payload.target_id)
+    local body = util.trim(payload.body)
+
+    if not targetId or targetId < 0 or math.floor(targetId) ~= targetId then
+      reply(senderId, request, "ERROR", {
+        code = "INVALID_TARGET",
+        message = "ID PC cible invalide."
+      })
+      return
+    end
+
+    if not database.getDevice(targetId) then
+      reply(senderId, request, "ERROR", {
+        code = "UNKNOWN_TARGET",
+        message = "Le PC #" .. tostring(targetId) .. " n'est pas connu du MER."
+      })
+      return
+    end
+
+    if body == "" or #body > config.MESSAGE_MAX then
       reply(senderId, request, "ERROR", {
         code = "INVALID_MESSAGE",
         message = "Message vide ou trop long (max " .. config.MESSAGE_MAX .. ")."
@@ -141,23 +157,23 @@ local function handle(senderId, request)
       return
     end
 
-    local entry = database.pushMessage(username, target, message)
-    local targetUser = database.getUser(target)
+    local entry = database.queueMessage(senderId, targetId, body)
 
-    if targetUser and targetUser.computer_id then
-      rednet.send(targetUser.computer_id, network.packet("MESSAGE_EVENT", entry), config.PROTOCOL)
-    end
+    rednet.send(
+      targetId,
+      network.packet("MESSAGE_EVENT", entry),
+      config.PROTOCOL
+    )
 
     reply(senderId, request, "MESSAGE_SENT", {
-      target = target,
-      sent_at = entry.sent_at
+      message = entry
     })
 
-    log(username .. " -> " .. target .. ": " .. message, colors.lightBlue)
+    log("Message prive PC #" .. senderId .. " -> PC #" .. targetId, colors.lightBlue)
 
   elseif kind == "STATS" then
     reply(senderId, request, "STATS_RESULT", {
-      users = util.count(database.get().users),
+      devices = database.countDevices(),
       server_id = os.getComputerID(),
       version = config.VERSION
     })
@@ -177,7 +193,7 @@ while true do
     local success, err = pcall(handle, senderId, message)
 
     if not success then
-      log("ERREUR requete PC " .. tostring(senderId) .. ": " .. tostring(err), colors.red)
+      log("ERREUR requete PC #" .. tostring(senderId) .. ": " .. tostring(err), colors.red)
 
       if type(message) == "table" then
         pcall(reply, senderId, message, "ERROR", {
