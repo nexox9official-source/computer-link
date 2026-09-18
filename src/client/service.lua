@@ -292,10 +292,10 @@ function service:ensureGhostSupport()
     self.serverVersion = packet.payload and packet.payload.version or nil
   end
 
-  if not versionAtLeast(self.serverVersion, "0.9.4") then
+  if not versionAtLeast(self.serverVersion, "0.9.5") then
     return false,
       "MER trop ancien pour Malcraft (" .. tostring(self.serverVersion or "?")
-      .. "). Mets a jour puis redemarre le MER en 0.9.4."
+      .. "). Mets a jour puis redemarre le MER en 0.9.5."
   end
 
   return true
@@ -390,7 +390,7 @@ function service:ghostRemote(targetId, action, argument)
     local event, a, message, protocol = os.pullEvent()
 
     if event == "timer" and a == timer then
-      return nil, "Agent GhostLink hors-ligne ou cible indisponible."
+      return nil, "Agent Malcraft hors-ligne ou cible indisponible."
     end
 
     if event == "rednet_message"
@@ -405,7 +405,7 @@ function service:ghostRemote(targetId, action, argument)
         return message.payload or {}
       end
 
-      return nil, message.error or "Commande GhostLink refusee."
+      return nil, message.error or "Commande Malcraft refusee."
     end
   end
 end
