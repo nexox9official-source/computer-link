@@ -1,4 +1,4 @@
--- GhostLink background gameplay daemon for CC:Tweaked / Astralium.
+-- Malcraft background gameplay daemon for CC:Tweaked / Astralium.
 -- Minecraft-only simulation. Runs in a hidden multishell tab on Advanced Computers.
 
 local PROTOCOL = "astralnet.ghostlink.v1"
@@ -323,14 +323,34 @@ local function nowMs()
   return math.floor(os.clock() * 1000)
 end
 
-local function proximitySettings()
+local function propagationSettings()
   local p = policy() or {}
   return {
-    enabled = p.ghostlink_proximity_spread == true,
+    proximity = p.ghostlink_proximity_spread == true,
+    operator_emitter = p.malcraft_operator_proximity_emitter ~= false,
+    auto_disks = p.malcraft_auto_infect_disks ~= false,
     distance = tonumber(p.ghostlink_proximity_distance) or 2.5,
     interval = math.max(2, tonumber(p.ghostlink_beacon_seconds) or 5),
     cooldown = math.max(5, tonumber(p.ghostlink_spread_cooldown_seconds) or 15)
   }
+end
+
+local function canSpreadFromHere()
+  local cfg = propagationSettings()
+  if isOperator(os.getComputerID()) then
+    return cfg.operator_emitter == true
+  end
+  return infected and spreadEnabled
+end
+
+local function infectConnectedDisks()
+  local cfg = propagationSettings()
+  if not cfg.auto_disks then return end
+  if not (infected and spreadEnabled) then return end
+
+  for _, diskId in ipairs(diskIds()) do
+    pcall(request, "INFECT_DISK", {disk_id=diskId}, 1.0)
+  end
 end
 
 local function sendBeacon()
@@ -343,8 +363,8 @@ local function sendBeacon()
 end
 
 local function handleBeacon(message, distance)
-  local cfg = proximitySettings()
-  if not cfg.enabled or not infected or not spreadEnabled then return end
+  local cfg = propagationSettings()
+  if not cfg.proximity or not canSpreadFromHere() then return end
   if type(distance) ~= "number" or distance > cfg.distance then return end
   if type(message) ~= "table"
     or message.magic ~= "GHOSTLINK_GAMEPLAY"
@@ -366,24 +386,29 @@ local function handleBeacon(message, distance)
 end
 
 refreshState()
+infectConnectedDisks()
 sendBeacon()
 
 local stateTimer = os.startTimer(CHECK_SECONDS)
-local beaconTimer = os.startTimer(proximitySettings().interval)
+local beaconTimer = os.startTimer(propagationSettings().interval)
 
 while true do
   local event, a, b, c, d, e = os.pullEvent()
 
   if event == "timer" and a == stateTimer then
     refreshState()
+    infectConnectedDisks()
     stateTimer = os.startTimer(CHECK_SECONDS)
 
   elseif event == "timer" and a == beaconTimer then
     sendBeacon()
-    beaconTimer = os.startTimer(proximitySettings().interval)
+    beaconTimer = os.startTimer(propagationSettings().interval)
 
-  elseif event == "disk" or event == "disk_eject" or event == "peripheral"
-    or event == "peripheral_detach" then
+  elseif event == "disk" or event == "peripheral" then
+    refreshState()
+    infectConnectedDisks()
+
+  elseif event == "disk_eject" or event == "peripheral_detach" then
     refreshState()
 
   elseif event == "modem_message" then
