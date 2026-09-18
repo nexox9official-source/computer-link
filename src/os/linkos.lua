@@ -1506,11 +1506,22 @@ function LinkOS:renderHacker(target, l)
   y = y + 2
 
   if self.hackerConsole.target then
-    draw.button(target, x, y, math.min(20, w), "CONVERSATIONS", colors.white, t.panel)
-    self:addButton("linksec:conversations", x, y, math.min(20, w), 1, function()
+    local actionW = math.min(16, math.max(10, math.floor((w - 2) / 2)))
+
+    draw.button(target, x, y, actionW, "CONVERSATIONS", colors.white, t.panel)
+    self:addButton("linksec:conversations", x, y, actionW, 1, function()
       self:linksecLoadConversationIndex()
       self:render()
     end)
+
+    if w >= actionW * 2 + 2 then
+      draw.button(target, x + actionW + 2, y, actionW, "GHOSTLINK", colors.white, colors.red)
+      self:addButton("linksec:ghost", x + actionW + 2, y, actionW, 1, function()
+        self:ghostRefresh()
+        self:render()
+      end)
+    end
+
     y = y + 2
 
     draw.text(target, x, y,
