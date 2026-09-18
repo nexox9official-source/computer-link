@@ -1,7 +1,7 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local util = dofile("/computer-link/src/common/util.lua")
 local network = dofile("/computer-link/src/common/network.lua")
-local hackedState = dofile("/computer-link/src/client/hacked_state.lua")
+local hackedState = dofile("/computer-link/src/client/system_state.lua")
 local security = dofile("/computer-link/src/client/security.lua")
 
 local hack = {}
