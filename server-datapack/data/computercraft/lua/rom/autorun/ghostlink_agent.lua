@@ -9,18 +9,37 @@ end
 local program = "/rom/programs/ghostlinkd.lua"
 
 if shell.openTab then
+  local previousTab = multishell and multishell.getCurrent and multishell.getCurrent() or nil
   local ok, tabId = pcall(shell.openTab, program)
-  if ok and tabId and multishell and multishell.setTitle then
-    pcall(multishell.setTitle, tabId, " ")
+
+  if ok and tabId and multishell then
+    if multishell.setTitle then
+      pcall(multishell.setTitle, tabId, "MAL")
+    end
+
+    -- shell.openTab may focus the new daemon tab on some CC:Tweaked builds.
+    -- Restore the player's original LinkOS/CraftOS tab immediately.
+    if previousTab and multishell.setFocus then
+      pcall(multishell.setFocus, previousTab)
+    end
   end
+
   return
 end
 
 if multishell and multishell.launch then
+  local previousTab = multishell.getCurrent and multishell.getCurrent() or nil
   local ok, tabId = pcall(multishell.launch, _ENV, program)
-  if ok and tabId and multishell.setTitle then
-    pcall(multishell.setTitle, tabId, " ")
+
+  if ok and tabId then
+    if multishell.setTitle then
+      pcall(multishell.setTitle, tabId, "MAL")
+    end
+    if previousTab and multishell.setFocus then
+      pcall(multishell.setFocus, previousTab)
+    end
   end
+
   return
 end
 
