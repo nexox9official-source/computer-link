@@ -1320,6 +1320,171 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
+  if self.linksecView == "ghost" then
+    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
+    self:addButton("ghost:back", x, y, math.min(12, w), 1, function()
+      self.linksecView = "home"
+      self:render()
+    end)
+    y = y + 2
+
+    local state = (self.ghostState and self.ghostState.state) or {}
+    local infected = state.infected == true
+    local spread = state.spread == true
+    local immune = self.ghostState and self.ghostState.immune == true
+
+    draw.text(target, x, y, "GhostLink", colors.red, t.bg, w)
+    y = y + 1
+    draw.text(target, x, y,
+      immune and "IMMUNISE"
+        or (infected and "ACTIF" or "ABSENT"),
+      immune and t.good or (infected and colors.red or t.muted),
+      t.bg, w)
+    y = y + 2
+
+    if immune then
+      draw.text(target, x, y, "Ce poste est protege par la politique operateur.", t.muted, t.bg, w)
+      return
+    end
+
+    if not infected then
+      draw.button(target, x, y, math.min(18, w), "INSTALLER GHOST", colors.white, colors.red)
+      self:addButton("ghost:install", x, y, math.min(18, w), 1, function()
+        self:ghostInstall()
+        self:render()
+      end)
+      return
+    end
+
+    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
+
+    draw.button(target, x, y, bw, spread and "PROPAGATION ON" or "PROPAGATION OFF",
+      colors.white, spread and colors.red or t.panel)
+    self:addButton("ghost:spread", x, y, bw, 1, function()
+      self:ghostToggleSpread()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "NETTOYER", colors.white, t.panel)
+      self:addButton("ghost:clean", x + bw + 2, y, bw, 1, function()
+        self:ghostClean()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "PERIPHERIQUES", colors.white, t.panel)
+    self:addButton("ghost:devices", x, y, bw, 1, function()
+      self:ghostLoadDevices()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "REDSTONE", colors.white, t.panel)
+      self:addButton("ghost:redstone", x + bw + 2, y, bw, 1, function()
+        self:ghostLoadRedstone()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "DISQUES", colors.white, t.panel)
+    self:addButton("ghost:drives", x, y, bw, 1, function()
+      self:ghostLoadDrives()
+      self:render()
+    end)
+
+    draw.text(target, x, y + 2,
+      "Etat persistant gere par AstralNet, meme sans LinkOS.",
+      t.muted, t.bg, w)
+    return
+  end
+
+  if self.linksecView == "ghost_devices" then
+    draw.text(target, x, y, "< GHOSTLINK", t.accent, t.bg, w)
+    self:addButton("ghost:devices:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Peripheriques connectes", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.ghostDevices == 0 then
+      draw.text(target, x, y, "Aucun peripherique detecte.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.ghostDevices, math.max(1, l.h - y - 2)) do
+        local device = self.ghostDevices[i]
+        draw.text(target, x, y,
+          tostring(device.name) .. " [" .. table.concat(device.types or {}, ",") .. "]"
+            .. "  " .. tostring(#(device.methods or {})) .. " methodes",
+          t.text, t.panel, w)
+        y = y + 1
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "ghost_redstone" then
+    draw.text(target, x, y, "< GHOSTLINK", t.accent, t.bg, w)
+    self:addButton("ghost:redstone:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Redstone - clique une face pour modifier", t.text, t.bg, w)
+    y = y + 2
+
+    for i = 1, math.min(#self.ghostRedstone, math.max(1, l.h - y - 2)) do
+      local side = self.ghostRedstone[i]
+      local line = tostring(side.side)
+        .. "  IN:" .. tostring(side.analog_input or (side.input and 15 or 0))
+        .. "  OUT:" .. tostring(side.analog_output or (side.output and 15 or 0))
+
+      draw.text(target, x, y, line, t.text, t.panel, w)
+      local sideName = side.side
+      self:addButton("ghost:redstone:" .. tostring(sideName), x, y, w, 1, function()
+        self:ghostSetRedstone(sideName)
+        self:render()
+      end)
+      y = y + 1
+    end
+    return
+  end
+
+  if self.linksecView == "ghost_drives" then
+    draw.text(target, x, y, "< GHOSTLINK", t.accent, t.bg, w)
+    self:addButton("ghost:drives:back", x, y, math.min(14, w), 1, function()
+      self.linksecView = "ghost"
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Disques connectes - clique pour marquer un vecteur", t.text, t.bg, w)
+    y = y + 2
+
+    if #self.ghostDrives == 0 then
+      draw.text(target, x, y, "Aucun disque detecte.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
+        local diskId = self.ghostDrives[i]
+        local line = "Disk #" .. tostring(diskId) .. "  [MARQUER GHOSTLINK]"
+        draw.text(target, x, y, line, t.text, t.panel, w)
+        self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
+          self:ghostCarrier(diskId)
+          self:render()
+        end)
+        y = y + 1
+      end
+    end
+    return
+  end
+
   draw.text(target, x, y, "Poste operateur PC #" .. os.getComputerID(), t.muted, t.bg, w)
   y = y + 2
 
