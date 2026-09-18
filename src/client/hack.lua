@@ -7,6 +7,22 @@ local hack = {}
 local pending = {}
 local sessions = {}
 
+local function isOperator(computerId)
+  return config.HACK_OPERATOR_IDS
+    and config.HACK_OPERATOR_IDS[tonumber(computerId)] == true
+end
+
+function hack.isOperator(computerId)
+  return isOperator(computerId or os.getComputerID())
+end
+
+local function requireOperator()
+  if not isOperator(os.getComputerID()) then
+    return false, "ACCES REFUSE: ce PC n'est pas autorise a utiliser le module d'intrusion."
+  end
+  return true
+end
+
 local function hash(value)
   local h = 7
   for i = 1, #value do
@@ -151,6 +167,12 @@ function hack.handleModem(modemName, channel, replyChannel, message, distance)
     return
   end
 
+  -- Autorisation verifiee cote cible : un client modifie ne suffit pas
+  -- pour s'accorder les commandes d'intrusion.
+  if not isOperator(sourceId) then
+    return
+  end
+
   local payload = message.payload or {}
   local targetId = tonumber(payload.target_id)
 
@@ -259,6 +281,10 @@ function hack.handleRednet(senderId, message, protocol, storage)
     return false
   end
 
+  if not isOperator(senderId) then
+    return true
+  end
+
   if message.type ~= "HACK_COMMAND" then
     return false
   end
@@ -322,6 +348,9 @@ function hack.handleRednet(senderId, message, protocol, storage)
 end
 
 function hack.scan(modemName, duration)
+  local allowed, err = requireOperator()
+  if not allowed then return nil, err end
+
   duration = tonumber(duration) or 2
   local scanId = util.requestId()
   local found = {}
@@ -371,6 +400,9 @@ function hack.scan(modemName, duration)
 end
 
 function hack.attack(modemName, targetId)
+  local allowed, err = requireOperator()
+  if not allowed then return nil, err end
+
   targetId = tonumber(targetId)
   if not targetId then return nil, "ID PC invalide." end
 
@@ -457,6 +489,9 @@ function hack.attack(modemName, targetId)
 end
 
 function hack.remote(targetId, token, action, argument)
+  local allowed, err = requireOperator()
+  if not allowed then return nil, err end
+
   targetId = tonumber(targetId)
   if not targetId then return nil, "ID PC invalide." end
 
