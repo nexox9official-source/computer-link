@@ -56,28 +56,39 @@ function M.install(OS,shellui,prefs)
     end
     return out
   end
-  function OS:focusWindow(win)
-    local list=self:workspace()
-    for i,v in ipairs(list) do if v==win then table.remove(list,i);break end end
-    list[#list+1]=win; win.minimized=false; self.app=win.id
+  function OS:persistWindowGeometry(win)
+    if not win then return end
+    local geometry=prefs.get('window_geometry',{})
+    geometry[win.id]={x=win.x,y=win.y,w=win.w,h=win.h}
+    prefs.set('window_geometry',geometry)
   end
-  function OS:openApp(id)
+
+  function OS:saveWorkspaceSession()
+    if self.restoringSession then return end
+    local windows={}
+    for _,win in ipairs(self:workspace()) do
+      windows[#windows+1]={
+        id=win.id,
+        minimized=win.minimized==true,
+        maximized=win.maximized==true,
+        scroll=tonumber(win.scroll) or 0
+      }
+    end
+    prefs.set('workspace_session',{
+      windows=windows,
+      active=self.app or 'home'
+    })
+  end
+
+  function OS:createWindow(id)
     local list=self:workspace()
-    self.startMenuOpen,self.quickPanelOpen=false,false
-    self.contextMenu=nil
-    if id=='home' then
-      for _,v in ipairs(list) do v.minimized=true end
-      self.app='home'; self:render(); return
-    end
-    if not shellui.allowed(id,self:isOperatorUI()) then return end
+    if not shellui.allowed(id,self:isOperatorUI()) then return nil end
 
-    if id=='store' and not self.storeCatalogTried then
-      self.storeCatalogTried=true
-      pcall(packages.refreshCatalog)
+    for _,win in ipairs(list) do
+      if win.id==id then return win end
     end
+    if not self.active or not self.active.target then return nil end
 
-    self:recordRecentApp(id)
-    for _,v in ipairs(list) do if v.id==id then self:focusWindow(v); self:render(); return end end
     local w,h=self.active.target.getSize()
     local offset=#list%4
     local defaultW=math.min(w-2,math.max(24,math.floor(w*0.82)))
@@ -92,33 +103,225 @@ function M.install(OS,shellui,prefs)
       defaultW=math.min(w,math.max(24,pref[1]))
       defaultH=math.min(h-1,math.max(8,pref[2]))
     end
-    local win={id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,data={},scroll=0}
+
+    local win={
+      id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,
+      data={},scroll=0,minimized=false,maximized=false
+    }
+
     local saved=prefs.get('window_geometry',{})[id]
     if type(saved)=='table' and type(saved.x)=='number' and type(saved.y)=='number'
       and type(saved.w)=='number' and type(saved.h)=='number' then
       win.x,win.y,win.w,win.h=saved.x,saved.y,saved.w,saved.h
     end
+
     if id:sub(1,4)=='pkg:' then
-      local ok,app=pcall(dofile,packages.path(id:sub(5)))
+      local packageId=id:sub(5)
+      if not packages.installed(packageId) then return nil end
+      local ok,app=pcall(dofile,packages.path(packageId))
       if not ok or type(app)~='table' or type(app.draw)~='function' then
-        self:setNotice('Application invalide: '..tostring(app),colors.red); self:render(); return
+        self:setNotice('Application invalide: '..tostring(app),colors.red)
+        return nil
       end
       win.program=app
     end
-    list[#list+1]=win; self.app=id
+
+    list[#list+1]=win
+    return win
+  end
+
+  function OS:focusWindow(win,quiet)
+    local list=self:workspace()
+    for i,v in ipairs(list) do
+      if v==win then table.remove(list,i);break end
+    end
+    list[#list+1]=win
+    win.minimized=false
+    self.app=win.id
+    self.showDesktopSnapshot=nil
+    if not quiet then self:saveWorkspaceSession() end
+  end
+
+  function OS:restoreWorkspaceSession()
+    if self.sessionRestored then return end
+    self.sessionRestored=true
+    if not prefs.get('restore_session',true) then return end
+
+    local session=prefs.get('workspace_session',{})
+    if type(session)~='table' or type(session.windows)~='table' then return end
+
+    self.restoringSession=true
+    for _,saved in ipairs(session.windows) do
+      if type(saved)=='table' and type(saved.id)=='string'
+        and shellui.allowed(saved.id,self:isOperatorUI()) then
+        local win=self:createWindow(saved.id)
+        if win then
+          win.minimized=saved.minimized==true
+          win.maximized=saved.maximized==true
+          win.scroll=math.max(0,tonumber(saved.scroll) or 0)
+        end
+      end
+    end
+
+    self.app='home'
+    local requested=tostring(session.active or 'home')
+    for _,win in ipairs(self:workspace()) do
+      if win.id==requested and not win.minimized then
+        self.app=win.id
+      end
+    end
+    if self.app=='home' then
+      for _,win in ipairs(self:workspace()) do
+        if not win.minimized then self.app=win.id end
+      end
+    end
+    self.restoringSession=false
+  end
+
+  function OS:cycleWindow(delta)
+    local list=self:workspace()
+    if #list==0 then return false end
+    delta=tonumber(delta) or 1
+
+    local current=0
+    for i,win in ipairs(list) do
+      if win.id==self.app then current=i;break end
+    end
+    local index=((current-1+delta)%#list)+1
+    self:focusWindow(list[index])
+    self.taskSwitcherOpen=self.altHeld==true
+    return true
+  end
+
+  function OS:renderTaskSwitcher(target,w,h)
+    if not self.taskSwitcherOpen then return end
+    local list=self:workspace()
+    if #list==0 then return end
+
+    local t=self:theme()
+    local mw=math.min(math.max(26,math.floor(w*0.56)),math.max(20,w-4))
+    local visible=math.min(7,#list)
+    local mh=visible+3
+    local x=math.max(1,math.floor((w-mw)/2)+1)
+    local y=math.max(1,math.floor((h-mh)/2))
+
+    draw.fill(target,x,y,mw,mh,colors.gray)
+    draw.fill(target,x,y,mw,1,t.accent)
+    draw.text(target,x+2,y,'ALT + TAB',colors.white,t.accent,mw-4)
+    draw.text(target,x+2,y+1,'Applications ouvertes',t.muted,colors.gray,mw-4)
+
+    local first=math.max(1,#list-visible+1)
+    local row=y+2
+    for i=first,#list do
+      local win=list[i]
+      local app=shellui.find(win.id,self:isOperatorUI())
+      local active=win.id==self.app and not win.minimized
+      local bg=active and colors.black or colors.gray
+      local icon=app and (app.icon or '+') or '+'
+      local title=app and app.title or win.id
+      draw.fill(target,x+1,row,mw-2,1,bg)
+      draw.text(target,x+2,row,icon,active and t.accent or t.text,bg,2)
+      draw.text(target,x+5,row,title,active and colors.white or t.text,bg,math.max(1,mw-14))
+      if win.minimized then
+        draw.text(target,x+mw-6,row,'MIN',t.muted,bg,3)
+      elseif active then
+        draw.text(target,x+mw-6,row,'ACT',t.accent,bg,3)
+      end
+      row=row+1
+    end
+  end
+
+  function OS:toggleShowDesktop()
+    local list=self:workspace()
+    if #list==0 then self.app='home';return end
+
+    if self.showDesktopSnapshot then
+      local snapshot=self.showDesktopSnapshot
+      self.showDesktopSnapshot=nil
+      for _,win in ipairs(list) do
+        local state=snapshot.states[win.id]
+        win.minimized=state==nil and win.minimized or state
+      end
+      self.app='home'
+      if snapshot.active and snapshot.active~='home' then
+        for _,win in ipairs(list) do
+          if win.id==snapshot.active and not win.minimized then
+            self.app=win.id
+            break
+          end
+        end
+      end
+    else
+      local states={}
+      for _,win in ipairs(list) do
+        states[win.id]=win.minimized==true
+        win.minimized=true
+      end
+      self.showDesktopSnapshot={states=states,active=self.app}
+      self.app='home'
+    end
+    self:saveWorkspaceSession()
+  end
+
+  function OS:openApp(id)
+    local list=self:workspace()
+    self.startMenuOpen,self.quickPanelOpen=false,false
+    self.contextMenu=nil
+
+    if id=='home' then
+      self:toggleShowDesktop()
+      self:render()
+      return
+    end
+    if not shellui.allowed(id,self:isOperatorUI()) then return end
+
+    if id=='store' and not self.storeCatalogTried then
+      self.storeCatalogTried=true
+      pcall(packages.refreshCatalog)
+    end
+
+    self:recordRecentApp(id)
+    for _,win in ipairs(list) do
+      if win.id==id then
+        self:focusWindow(win)
+        self:render()
+        return
+      end
+    end
+
+    local win=self:createWindow(id)
+    if not win then
+      self:render()
+      return
+    end
+    self:focusWindow(win,true)
     if id=='messages' then self.service:markRead() end
+    self:saveWorkspaceSession()
     self:render()
   end
+
   function OS:closeWindow(win)
     if win.id=='notes' and self.noteDocument and self.noteDocument.dirty then
       local answer=self:prompt('Document modifie','OUI: sauver / NON: abandonner / Echap: annuler'):lower()
-      if answer=='oui' then self:saveNote();if self.noteDocument.dirty then return end
-      elseif answer~='non' then return end
+      if answer=='oui' then
+        self:saveNote()
+        if self.noteDocument.dirty then return end
+      elseif answer~='non' then
+        return
+      end
     end
+
     if win.id=='notes' then self.noteDocument=nil end
-    for i,v in ipairs(self:workspace()) do if v==win then table.remove(self.windows,i);break end end
+    for i,v in ipairs(self:workspace()) do
+      if v==win then table.remove(self.windows,i);break end
+    end
+
+    self.showDesktopSnapshot=nil
     self.app='home'
-    for _,v in ipairs(self.windows) do if not v.minimized then self.app=v.id end end
+    for _,v in ipairs(self.windows) do
+      if not v.minimized then self.app=v.id end
+    end
+    self:saveWorkspaceSession()
   end
   function OS:desktopApps()
     local items,seen={},{}
@@ -444,7 +647,12 @@ function M.install(OS,shellui,prefs)
       self:addButton('win:'..win.id..':'..label,x,win.y,3,1,callback)
     end
 
-    control(9,'-',titleBg,function() win.minimized=true;self.app='home' end)
+    control(9,'-',titleBg,function()
+      win.minimized=true
+      self.app='home'
+      self.showDesktopSnapshot=nil
+      self:saveWorkspaceSession()
+    end)
     control(6,'O',titleBg,function()
       if win.maximized then
         win.maximized=false
@@ -454,6 +662,7 @@ function M.install(OS,shellui,prefs)
         win.restore={win.x,win.y,win.w,win.h}
         win.maximized=true
       end
+      self:saveWorkspaceSession()
     end)
     control(3,'X',colors.red,function() self:closeWindow(win) end)
 
@@ -530,6 +739,7 @@ function M.install(OS,shellui,prefs)
   function OS:render()
     if self.dialogOpen or not self.active then return end
     local t=self:theme()
+    self:restoreWorkspaceSession()
     local list=self:workspace()
     if self:renderHijackState() or self:renderUserLock() then return end
 
@@ -600,6 +810,8 @@ function M.install(OS,shellui,prefs)
           if win.id==self.app and not win.minimized then
             win.minimized=true
             self.app='home'
+            self.showDesktopSnapshot=nil
+            self:saveWorkspaceSession()
           else
             self:focusWindow(win)
           end
@@ -623,6 +835,10 @@ function M.install(OS,shellui,prefs)
     self:addButton('wm:system',rightX,h,3,1,function() self:toggleQuickPanel() end)
     draw.text(target,w-5,h,textutils.formatTime(os.time(),true),colors.white,colors.black,5)
     self:addButton('wm:clock',w-5,h,5,1,function() self:toggleQuickPanel() end)
+    draw.text(target,w,h,'|',t.muted,colors.black,1)
+    self:addButton('wm:desktop',w,h,1,1,function()
+      self:toggleShowDesktop()
+    end)
 
     if self.notice then
       local nw=math.min(w-2,math.max(12,#tostring(self.notice)+2))
@@ -635,6 +851,9 @@ function M.install(OS,shellui,prefs)
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
     if self.contextMenu and not self.startMenuOpen and not self.quickPanelOpen then
       self:renderContextMenu(target,w,h)
+    end
+    if self.taskSwitcherOpen and not self.startMenuOpen and not self.quickPanelOpen then
+      self:renderTaskSwitcher(target,w,h)
     end
 
     for row=1,h do
@@ -671,6 +890,7 @@ function M.install(OS,shellui,prefs)
               end
               self.lastTitleWindow=nil
               self.lastTitleClick=0
+              self:saveWorkspaceSession()
               self:render()
               return true
             end
@@ -709,7 +929,14 @@ function M.install(OS,shellui,prefs)
     if (event=='mouse_drag' or event=='mouse_up' or event=='mouse_scroll')
       and self.active.kind~='computer' then return false end
     if event=='key_up' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=false;return true end
+    if event=='key_up' and (a==keys.leftAlt or a==keys.rightAlt) then
+      self.altHeld=false
+      self.taskSwitcherOpen=false
+      self:render()
+      return true
+    end
     if event=='key' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=true;return true end
+    if event=='key' and (a==keys.leftAlt or a==keys.rightAlt) then self.altHeld=true;return true end
     local note=self.noteDocument
     if self.app=='notes' and note and note.editing and not self.startMenuOpen and not self.quickPanelOpen then
       local line=note.lines[note.row] or ''
@@ -789,9 +1016,8 @@ function M.install(OS,shellui,prefs)
           end
         end
 
-        local geometry=prefs.get('window_geometry',{})
-        geometry[win.id]={x=win.x,y=win.y,w=win.w,h=win.h}
-        prefs.set('window_geometry',geometry)
+        self:persistWindowGeometry(win)
+        self:saveWorkspaceSession()
       end
       self.iconDrag,self.iconMoved,self.windowDrag=nil,nil,nil
       self:render();return true
@@ -897,68 +1123,52 @@ function M.install(OS,shellui,prefs)
     end
   end
 
-  function OS:renderFiles(target,l)
-    local path=self.filePath or '/user'
-    local entries,err=self:listFiles(path)
-    draw.text(target,2,1,'FICHIERS / '..path,colors.cyan,colors.black,l.w-3)
-    local function newName(title)
-      local name=self:prompt(title,'Nom simple, sans /, ni \\')
-      if name=='' then return nil end
-      if name=='.' or name=='..' or name:find('[/\\]') or name:find('[%c]') or #name>60 then
-        self:setNotice('Nom invalide.',colors.red);return nil
-      end
-      local full=fs.combine(path,name)
-      if fs.exists(full) then self:setNotice('Ce nom existe deja.',colors.red);return nil end
-      return full
-    end
-    self:button(target,'explorer:parent',2,3,7,'PARENT',function()
-      if path~='/user' then self.filePath=fs.getDir(path);self.explorerPage=1 end
-    end)
-    self:button(target,'explorer:new',10,3,7,'TEXTE',function()
-      if self.noteDocument and self.noteDocument.dirty then
-        self:setNotice('Sauvegarde le document ouvert avant de creer un autre texte.',colors.orange);return
-      end
-      local full=newName('Nouveau fichier texte')
-      if full and self:loadNote(full) then self.noteDocument.editing=true;self:openApp('notes') end
-    end)
-    self:button(target,'explorer:folder',18,3,math.min(8,l.w-18),'DOSSIER',function()
-      local full=newName('Nouveau dossier');if full then
-        local ok,failure=pcall(fs.makeDir,full);if not ok then self:setNotice(tostring(failure),colors.red) end
-      end
-    end)
-    if err then draw.text(target,2,5,err,colors.red,colors.black,l.w-3);return end
-    local page=clamp(self.explorerPage or 1,1,math.max(1,math.ceil(#entries/16)))
-    self.explorerPage=page
-    for i=(page-1)*16+1,math.min(#entries,page*16) do
-      local name=entries[i];local full=fs.combine(path,name);local dir=fs.isDir(full)
-      local y=5+(i-1)%16
-      self:button(target,'explorer:file:'..i,2,y,l.w-3,(dir and '[+] ' or '    ')..name,function()
-        if dir then self.filePath=full;self.explorerPage=1
-        elseif self.noteDocument and self.noteDocument.dirty then self:setNotice('Sauvegarde le document ouvert avant de changer.',colors.orange)
-        elseif self:loadNote(full) then self:openApp('notes') end
-      end)
-    end
-    self:button(target,'explorer:prev',2,23,7,'<',function() self.explorerPage=math.max(1,page-1) end)
-    draw.text(target,11,23,'Page '..page,colors.lightGray,colors.black,10)
-    self:button(target,'explorer:next',l.w-7,23,7,'>',function() self.explorerPage=math.min(math.max(1,math.ceil(#entries/16)),page+1) end)
-  end
   function OS:handleKey(key)
     if self.startMenuOpen then return originalKey(self,key) end
     local list=self:workspace()
     local focused
     for _,win in ipairs(list) do if win.id==self.app and not win.minimized then focused=win end end
+
+    if self.altHeld and key==keys.tab then
+      self:cycleWindow(1)
+      return
+    end
+
+    if self.ctrlHeld and key==keys.d then
+      self:toggleShowDesktop()
+      return
+    end
+
     if self.ctrlHeld and focused then
-      if key==keys.w then self:closeWindow(focused)
-      elseif key==keys.m then focused.minimized=true;self.app='home'
+      if key==keys.w then
+        self:closeWindow(focused)
+      elseif key==keys.m then
+        focused.minimized=true
+        self.app='home'
+        self.showDesktopSnapshot=nil
+        self:saveWorkspaceSession()
       elseif key==keys.enter then
         if focused.maximized then
           focused.maximized=false
           if focused.restore then focused.x,focused.y,focused.w,focused.h=table.unpack(focused.restore) end
-        else focused.restore={focused.x,focused.y,focused.w,focused.h};focused.maximized=true end
-      elseif key==keys.left then focused.maximized=false;focused.x=focused.x-1
-      elseif key==keys.right then focused.maximized=false;focused.x=focused.x+1
-      elseif key==keys.up then focused.maximized=false;focused.y=focused.y-1
-      elseif key==keys.down then focused.maximized=false;focused.y=focused.y+1 end
+        else
+          focused.restore={focused.x,focused.y,focused.w,focused.h}
+          focused.maximized=true
+        end
+        self:saveWorkspaceSession()
+      elseif key==keys.left then
+        focused.maximized=false;focused.x=focused.x-1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.right then
+        focused.maximized=false;focused.x=focused.x+1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.up then
+        focused.maximized=false;focused.y=focused.y-1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.down then
+        focused.maximized=false;focused.y=focused.y+1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      end
       return
     end
     if focused and key==keys.tab then
@@ -971,7 +1181,7 @@ function M.install(OS,shellui,prefs)
       return
     end
     if key==keys.f12 then
-      if #list>0 then local win=table.remove(list,1);list[#list+1]=win;self:focusWindow(win) end
+      self:cycleWindow(1)
     elseif key==keys.pageUp or key==keys.pageDown then
       for _,win in ipairs(list) do if win.id==self.app then win.scroll=math.max(0,(win.scroll or 0)+(key==keys.pageDown and 4 or -4)) end end
     elseif self.app=='home' and (key==keys.tab or key==keys.enter or key==keys.m) then
