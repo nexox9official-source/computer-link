@@ -138,7 +138,9 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   local beforeAlt=o.app
   o:workspaceEvent('key',keys.leftAlt)
   o:handleKey(keys.tab)
+  assert(o.taskSwitcherOpen,'Alt+Tab switcher did not open')
   o:workspaceEvent('key_up',keys.leftAlt)
+  assert(not o.taskSwitcherOpen,'Alt+Tab switcher did not close on Alt release')
   assert(o.app~=beforeAlt or #o.windows==1,'Alt+Tab did not cycle the workspace')
   queue={{'char','O'},{'char','K'},{'key',keys.enter}}
   assert(o:prompt('Test','Integrated dialog')=='OK' and not o.dialogOpen)
@@ -161,6 +163,12 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
     o:openApp('files');o:render();native.dump('/tmp/linkos-files.frame')
     o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+
+    o:openApp('messages')
+    o:workspaceEvent('key',keys.leftAlt)
+    o:handleKey(keys.tab)
+    o:render();native.dump('/tmp/linkos-task-switcher.frame')
+    o:workspaceEvent('key_up',keys.leftAlt)
 
     o:openApp('home');o:render()
     local icon=o.iconRects[1]
