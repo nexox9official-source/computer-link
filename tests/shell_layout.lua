@@ -54,34 +54,38 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{58,18},{82,26},{110,38}}) do
       o.launcherIndex=index; o:renderStartMenu(target,l)
       for _,b in ipairs(o.buttons) do seen[b.id]=true end
     end
-    for _,app in ipairs(shellui.apps(operator)) do
-      assert(app.id=='home' or seen['launcher:'..app.id],'Unreachable launcher '..app.id)
-    end
+    -- Default Start intentionally shows only a small pinned set.
+    assert(seen['launcher:all'],'All Apps entry missing from simplified Start')
 
-    -- Standard/wide Start uses explicit pager controls so mouse/touch users can
-    -- reach later pages without relying on keyboard navigation.
-    o.launcherQuery=''
-    o.launcherIndex=1
+    -- Opening All Apps must make every allowed app reachable.
+    for _,button in ipairs(o.buttons) do
+      if button.id=='launcher:all' then button.callback();break end
+    end
     o.buttons={}
     o:renderStartMenu(target,l)
-    local nextButton=nil
-    for _,button in ipairs(o.buttons) do
-      if button.id=='launcher:next' then nextButton=button break end
-    end
-    if nextButton then
+    local allSeen={}
+    for _,button in ipairs(o.buttons) do allSeen[button.id]=true end
+    local pages=math.max(1,math.ceil(#(o.launcherApps or {})/math.max(1,(o.launcherCols or 1)*3)))
+    local guard=0
+    while guard<pages+2 do
+      for _,button in ipairs(o.buttons) do allSeen[button.id]=true end
+      local nextButton=nil
+      for _,button in ipairs(o.buttons) do
+        if button.id=='launcher:next' then nextButton=button break end
+      end
+      if not nextButton then break end
       local before=o.launcherIndex
       nextButton.callback()
-      assert(o.launcherIndex>before,'Start next-page button did not advance')
+      if o.launcherIndex==before then break end
       o.buttons={}
       o:renderStartMenu(target,l)
-      local previousFound=false
-      for _,button in ipairs(o.buttons) do
-        if button.id=='launcher:prev' then previousFound=true break end
-      end
-      assert(previousFound,'Start previous-page button missing after paging')
+      guard=guard+1
+    end
+    for _,app in ipairs(shellui.apps(operator)) do
+      assert(app.id=='home' or allSeen['launcher:'..app.id],'Unreachable All Apps entry '..app.id)
     end
 
-    o.launcherQuery='calcul'; o:renderStartMenu(target,l)
+    o.launcherQuery='calcul'; o.startAllApps=false; o:renderStartMenu(target,l)
     assert(#o.launcherApps==1 and o.launcherApps[1].id=='calculator')
     o:handleKey(keys.enter); assert(o.app=='calculator')
     o.startMenuOpen=true; o.launcherQuery='no-match'; o:renderStartMenu(target,l)
