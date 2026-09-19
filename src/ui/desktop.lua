@@ -229,10 +229,11 @@ function M.install(OS,shellui,prefs)
       local bg=active and t.selection or t.surface2
       draw.fill(target,bx,y+2,cardW,5,bg)
       fluent.drawIcon(target,win.id,bx+1,y+3,false,bg)
-      draw.text(target,bx+5,y+2,app and app.title or win.id,
+      local switchLabel=app and (app.short or app.title) or win.id
+      draw.text(target,bx+5,y+2,switchLabel,
         active and t.text or t.muted,bg,math.max(1,cardW-6))
       draw.text(target,bx+5,y+3,
-        win.minimized and "Minimise" or (active and "Active" or "Ouverte"),
+        win.minimized and "Minim." or (active and "Active" or "Ouvert"),
         win.minimized and t.muted or (active and t.accent or t.muted),
         bg,math.max(1,cardW-6))
       if active then
