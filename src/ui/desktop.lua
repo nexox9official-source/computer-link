@@ -666,24 +666,28 @@ function M.install(OS,shellui,prefs)
       self:addButton("win:"..win.id..":"..label,cx,win.y,3,1,callback)
     end
 
-    control(9,"-",false,function()
-      win.minimized=true
-      self.app="home"
-      self.showDesktopSnapshot=nil
-      self:saveWorkspaceSession()
-    end)
-    control(6,win.maximized and "o" or "O",false,function()
-      if win.maximized then
-        win.maximized=false
-        local r=win.restore
-        if r then win.x,win.y,win.w,win.h=table.unpack(r) end
-      else
-        win.restore={win.x,win.y,win.w,win.h}
-        win.maximized=true
-      end
-      self:saveWorkspaceSession()
-    end)
-    control(3,"X",true,function() self:closeWindow(win) end)
+    if simpleDisplay then
+      control(3,"X",true,function() self:closeWindow(win) end)
+    else
+      control(9,"-",false,function()
+        win.minimized=true
+        self.app="home"
+        self.showDesktopSnapshot=nil
+        self:saveWorkspaceSession()
+      end)
+      control(6,win.maximized and "o" or "O",false,function()
+        if win.maximized then
+          win.maximized=false
+          local r=win.restore
+          if r then win.x,win.y,win.w,win.h=table.unpack(r) end
+        else
+          win.restore={win.x,win.y,win.w,win.h}
+          win.maximized=true
+        end
+        self:saveWorkspaceSession()
+      end)
+      control(3,"X",true,function() self:closeWindow(win) end)
+    end
 
     local virtualH=math.max(30,bodyH)
     if win.id=="store" then
