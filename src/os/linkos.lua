@@ -902,8 +902,8 @@ function LinkOS:renderMessages(target,l)
 
   if not self.selectedPeer then
     ccui.panel(target,chatX,y,chatW,6,t,{accent=t.accent,
-      title="Choisis une conversation",
-      subtitle="NOUVEAU permet d'ecrire a un autre Computer."})
+      title="Aucune conversation ouverte",
+      subtitle="Clique NOUVEAU pour ecrire."})
     return
   end
 
@@ -2081,7 +2081,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:malcraftOpenHosts()
         self:render()
       end)
@@ -2128,7 +2128,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:malcraftOpenLiveHosts()
         self:render()
       end)
@@ -2332,7 +2332,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:ghostRefresh()
         self:render()
       end)
@@ -3062,7 +3062,7 @@ function LinkOS:renderFiles(target, l)
   if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
   if #entries==0 then
     fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
-      subtitle="Cree un dossier ou un fichier depuis la barre d'outils.",muted=t.muted})
+      subtitle="Utilise DOSSIER ou TEXTE pour commencer.",muted=t.muted})
     return
   end
 
@@ -3261,7 +3261,7 @@ function LinkOS:renderSettings(target,l)
     local currentAccent=prefs.get("accent","blue")
 
     ccui.panel(target,x,y,w,4,t,{accent=t.accent,title="Couleur",
-      subtitle="Couleur principale des boutons et selections."})
+      subtitle="Couleur principale des boutons."})
     ccui.button(target,x+2,y+2,math.min(20,w-4),
       "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),t,{primary=true})
     self:addButton("set:accent",x+2,y+2,math.min(20,w-4),1,function()
