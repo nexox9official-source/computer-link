@@ -866,7 +866,7 @@ function LinkOS:renderMessages(target, l)
   y=y+4
 
   local peers=self.service:peers()
-  local sideW=w>=34 and math.min(14,math.floor(w*0.36)) or w
+  local sideW=w>=40 and math.min(18,math.floor(w*0.38)) or (w>=34 and math.min(15,math.floor(w*0.38)) or w)
   local chatX=x+sideW+1
   local chatW=math.max(1,w-sideW-1)
 
@@ -2977,7 +2977,7 @@ function LinkOS:renderFiles(target, l)
   draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
 
   if not self.filePreview and w>=32 then
-    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"+ DOSSIER",function()
+    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
       if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
       local full=childPath(name)
@@ -2985,7 +2985,7 @@ function LinkOS:renderFiles(target, l)
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
-    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"+ TEXTE",function()
+    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"TEXTE",function()
       local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
       if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
       local full=childPath(name)
