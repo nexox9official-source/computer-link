@@ -183,6 +183,11 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:render();native.dump('/tmp/linkos-settings.frame')
     captureApp('messages','/tmp/linkos-messages.frame')
 
+    local originalOperator=o.isOperatorUI
+    o.isOperatorUI=function() return true end
+    captureApp('hacker','/tmp/linkos-linksec.frame')
+    o.isOperatorUI=originalOperator
+
     o.windows={};o.app='home'
     o:openApp('messages');o:openApp('files');o:openApp('settings')
     o:workspaceEvent('key',keys.leftAlt)
