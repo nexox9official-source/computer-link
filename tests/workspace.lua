@@ -90,8 +90,17 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   o:openApp('store');assert(#o.windows==2 and o.windows[2]==store)
   o.windowDrag={win=store,dx=1,dy=0}
   o:workspaceEvent('mouse_drag',1,100,100)
-  assert(store.x+store.w-1<=size[1] and store.y+store.h-1<=size[2]-2)
+  assert(store.x+store.w-1<=size[1] and store.y+store.h-1<=size[2]-1)
   o:workspaceEvent('mouse_up',1,100,100)
+  if size[1]>=51 then
+    store.maximized=false
+    store.x,store.y,store.w,store.h=5,3,30,10
+    o.windowDrag={win=store,dx=0,dy=0,original={5,3,30,10}}
+    o:workspaceEvent('mouse_drag',1,1,5)
+    o:workspaceEvent('mouse_up',1,1,5)
+    assert(store.snapped=='left' and store.x==1 and store.y==1)
+    assert(store.h==size[2]-1)
+  end
   store.maximized=true;o:render();assert(store.w==size[1])
   o:openApp('home');assert(store.minimized and notes.minimized)
   o:handleKey(keys.f12);assert(o.app~='home')
@@ -105,8 +114,18 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:closeWindow(win)
   end
   if size[1]==51 then
+    o.notice=nil;o.noticeExpires=nil
     o:openApp('home');o:render();native.dump('/tmp/linkos-desktop.frame')
+
+    o.startMenuOpen=true;o:render();native.dump('/tmp/linkos-launcher.frame')
+    o.startMenuOpen=false;o.quickPanelOpen=true;o:render();native.dump('/tmp/linkos-system-panel.frame')
+    o.quickPanelOpen=false
+
     o:openApp('store');o:render();native.dump('/tmp/linkos-store.frame')
+    o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
+    o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+
+    o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
   end
   total=total+1
   disk['/user/notes.txt']=nil

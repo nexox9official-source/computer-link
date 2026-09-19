@@ -1,7 +1,24 @@
 local ROOT = "/computer-link"
 local ROLE_FILE = ROOT .. "/role.txt"
 local CONFIG_FILE = ROOT .. "/src/common/config.lua"
-local MANIFEST_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/manifest.lua"
+
+local function sourceRef()
+  local path = ROOT .. "/source_ref.txt"
+  if not fs.exists(path) then return "main" end
+  local f = fs.open(path, "r")
+  if not f then return "main" end
+  local value = tostring(f.readAll() or ""):gsub("%s+", "")
+  f.close()
+  if value == "" or value:find("..", 1, true)
+    or not value:match("^[%w%._%-%/]+$") then
+    return "main"
+  end
+  return value
+end
+
+local SOURCE_REF = sourceRef()
+local MANIFEST_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/"
+  .. SOURCE_REF .. "/manifest.lua"
 
 local function cleanupLegacyInternalNames()
   local legacy = {
@@ -35,6 +52,46 @@ end
 local function setColour(colour)
   if term.isColor and term.isColor() then
     term.setTextColor(colour)
+  end
+end
+
+local function setBackground(colour)
+  if term.isColor and term.isColor() and term.setBackgroundColor then
+    term.setBackgroundColor(colour)
+  end
+end
+
+local function center(row, text, foreground, background)
+  local w = select(1, term.getSize())
+  text = tostring(text or "")
+  if background then setBackground(background) end
+  if foreground then setColour(foreground) end
+  term.setCursorPos(math.max(1, math.floor((w - #text) / 2) + 1), row)
+  write(text:sub(1, w))
+end
+
+local function bootScreen(status, colour, detail)
+  local w, h = term.getSize()
+  setBackground(colors.black)
+  setColour(colors.white)
+  term.clear()
+
+  setBackground(colors.cyan)
+  term.setCursorPos(1, 1)
+  write(string.rep(" ", w))
+  term.setCursorPos(2, 1)
+  setColour(colors.white)
+  write("LINKOS")
+  setBackground(colors.black)
+
+  local mid = math.max(3, math.floor(h / 2))
+  center(mid - 2, "COMPUTER LINK", colors.white, colors.black)
+  center(mid, status or "Demarrage", colour or colors.cyan, colors.black)
+  if detail and h >= 8 then
+    center(mid + 2, detail, colors.lightGray, colors.black)
+  end
+  if h >= 5 then
+    center(h, "Canal " .. SOURCE_REF, colors.gray, colors.black)
   end
 end
 
@@ -87,60 +144,39 @@ local function autoUpdate()
   local config = loadLocalConfig()
   if not config then return end
 
-  term.clear()
-  term.setCursorPos(1, 1)
-  setColour(colors.cyan)
-  print("================================")
-  print("        COMPUTER LINK")
-  print("        AUTO UPDATE")
-  print("================================")
-  setColour(colors.white)
-  print("Verification des mises a jour...")
+  bootScreen("Verification des mises a jour", colors.cyan,
+    "LinkOS " .. tostring(config.VERSION or "?"))
 
   local remote, err = fetchRemoteManifest()
 
   if not remote then
-    setColour(colors.orange)
-    print("GitHub indisponible: demarrage hors-ligne.")
-    setColour(colors.white)
-    sleep(0.5)
+    bootScreen("Demarrage hors-ligne", colors.orange,
+      tostring(err or "GitHub indisponible"))
+    sleep(0.35)
     return
   end
 
   local localVersion = tostring(config.VERSION or "?")
   local remoteVersion = tostring(remote.version or "?")
 
-  print("Local  : " .. localVersion)
-  print("Remote : " .. remoteVersion)
-
   if localVersion == remoteVersion then
-    setColour(colors.lime)
-    print("Computer Link est a jour.")
-    setColour(colors.white)
-    sleep(0.35)
+    bootScreen("Systeme a jour", colors.lime, "Version " .. localVersion)
+    sleep(0.18)
     return
   end
 
-  setColour(colors.yellow)
-  print("Nouvelle version detectee.")
-  print("Mise a jour automatique...")
-  setColour(colors.white)
+  bootScreen("Mise a jour " .. localVersion .. " -> " .. remoteVersion,
+    colors.yellow, "Installation automatique")
 
   local ok = shell.run(ROOT .. "/update.lua")
-
   if ok then
-    setColour(colors.lime)
-    print("Mise a jour terminee.")
-    setColour(colors.white)
+    bootScreen("Mise a jour terminee", colors.lime, "Demarrage de LinkOS")
   else
-    setColour(colors.red)
-    print("La mise a jour a echoue. Demarrage avec les fichiers disponibles.")
-    setColour(colors.white)
+    bootScreen("Mise a jour impossible", colors.red,
+      "Demarrage avec les fichiers disponibles")
   end
-
-  sleep(0.6)
+  sleep(0.35)
 end
-
 -- Chaque lancement verifie GitHub AVANT de demarrer MER ou le client.
 autoUpdate()
 
@@ -151,23 +187,11 @@ cleanupLegacyInternalNames()
 local config = loadLocalConfig()
 
 if config and fs.exists(config.CRASH_FLAG) then
-  term.clear()
-  term.setCursorPos(1, 1)
-  setColour(colors.red)
-  print("================================")
-  print("       SYSTEM FAILURE")
-  print("================================")
-  setColour(colors.white)
-  print()
-  print("Computer Link a subi un crash distant.")
-  print("Recuperation du systeme...")
-
   for remaining = config.CRASH_RECOVERY_SECONDS, 1, -1 do
-    write("\rRedemarrage dans " .. remaining .. "s   ")
+    bootScreen("RECUPERATION SYSTEME", colors.red,
+      "Redemarrage dans " .. remaining .. "s")
     sleep(1)
   end
-
-  print()
   fs.delete(config.CRASH_FLAG)
 end
 

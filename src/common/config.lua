@@ -1,7 +1,35 @@
+local SOURCE_REF = "main"
+local SOURCE_FILE = "/computer-link/source_ref.txt"
+if fs and fs.exists and fs.exists(SOURCE_FILE) then
+  local handle = fs.open(SOURCE_FILE, "r")
+  if handle then
+    local value = tostring(handle.readAll() or ""):gsub("%s+", "")
+    handle.close()
+    if value ~= "" and not value:find("..", 1, true)
+      and value:match("^[%w%._%-%/]+$") then
+      SOURCE_REF = value
+    end
+  end
+end
+
+local SOURCE_REF = "main"
+local sourcePath = "/computer-link/source_ref.txt"
+if fs and fs.exists and fs.exists(sourcePath) then
+  local handle = fs.open(sourcePath, "r")
+  if handle then
+    local value = tostring(handle.readAll() or ""):gsub("%s+", "")
+    handle.close()
+    if value ~= "" and not value:find("..", 1, true)
+      and value:match("^[%w%._%-%/]+$") then
+      SOURCE_REF = value
+    end
+  end
+end
+
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
-  VERSION = "0.14.0",
+  VERSION = "0.15.0",
   PROTOCOL_VERSION = 2,
 
   MAGIC = "COMPUTER_LINK",
@@ -33,13 +61,10 @@ return {
   HACK_MAX_WRITE_BYTES = 4096,
   HACK_MAX_LIST_ENTRIES = 50,
 
-  -- Seuls ces Computer IDs peuvent lancer des commandes d'intrusion.
-  -- Les autres PC restent des cibles potentielles mais ne peuvent pas attaquer.
-  -- Informational only. Authorization comes exclusively from the
-  -- read-only server datapack policy.
   HACK_OPERATOR_IDS = {},
 
   CRASH_RECOVERY_SECONDS = 10,
 
-  GITHUB_RAW = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/"
+  SOURCE_REF = SOURCE_REF,
+  GITHUB_RAW = "https://raw.githubusercontent.com/nexox9official-source/computer-link/" .. SOURCE_REF .. "/"
 }
