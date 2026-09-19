@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="0.10.0"
+          VERSION="0.10.1"
           OUT="$GITHUB_WORKSPACE/dist"
           mkdir -p "$OUT/combined/mods" "$OUT/combined/datapacks"
 
@@ -52,13 +52,13 @@ jobs:
           cp "$OUT/Computer-Link-Server-Datapack-1.20.1-v${VERSION}.zip"             "$OUT/combined/datapacks/Computer-Link-Server-Datapack-1.20.1-v${VERSION}.zip"
 
           cat > "$OUT/combined/INSTALLATION.txt" <<'EOF'
-          ASTRALIUM MALCRAFT / COMPUTER LINK 0.10.0
+          ASTRALIUM MALCRAFT / COMPUTER LINK 0.10.1
 
           1. Arreter completement le serveur Minecraft.
-          2. Copier mods/malcraft-bridge-0.10.0.jar dans le dossier mods/ du serveur.
+          2. Copier mods/malcraft-bridge-0.10.1.jar dans le dossier mods/ du serveur.
              Ce mod est serveur uniquement : ne pas l'ajouter aux clients.
           3. Remplacer l'ancien datapack Computer Link par :
-             Computer-Link-Server-Datapack-1.20.1-v0.10.0.zip
+             Computer-Link-Server-Datapack-1.20.1-v0.10.1.zip
              dans <monde>/datapacks/.
           4. Demarrer completement le serveur.
           5. Redemarrer le MER puis le PC operateur #0.
@@ -74,17 +74,17 @@ jobs:
       - name: Upload Malcraft Bridge
         uses: actions/upload-artifact@v4
         with:
-          name: malcraft-bridge-1.20.1-v0.10.0
-          path: dist/malcraft-bridge-0.10.0.jar
+          name: malcraft-bridge-1.20.1-v0.10.1
+          path: dist/malcraft-bridge-0.10.1.jar
 
       - name: Upload Computer Link datapack
         uses: actions/upload-artifact@v4
         with:
-          name: computer-link-datapack-1.20.1-v0.10.0
-          path: dist/Computer-Link-Server-Datapack-1.20.1-v0.10.0.zip
+          name: computer-link-datapack-1.20.1-v0.10.1
+          path: dist/Computer-Link-Server-Datapack-1.20.1-v0.10.1.zip
 
       - name: Upload complete Malcraft server pack
         uses: actions/upload-artifact@v4
         with:
-          name: computer-link-malcraft-server-v0.10.0
-          path: dist/Computer-Link-Malcraft-Server-v0.10.0.zip
+          name: computer-link-malcraft-server-v0.10.1
+          path: dist/Computer-Link-Malcraft-Server-v0.10.1.zip
