@@ -105,9 +105,10 @@ function M.install(OS,shellui,prefs)
       defaultH=math.min(h-1,math.max(8,pref[2]))
     end
 
+    local autoMaximize = w < 70 or h < 22
     local win={
       id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,
-      data={},scroll=0,minimized=false,maximized=false
+      data={},scroll=0,minimized=false,maximized=autoMaximize
     }
 
     local saved=prefs.get('window_geometry',{})[id]
@@ -489,11 +490,6 @@ function M.install(OS,shellui,prefs)
     local desktopH=math.max(1,h-1)
     shellui.wallpaper(target,1,1,w,desktopH,prefs.get("wallpaper","fluent"),t.accent)
     self.iconRects={}
-
-    -- Subtle identity mark instead of a permanent information bar.
-    if w>=38 and desktopH>=10 then
-      draw.text(target,w-8,2,"LINKOS",t.muted,t.desktop,6)
-    end
 
     local apps=self:desktopApps()
     local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
