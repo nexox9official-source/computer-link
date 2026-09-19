@@ -93,6 +93,11 @@ public final class MalcraftApi implements ILuaAPI {
     }
 
     @LuaFunction
+    public final String listComputers() {
+        return MalcraftRegistry.listLiveJson(computer);
+    }
+
+    @LuaFunction
     public final String nearby(double radius) {
         return MalcraftRegistry.nearbyJson(computer, radius);
     }
