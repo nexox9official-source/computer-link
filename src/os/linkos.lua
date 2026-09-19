@@ -1895,7 +1895,7 @@ function LinkOS:renderHacker(target, l)
   local targetText=shownTarget and ("Cible PC #"..tostring(shownTarget)) or "Aucune cible"
 
   if w>=26 then
-    draw.text(target,math.max(x,x+w-#targetText),y+1,targetText,
+    draw.text(target,math.max(x+10,x+w-#targetText),y,targetText,
       shownTarget and t.good or t.warn,t.bg,#targetText)
   end
 
