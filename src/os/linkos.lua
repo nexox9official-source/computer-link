@@ -152,6 +152,18 @@ function LinkOS:setNotice(text, colour)
   self.notice = tostring(text or "")
   self.noticeColour = colour or colors.lightGray
   self.noticeExpires = os.clock() + 3.5
+
+  self.notificationHistory = self.notificationHistory or {}
+  if self.notice ~= "" then
+    table.insert(self.notificationHistory, 1, {
+      text = self.notice,
+      colour = self.noticeColour,
+      time = textutils.formatTime(os.time(), true)
+    })
+    while #self.notificationHistory > 6 do
+      table.remove(self.notificationHistory)
+    end
+  end
 end
 
 function LinkOS:openApp(id)
