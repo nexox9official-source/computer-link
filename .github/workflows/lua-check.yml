@@ -2,6 +2,8 @@ name: Lua Syntax Check
 
 on:
   push:
+    branches: [ "main", "ui/**" ]
+  pull_request:
     branches: [ "main" ]
     paths:
       - "**/*.lua"
