@@ -3448,52 +3448,47 @@ function LinkOS:renderCompanion(d)
   local target=d.target
   local t=self:theme()
   local w,h=target.getSize()
-  draw.clear(target,colors.black,colors.white)
+  fluent.applyPalette(target)
+  draw.clear(target,t.desktop,t.text)
 
   local clock=nowText()
-  draw.fill(target,1,1,w,1,t.accent)
-  draw.text(target,2,1,"LINKOS",colors.white,t.accent,math.max(1,w-9))
-  draw.text(target,math.max(1,w-#clock-1),1,clock,colors.white,t.accent,#clock)
+  local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC-"..tostring(os.getComputerID()))
+  draw.text(target,2,2,clock,t.text,t.desktop,5)
+  draw.text(target,2,3,"LinkOS",t.muted,t.desktop,8)
 
-  local label=os.getComputerLabel() or ("PC-"..os.getComputerID())
-  if h>=5 then
-    draw.text(target,2,3,label,t.text,colors.black,math.max(1,w-3))
-    draw.text(target,2,4,"Computer #"..tostring(os.getComputerID()),t.muted,colors.black,math.max(1,w-3))
+  if h>=7 then
+    fluent.card(target,2,5,math.max(12,w-3),4,{bg=t.surface,accent=t.accent,
+      title=label,subtitle="Computer #"..tostring(os.getComputerID()),muted=t.muted})
   end
 
-  local row=h>=12 and 6 or 5
-  if row<=h-2 then
-    local net=self.service.online and "ONLINE" or "OFFLINE"
-    draw.text(target,2,row,"ASTRALNET",t.muted,colors.black,10)
-    draw.text(target,math.max(12,w-#net-1),row,net,
-      self.service.online and t.good or t.danger,colors.black,#net)
-    row=row+2
+  local row=h>=13 and 10 or 6
+  local function line(title,value,colour)
+    if row>=h-2 then return end
+    draw.text(target,2,row,title,t.muted,t.desktop,10)
+    local text=tostring(value)
+    draw.text(target,math.max(12,w-#text-1),row,text,colour or t.text,t.desktop,#text)
+    row=row+1
   end
-  if row<=h-2 then
-    local unread=tostring(self.service.unread or 0)
-    draw.text(target,2,row,"MESSAGES",t.muted,colors.black,10)
-    draw.text(target,math.max(12,w-#unread-1),row,unread,
-      (self.service.unread or 0)>0 and t.warn or t.text,colors.black,#unread)
-    row=row+2
-  end
-  if row<=h-2 then
-    local app=shellui.find(self.app,self:isOperatorUI())
-    draw.text(target,2,row,"APP",t.muted,colors.black,5)
-    draw.text(target,8,row,app and app.title or tostring(self.app),t.text,colors.black,math.max(1,w-9))
-  end
+
+  line("AstralNet",self.service.online and "Connecte" or "Hors-ligne",
+    self.service.online and t.good or t.danger)
+  line("Messages",tostring(self.service.unread or 0),
+    (self.service.unread or 0)>0 and t.warn or t.text)
+  local app=shellui.find(self.app,self:isOperatorUI())
+  line("Application",app and app.title or tostring(self.app),t.text)
 
   self.companionButtons[d.name]=nil
-  if self.service.updateAvailable and d.touch and h>=13 and w>=14 then
+  if self.service.updateAvailable and d.touch and h>=14 and w>=16 then
     local bw=math.min(16,w-4)
     local by=h-3
-    draw.button(target,2,by,bw,"INSTALLER MAJ",colors.black,colors.yellow)
+    fluent.button(target,2,by,bw,"INSTALLER MAJ",{primary=true,accent=t.warn})
     self.companionButtons[d.name]={x=2,y=by,w=bw,h=1,action="update"}
   end
 
   if h>=2 then
-    draw.fill(target,1,h,w,1,colors.gray)
-    draw.center(target,h,d.touch and "TOUCHER POUR UTILISER CET ECRAN" or "AFFICHAGE SECONDAIRE",
-      d.touch and colors.white or t.muted,colors.gray)
+    draw.fill(target,1,h,w,1,t.taskbar)
+    draw.center(target,h,d.touch and "Toucher pour utiliser cet ecran" or "Affichage secondaire",
+      d.touch and t.text or t.muted,t.taskbar)
   end
 
   if target.setCursorBlink then pcall(target.setCursorBlink,false) end
