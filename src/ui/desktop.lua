@@ -105,9 +105,10 @@ function M.install(OS,shellui,prefs)
       defaultH=math.min(h-1,math.max(8,pref[2]))
     end
 
+    local autoMaximize = w < 70 or h < 22
     local win={
       id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,
-      data={},scroll=0,minimized=false,maximized=false
+      data={},scroll=0,minimized=false,maximized=autoMaximize
     }
 
     local saved=prefs.get('window_geometry',{})[id]
@@ -453,10 +454,10 @@ function M.install(OS,shellui,prefs)
       add(self:isTaskbarPinned(menu.targetId) and "Desepingler" or "Epingler",function()
         self:toggleTaskbarPin(menu.targetId)
       end)
-      add(self:isDesktopShortcut(menu.targetId) and "Retirer du bureau" or "Ajouter au bureau",function()
+      add(self:isDesktopShortcut(menu.targetId) and "Retirer bureau" or "Ajouter bureau",function()
         self:toggleDesktopShortcut(menu.targetId)
       end)
-      if app and app.id~="store" then add("Voir dans Applications",function() self:openApp("store") end) end
+      if app and app.id~="store" then add("Voir dans Apps",function() self:openApp("store") end) end
       add("Parametres",function() self:openApp("settings") end)
     else
       add("Actualiser",function() self:render() end)
@@ -489,11 +490,6 @@ function M.install(OS,shellui,prefs)
     local desktopH=math.max(1,h-1)
     shellui.wallpaper(target,1,1,w,desktopH,prefs.get("wallpaper","fluent"),t.accent)
     self.iconRects={}
-
-    -- Subtle identity mark instead of a permanent information bar.
-    if w>=38 and desktopH>=10 then
-      draw.text(target,w-8,2,"LINKOS",t.muted,t.desktop,6)
-    end
 
     local apps=self:desktopApps()
     local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
@@ -576,7 +572,7 @@ function M.install(OS,shellui,prefs)
       return
     end
 
-    local cols=l.w>=40 and 2 or 1
+    local cols=l.w>=60 and 2 or 1
     local gap=1
     local cardW=math.max(16,math.floor((l.w-3-(cols-1)*gap)/cols))
     local cardH=6
@@ -639,6 +635,8 @@ function M.install(OS,shellui,prefs)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
 
+    local simpleDisplay = w < 70 or h < 22
+    if simpleDisplay then win.maximized=true end
     if win.maximized then win.x,win.y,win.w,win.h=1,1,w,desktopH end
     win.w=clamp(win.w,math.min(24,w),w)
     win.h=clamp(win.h,math.min(8,desktopH),desktopH)
@@ -668,28 +666,32 @@ function M.install(OS,shellui,prefs)
       self:addButton("win:"..win.id..":"..label,cx,win.y,3,1,callback)
     end
 
-    control(9,"-",false,function()
-      win.minimized=true
-      self.app="home"
-      self.showDesktopSnapshot=nil
-      self:saveWorkspaceSession()
-    end)
-    control(6,win.maximized and "o" or "O",false,function()
-      if win.maximized then
-        win.maximized=false
-        local r=win.restore
-        if r then win.x,win.y,win.w,win.h=table.unpack(r) end
-      else
-        win.restore={win.x,win.y,win.w,win.h}
-        win.maximized=true
-      end
-      self:saveWorkspaceSession()
-    end)
-    control(3,"X",true,function() self:closeWindow(win) end)
+    if simpleDisplay then
+      control(3,"X",true,function() self:closeWindow(win) end)
+    else
+      control(9,"-",false,function()
+        win.minimized=true
+        self.app="home"
+        self.showDesktopSnapshot=nil
+        self:saveWorkspaceSession()
+      end)
+      control(6,win.maximized and "o" or "O",false,function()
+        if win.maximized then
+          win.maximized=false
+          local r=win.restore
+          if r then win.x,win.y,win.w,win.h=table.unpack(r) end
+        else
+          win.restore={win.x,win.y,win.w,win.h}
+          win.maximized=true
+        end
+        self:saveWorkspaceSession()
+      end)
+      control(3,"X",true,function() self:closeWindow(win) end)
+    end
 
     local virtualH=math.max(30,bodyH)
     if win.id=="store" then
-      local storeCols=bodyW>=40 and 2 or 1
+      local storeCols=bodyW>=60 and 2 or 1
       virtualH=math.max(virtualH,math.ceil(#packages.catalog/storeCols)*7+8)
     elseif win.id=="settings" then
       virtualH=math.max(virtualH,38)
@@ -788,13 +790,28 @@ function M.install(OS,shellui,prefs)
       end
     end
 
-    -- Windows 11-like single-row taskbar: centered app group, system tray right.
+    -- Simple Windows-like taskbar: obvious Start, apps, then system tray.
     draw.fill(target,1,h,w,1,t.taskbar)
 
-    local statusW=10
-    local rightX=math.max(8,w-statusW+1)
-    local usableRight=rightX-2
-    local labels=prefs.get("taskbar_labels",false) and w>=70
+    local startW=7
+    local startBg=self.startMenuOpen and t.selection or t.taskbar
+    draw.fill(target,1,h,startW,1,startBg)
+    draw.text(target,2,h,"START",self.startMenuOpen and t.accent or t.text,startBg,5)
+    self:addButton("wm:start",1,h,startW,1,function() self:toggleStartMenu() end)
+
+    local clock=textutils.formatTime(os.time(),true)
+    local netText=self.service.online and "NET" or "OFF"
+    local trayW=10
+    local trayX=math.max(startW+2,w-trayW+1)
+    draw.text(target,trayX,h,netText,self.service.online and t.good or t.danger,t.taskbar,3)
+    draw.text(target,w-5,h,clock,t.text,t.taskbar,5)
+    self:addButton("wm:system",trayX,h,3,1,function() self:toggleQuickPanel() end)
+    self:addButton("wm:clock",w-5,h,5,1,function() self:toggleQuickPanel() end)
+
+    local unread=tonumber(self.service.unread) or 0
+    if unread>0 and trayX-2>startW then
+      draw.text(target,trayX-2,h,tostring(math.min(9,unread)),t.warn,t.taskbar,1)
+    end
 
     local openById={}
     for _,win in ipairs(list) do openById[win.id]=win end
@@ -802,7 +819,7 @@ function M.install(OS,shellui,prefs)
     local taskItems={}
     local seen={}
     for _,app in ipairs(self:taskbarPins()) do
-      taskItems[#taskItems+1]={id=app.id,app=app,win=openById[app.id],pinned=true}
+      taskItems[#taskItems+1]={id=app.id,app=app,win=openById[app.id]}
       seen[app.id]=true
     end
     for _,win in ipairs(list) do
@@ -812,35 +829,22 @@ function M.install(OS,shellui,prefs)
       end
     end
 
-    local taskW=labels and 8 or 4
-    local maxTasks=math.max(1,math.floor((usableRight-6)/taskW))
-    local visibleTasks=math.min(#taskItems,maxTasks)
-    local groupW=4+visibleTasks*taskW
-    local startX=math.max(1,math.floor((usableRight-groupW)/2)+1)
+    local taskX=startW+1
+    local available=math.max(0,trayX-taskX-2)
+    local taskW=6
+    local maxTasks=math.max(0,math.floor(available/taskW))
+    local visible=math.min(#taskItems,maxTasks)
 
-    -- Start button uses the same icon language as the desktop.
-    local startBg=self.startMenuOpen and t.selection or t.taskbar
-    fluent.drawMiniIcon(target,"home",startX,h,self.startMenuOpen,startBg)
-    self:addButton("wm:start",startX,h,3,1,function() self:toggleStartMenu() end)
-    local taskX=startX+4
-
-    for i=1,visibleTasks do
+    for i=1,visible do
       local item=taskItems[i]
       local app=item.app
       local active=item.win and item.win.id==self.app and not item.win.minimized
-      local minimized=item.win and item.win.minimized
       local bg=active and t.selection or t.taskbar
+      local label=(app and (app.short or app.title) or item.id):upper()
+      label=label:sub(1,math.max(1,taskW-1))
 
-      if labels then
-        draw.fill(target,taskX,h,taskW,1,bg)
-        fluent.drawMiniIcon(target,item.id,taskX,h,active,bg)
-        draw.text(target,taskX+3,h,app and app.short or item.id,
-          active and t.text or t.muted,bg,math.max(1,taskW-3))
-      else
-        fluent.drawMiniIcon(target,item.id,taskX,h,active,bg)
-        if minimized then draw.text(target,taskX+3,h,".",t.muted,t.taskbar,1) end
-      end
-
+      draw.fill(target,taskX,h,taskW,1,bg)
+      draw.text(target,taskX+1,h,label,active and t.text or t.muted,bg,taskW-1)
       self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
         local win=openById[item.id]
         if win then
@@ -859,29 +863,13 @@ function M.install(OS,shellui,prefs)
       taskX=taskX+taskW
     end
 
-    if visibleTasks<#taskItems and taskX<usableRight then
-      local hidden=#taskItems-visibleTasks
+    if visible<#taskItems and taskX<trayX-1 then
+      local hidden=#taskItems-visible
       draw.text(target,taskX,h,"+"..tostring(hidden),t.muted,t.taskbar,
-        math.min(3,usableRight-taskX+1))
-      self:addButton("wm:overflow",taskX,h,math.min(3,usableRight-taskX+1),1,
-        function() self:toggleStartMenu() end)
+        math.min(3,trayX-taskX-1))
+      self:addButton("wm:overflow",taskX,h,math.min(3,trayX-taskX-1),1,
+        function() self.startAllApps=true;self:toggleStartMenu() end)
     end
-
-    -- System tray.
-    local unread=tonumber(self.service.unread) or 0
-    local netGlyph=self.service.online and "^" or "x"
-    draw.text(target,rightX,h,netGlyph,
-      self.service.online and t.good or t.danger,t.taskbar,1)
-    if unread>0 and rightX+2<w-5 then
-      draw.text(target,rightX+2,h,tostring(math.min(9,unread)),t.warn,t.taskbar,1)
-    end
-    self:addButton("wm:system",rightX,h,3,1,function() self:toggleQuickPanel() end)
-
-    draw.text(target,w-5,h,textutils.formatTime(os.time(),true),t.text,t.taskbar,5)
-    self:addButton("wm:clock",w-5,h,5,1,function() self:toggleQuickPanel() end)
-
-    draw.text(target,w,h,"|",t.muted,t.taskbar,1)
-    self:addButton("wm:desktop",w,h,1,1,function() self:toggleShowDesktop() end)
 
     if self.notice then
       local message=tostring(self.notice)

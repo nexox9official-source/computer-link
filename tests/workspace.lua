@@ -160,6 +160,7 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o.notice=nil;o.noticeExpires=nil
     o:openApp('home');o:render();native.dump('/tmp/linkos-desktop.frame')
 
+    o.launcherQuery='';o.launcherIndex=1;o.startAllApps=false
     o.startMenuOpen=true;o:render();native.dump('/tmp/linkos-launcher.frame')
     o.startMenuOpen=false;o.quickPanelOpen=true;o:render();native.dump('/tmp/linkos-system-panel.frame')
     o.quickPanelOpen=false

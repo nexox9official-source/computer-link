@@ -202,6 +202,12 @@ function LinkOS:toggleStartMenu()
   self.startMenuOpen = not self.startMenuOpen
   self.quickPanelOpen = false
   self.appSwitcherOpen = false
+
+  if self.startMenuOpen then
+    self.startAllApps = false
+    self.launcherQuery = ""
+    self.launcherIndex = 1
+  end
 end
 
 function LinkOS:toggleQuickPanel()
@@ -900,8 +906,8 @@ function LinkOS:renderMessages(target, l)
   draw.fill(target,chatX,y,chatW,math.max(5,h-5),t.bg)
   if not self.selectedPeer then
     fluent.card(target,chatX+1,y+2,math.max(8,chatW-2),5,{
-      bg=t.surface,accent=t.accent,title="Selectionne une conversation",
-      subtitle="Ou utilise + NOUVEAU pour contacter un Computer.",muted=t.muted
+      bg=t.surface,accent=t.accent,title="Choisis une conversation",
+      subtitle="+ NOUVEAU pour ecrire a un Computer.",muted=t.muted
     })
     return
   end
@@ -3250,24 +3256,24 @@ function LinkOS:renderSettings(target, l)
     draw.text(target,cx,y+1,"Couleurs, bureau et barre des taches",t.muted,t.bg,cw)
     local py=y+3
 
-    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.accent,title="Couleur d'accent",
-      subtitle="Utilisee dans les selections et actions principales.",muted=t.muted})
-    local accentNames={"blue","cyan","lime","orange","purple","red"}
-    local aw=math.max(4,math.floor((cw-5)/6))
-    for i,name in ipairs(accentNames) do
-      local bx=cx+2+(i-1)*(aw+1)
-      local selected=prefs.get("accent","blue")==name
-      local colour=ACCENTS[name] or colors.lightBlue
-      draw.fill(target,bx,py+3,aw,2,selected and colour or t.surface2)
-      draw.fill(target,bx+1,py+3,math.max(1,aw-2),1,colour)
-      draw.text(target,bx,py+4,string.upper(string.sub(name,1,1)),
-        selected and colors.white or t.muted,selected and colour or t.surface2,aw)
-      self:addButton("accent:"..name,bx,py+3,aw,2,function()
-        prefs.set("accent",name)
+    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Couleur",
+      subtitle="Couleur principale de LinkOS.",muted=t.muted})
+    local accentOrder={"blue","cyan","lime","orange","purple","red"}
+    local accentLabels={blue="BLEU",cyan="CYAN",lime="VERT",orange="ORANGE",purple="VIOLET",red="ROUGE"}
+    local currentAccent=prefs.get("accent","blue")
+    self:button(target,"set:accent",cx+2,py+2,math.min(18,cw-4),
+      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),function()
+        local nextAccent=accentOrder[1]
+        for i,name in ipairs(accentOrder) do
+          if name==prefs.get("accent","blue") then
+            nextAccent=accentOrder[(i%#accentOrder)+1]
+            break
+          end
+        end
+        prefs.set("accent",nextAccent)
         self:refreshDisplays()
       end)
-    end
-    py=py+7
+    py=py+5
 
     fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
       subtitle="Fond et densite de la barre des taches.",muted=t.muted})
