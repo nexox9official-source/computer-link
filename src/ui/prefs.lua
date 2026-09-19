@@ -5,9 +5,9 @@ local prefs = {}
 local PATH = config.DATA_DIR .. "/ui.db"
 
 local defaults = {
-  schema = 5,
+  schema = 6,
   display_id = nil,
-  accent = "cyan",
+  accent = "blue",
   wallpaper = "clean",
   taskbar_labels = false,
   taskbar_pins = {"messages", "files", "store"},
