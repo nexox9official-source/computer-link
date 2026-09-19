@@ -29,3 +29,18 @@ jobs:
         run: |
           lua5.3 tests/shell_layout.lua
           lua5.3 tests/workspace.lua
+
+      - name: Collect UI frame previews
+        if: always()
+        run: |
+          mkdir -p test-output
+          cp /tmp/linkos-*.frame test-output/ 2>/dev/null || true
+
+      - name: Upload UI frame previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkos-ui-frames
+          path: test-output
+          if-no-files-found: ignore
+          retention-days: 7
