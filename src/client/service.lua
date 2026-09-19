@@ -437,14 +437,9 @@ function service:ghostList()
   if malcraftBusAvailable() then
     local data = jsonDecode(malcraft_bus.listInfected())
     if data then
-      -- Keep the legacy MER disk registry when it is reachable, but the host
-      -- list always comes from the server-internal Malcraft Bridge.
-      if self.serverId then
-        local packet = self:request("GHOST_LIST", nil, 1)
-        if packet and packet.payload and type(packet.payload.disks) == "table" then
-          data.disks = packet.payload.disks
-        end
-      end
+      -- The Bridge is the authoritative low-latency host registry. Physical
+      -- disk state is read directly from the inserted CC:Tweaked disks.
+      data.disks = data.disks or {}
       return data
     end
   end
