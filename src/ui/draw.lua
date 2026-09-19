@@ -75,8 +75,8 @@ end
 function draw.button(target, x, y, w, label, fg, bg, selected)
   if w <= 0 then return end
   local text = tostring(label or "")
-  if #text > w - 2 then
-    text = string.sub(text, 1, math.max(1, w - 3)) .. "~"
+  if #text > w then
+    text = w == 1 and text:sub(1,1) or text:sub(1,w-1) .. "~"
   end
   local pad = math.max(0, w - #text)
   local left = math.floor(pad / 2)

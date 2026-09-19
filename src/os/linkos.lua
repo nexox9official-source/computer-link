@@ -3653,6 +3653,8 @@ function LinkOS:uiLoop()
         self:render()
       end
 
+      if self.workspaceEvent then self:render() end
+
     elseif hijack.locked then
       if event == "linkos_hacked_state" or event == "linkos_refresh"
         or event == "monitor_resize" or event == "term_resize"
@@ -3682,6 +3684,10 @@ function LinkOS:uiLoop()
         self:refreshDisplays()
         self:render()
       end
+
+    elseif self.workspaceEvent and self.active
+      and self:workspaceEvent(event,a,b,c) then
+      self.lastActivity = os.clock()
 
     elseif event == "mouse_click" and self.active and self.active.kind ~= "computer" then
       for _, screen in ipairs(self.displays) do
@@ -3813,5 +3819,6 @@ function LinkOS:run()
 end
 
 shellui.install(LinkOS, prefs)
+dofile('/computer-link/src/ui/desktop.lua').install(LinkOS, shellui, prefs)
 local instance = LinkOS.new()
 instance:run()

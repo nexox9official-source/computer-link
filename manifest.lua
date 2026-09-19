@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.13.0",
+  version = "0.14.0",
   protocol_version = 2,
 
   common_files = {
@@ -22,6 +22,8 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
+    "src/ui/desktop.lua",
+    "src/ui/packages.lua",
     "src/os/operator_console.lua",
     "src/os/remote_desktop.lua",
     "src/os/linkos.lua",
@@ -50,6 +52,8 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
+    "src/ui/desktop.lua",
+    "src/ui/packages.lua",
     "src/os/operator_console.lua",
     "src/os/remote_desktop.lua",
     "src/os/linkos.lua",
@@ -68,6 +72,8 @@ return {
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
+    "src/ui/desktop.lua",
+    "src/ui/packages.lua",
     "src/os/operator_console.lua",
     "src/os/remote_desktop.lua",
     "src/os/linkos.lua",

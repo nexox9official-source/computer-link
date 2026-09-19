@@ -1,5 +1,16 @@
 # Computer Link — LinkOS / AstralNet
 
+## Desktop 0.14 — bureau et fenetres
+
+Priorite au Computer 51x19 : icones reorganisables, fenetres deplacables et
+redimensionnables, reduction/agrandissement/fermeture, barre des taches, dialogues
+integres, explorateur et editeur multiligne. Link Store telecharge quatre utilitaires
+officiels (taches, chronometre, conversions, peripheriques).
+
+Voir [le guide 0.14](docs/DESKTOP-0.14.md) pour les commandes, les raccourcis
+clavier du Computer normal, les limites et les tests. Ce n'est pas une copie de
+LevelOS ni un remplacement integral de tous les services reseau existants.
+
 ## Interface 0.13.0
 
 - Bureau en cartes avec pagination : toutes les applications restent accessibles.
