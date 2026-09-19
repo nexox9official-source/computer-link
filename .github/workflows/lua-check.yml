@@ -48,6 +48,7 @@ jobs:
             linkos-files.frame \
             linkos-messages.frame \
             linkos-calculator.frame \
+            linkos-linksec.frame \
             linkos-task-switcher.frame; do
             path="test-output/$frame"
             [ -f "$path" ] || continue
