@@ -2,7 +2,7 @@
 local ui=dofile('/computer-link/src/ui/fluent.lua')
 local started=os.clock()
 return {draw=function(ctx)
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   local names=peripheral.getNames()
   local free=fs.getFreeSpace('/')
   local label=(os.getComputerLabel and os.getComputerLabel()) or '-'
