@@ -169,7 +169,7 @@ function shellui.install(OS, prefs)
   function OS:renderHome(target, l)
     local t = self:theme()
     local bottom = math.max(3, l.h - 1)
-    shellui.wallpaper(target, 1, 1, l.w, bottom, prefs.get("wallpaper","dots"), t.accent)
+    shellui.wallpaper(target, 1, 1, l.w, bottom, prefs.get("wallpaper","fluent"), t.accent)
 
     draw.text(target, 2, 2, "LINKOS", t.accent, colors.black, math.max(1,l.w-3))
     draw.text(target, 2, 3,
