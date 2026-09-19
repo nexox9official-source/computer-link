@@ -151,6 +151,7 @@ end
 function LinkOS:setNotice(text, colour)
   self.notice = tostring(text or "")
   self.noticeColour = colour or colors.lightGray
+  self.noticeExpires = os.clock() + 3.5
 end
 
 function LinkOS:openApp(id)
@@ -161,6 +162,7 @@ function LinkOS:openApp(id)
     self:setNotice("Application indisponible sur ce PC.", self:theme().warn)
   else
     self.notice = nil
+    self.noticeExpires = nil
   end
 
   if self.app ~= id then
@@ -3605,6 +3607,11 @@ function LinkOS:uiLoop()
 
     if event == "timer" and self.lockTimer and a == self.lockTimer then
       self.lockTimer = os.startTimer(1)
+
+      if self.notice and self.noticeExpires and os.clock() >= self.noticeExpires then
+        self.notice = nil
+        self.noticeExpires = nil
+      end
 
       local malcraftListVisible = self.app == "hacker"
         and (self.linksecView == "malcraft_hub"
