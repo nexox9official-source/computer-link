@@ -2591,95 +2591,97 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "ghost_inventories" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:inventories:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:inventories:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Inventaires accessibles depuis la cible", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Inventaires",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Inventaires exposes par la cible",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostInventories == 0 then
-      draw.text(target, x, y, "Aucun inventaire expose a CC:Tweaked.", t.muted, t.bg, w)
-    else
-      local remaining = math.max(1, l.h - y - 2)
-      for _, inventory in ipairs(self.ghostInventories) do
-        if remaining <= 0 then break end
-        draw.text(target, x, y,
-          tostring(inventory.name) .. " [" .. table.concat(inventory.types or {}, ",") .. "]",
-          t.accent, t.bg, w)
-        y = y + 1
-        remaining = remaining - 1
+    if #self.ghostInventories==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun inventaire",
+        subtitle="Aucun stockage expose a CC:Tweaked."})
+      return
+    end
 
-        local slots = inventory.items or {}
-        for slot, item in pairs(slots) do
-          if remaining <= 0 then break end
-          local line = "  " .. tostring(slot) .. ": "
-            .. tostring(type(item) == "table" and (item.name or item.displayName or "item") or item)
-          if type(item) == "table" and item.count then
-            line = line .. " x" .. tostring(item.count)
-          end
-          draw.text(target, x, y, line, t.text, t.bg, w)
-          y = y + 1
-          remaining = remaining - 1
-        end
+    local remaining=math.max(1,l.h-y-1)
+    for _,inventory in ipairs(self.ghostInventories) do
+      if remaining<3 then break end
+      local types=table.concat(inventory.types or {},",")
+      ccui.panel(target,x,y,w,3,t,{accent=t.accent,title=tostring(inventory.name),
+        subtitle=types~="" and types or "Inventaire"})
+      y=y+3
+      remaining=remaining-3
+
+      local shown=0
+      for slot,item in pairs(inventory.items or {}) do
+        if remaining<=0 or shown>=3 then break end
+        local name=type(item)=="table" and (item.name or item.displayName or "item") or tostring(item)
+        local count=type(item)=="table" and item.count or nil
+        draw.text(target,x+2,y,tostring(slot)..": "..tostring(name)
+          ..(count and (" x"..tostring(count)) or ""),t.muted,t.bg,math.max(1,w-4))
+        y=y+1
+        remaining=remaining-1
+        shown=shown+1
       end
+      if remaining<=0 then break end
     end
     return
   end
 
   if self.linksecView == "ghost_nearby" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:nearby:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:nearby:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Computers accessibles autour / via reseau cable", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"PC proches / cable",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Computers exposes depuis la cible",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostNearbyComputers == 0 then
-      draw.text(target, x, y, "Aucun Computer expose comme peripherique.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostNearbyComputers, math.max(1, math.floor((l.h - y - 2) / 2))) do
-        local pc = self.ghostNearbyComputers[i]
-        draw.text(target, x, y,
-          tostring(pc.name) .. "  PC #" .. tostring(pc.id or "?")
-            .. "  " .. tostring(pc.label or "")
-            .. (pc.on and " [ON]" or " [OFF]"),
-          pc.on and t.good or t.muted, t.panel, w)
-        y = y + 1
-
-        local half = math.max(8, math.floor((w - 2) / 3))
-        draw.button(target, x, y, half, "ON", colors.white, t.panel)
-        local name = pc.name
-        self:addButton("ghost:nearby:on:" .. tostring(name), x, y, half, 1, function()
-          self:ghostNearbyPower(name, "on")
-          self:render()
-        end)
-
-        if w >= half * 2 + 1 then
-          draw.button(target, x + half + 1, y, half, "REBOOT", colors.white, t.panel)
-          self:addButton("ghost:nearby:reboot:" .. tostring(name), x + half + 1, y, half, 1, function()
-            self:ghostNearbyPower(name, "reboot")
-            self:render()
-          end)
-        end
-
-        if w >= half * 3 + 2 then
-          draw.button(target, x + (half + 1) * 2, y, half, "OFF", colors.white, colors.red)
-          self:addButton("ghost:nearby:off:" .. tostring(name), x + (half + 1) * 2, y, half, 1, function()
-            self:ghostNearbyPower(name, "off")
-            self:render()
-          end)
-        end
-
-        y = y + 1
-      end
+    if #self.ghostNearbyComputers==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun Computer",
+        subtitle="Aucun PC proche ou cable expose."})
+      return
     end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/4))
+    self.ghostNearbyOffset=self.ghostNearbyOffset or 0
+    local page=ccui.page(#self.ghostNearbyComputers,pageSize,self.ghostNearbyOffset)
+    self.ghostNearbyOffset=page.offset
+
+    for i=page.first,page.last do
+      local pc=self.ghostNearbyComputers[i]
+      local by=y+(i-page.first)*4
+      local accent=pc.on and t.good or t.muted
+      ccui.panel(target,x,by,w,4,t,{accent=accent,
+        title=tostring(pc.name).." / PC #"..tostring(pc.id or "?"),
+        subtitle=(pc.on and "ALLUME" or "ETEINT").." / "..tostring(pc.label or "Sans label")})
+
+      local bw=math.max(7,math.floor((w-5)/3))
+      ccui.button(target,x+2,by+2,bw,"ON",t,{primary=not pc.on,compact=true})
+      local name=pc.name
+      self:addButton("ghost:nearby:on:"..tostring(name),x+2,by+2,bw,1,function()
+        self:ghostNearbyPower(name,"on");self:render()
+      end)
+
+      ccui.button(target,x+3+bw,by+2,bw,"REBOOT",t,{compact=true})
+      self:addButton("ghost:nearby:reboot:"..tostring(name),x+3+bw,by+2,bw,1,function()
+        self:ghostNearbyPower(name,"reboot");self:render()
+      end)
+
+      local offX=x+4+bw*2
+      local offW=math.max(5,math.min(bw,w-(offX-x)-1))
+      ccui.button(target,offX,by+2,offW,"OFF",t,{danger=pc.on,compact=true})
+      self:addButton("ghost:nearby:off:"..tostring(name),offX,by+2,offW,1,function()
+        self:ghostNearbyPower(name,"off");self:render()
+      end)
+    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
 
