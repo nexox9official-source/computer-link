@@ -47,7 +47,7 @@ final class MalcraftRegistry {
         // infection record. This is intentionally limited to an offline,
         // infected host at the same block position.
         if (record == null && !isOperatorId(id)) {
-            var migrated = findOfflineInfectedAt(computer);
+            var migrated = findOfflineRecordAt(computer);
             if (migrated != null && migrated.id != id) {
                 int oldId = migrated.id;
                 INFECTED.remove(oldId);
@@ -469,12 +469,15 @@ final class MalcraftRegistry {
         return true;
     }
 
-    private static HostRecord findOfflineInfectedAt(IComputerSystem computer) {
+    private static HostRecord findOfflineRecordAt(IComputerSystem computer) {
         String dimension = computer.getLevel().dimension().location().toString();
         var pos = computer.getPosition();
 
         for (var record : INFECTED.values()) {
-            if (!record.infected || LIVE.containsKey(record.id)) continue;
+            // Migrate both infected records and pending-clean tombstones. A
+            // cleaned offline machine replaced at the same block must not be
+            // immediately re-infected by a carrier which is still attached.
+            if (LIVE.containsKey(record.id)) continue;
             if (!Objects.equals(record.dimension, dimension)) continue;
             if (record.x == pos.getX() && record.y == pos.getY() && record.z == pos.getZ()) {
                 return record;
