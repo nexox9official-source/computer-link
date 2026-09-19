@@ -3328,186 +3328,183 @@ function LinkOS:renderTerminal(target, l)
 end
 
 function LinkOS:renderSettings(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
+  self.settingsTab=self.settingsTab or "style"
 
-  self.settingsTab = self.settingsTab or "style"
-  draw.text(target, x, y, "Parametres", t.text, t.bg, w)
-  y = y + 2
+  fluent.sectionTitle(target,x,y,w,"Parametres","Personnalise ton experience LinkOS",t.accent)
+  y=y+4
 
-  local tabs = {
-    {"style","STYLE"},
-    {"display","ECRANS"},
-    {"system","SYSTEME"}
+  local sideW=w>=34 and 12 or 9
+  local cx=x+sideW+1
+  local cw=math.max(10,w-sideW-1)
+  draw.fill(target,x,y,sideW,math.max(18,l.h-y-1),t.surface)
+
+  local tabs={
+    {"style","Style","*"},
+    {"display","Ecrans","D"},
+    {"system","Systeme","I"}
   }
-  local gap = 1
-  local tabW = math.max(6, math.floor((w-2*gap)/3))
-  local tx = x
-  for i,tab in ipairs(tabs) do
-    local width = i==#tabs and math.max(6, x+w-tx) or tabW
-    draw.button(target, tx, y, width, tab[2], colors.white,
-      self.settingsTab==tab[1] and t.accent or colors.black)
+  local sy=y+1
+  for _,tab in ipairs(tabs) do
+    local selected=self.settingsTab==tab[1]
+    local bg=selected and t.selection or t.surface
+    draw.fill(target,x,sy,sideW,2,bg)
+    draw.text(target,x+1,sy,tab[3],selected and t.accent or t.muted,bg,1)
+    draw.text(target,x+3,sy,tab[2],selected and t.text or t.muted,bg,math.max(1,sideW-4))
     local id=tab[1]
-    self:addButton("set:tab:"..id,tx,y,width,1,function() self.settingsTab=id end)
-    tx=tx+width+gap
+    self:addButton("set:tab:"..id,x,sy,sideW,2,function() self.settingsTab=id end)
+    sy=sy+3
   end
-  y = y + 3
 
-  if self.settingsTab == "style" then
-    draw.text(target, x, y, "Couleur d'accent", t.muted, t.bg, w)
-    y = y + 2
+  if self.settingsTab=="style" then
+    draw.text(target,cx,y,"Apparence",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Couleurs, bureau et barre des taches",t.muted,t.bg,cw)
+    local py=y+3
 
-    local accentNames = {"cyan","blue","lime","orange","purple","red"}
-    local cellW = math.max(4, math.floor((w-2)/3))
+    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.accent,title="Couleur d'accent",
+      subtitle="Utilisee dans les selections et actions principales.",muted=t.muted})
+    local accentNames={"blue","cyan","lime","orange","purple","red"}
+    local aw=math.max(4,math.floor((cw-5)/6))
     for i,name in ipairs(accentNames) do
-      local col=(i-1)%3
-      local row=math.floor((i-1)/3)
-      local bx=x+col*(cellW+1)
-      local by=y+row*2
-      local selected=prefs.get("accent","cyan")==name
-      draw.button(target,bx,by,cellW,string.upper(string.sub(name,1,3)),
-        selected and colors.black or colors.white,
-        selected and ACCENTS[name] or colors.black)
-      self:addButton("accent:"..name,bx,by,cellW,1,function()
+      local bx=cx+2+(i-1)*(aw+1)
+      local selected=prefs.get("accent","blue")==name
+      local colour=ACCENTS[name] or colors.lightBlue
+      draw.fill(target,bx,py+3,aw,2,selected and colour or t.surface2)
+      draw.fill(target,bx+1,py+3,math.max(1,aw-2),1,colour)
+      draw.text(target,bx,py+4,string.upper(string.sub(name,1,1)),
+        selected and colors.white or t.muted,selected and colour or t.surface2,aw)
+      self:addButton("accent:"..name,bx,py+3,aw,2,function()
         prefs.set("accent",name)
+        self:refreshDisplays()
       end)
     end
-    y = y + 5
+    py=py+7
 
-    draw.text(target, x, y, "Fond du bureau", t.muted, t.bg, w)
-    y = y + 1
-    local wallpaper=tostring(prefs.get("wallpaper","dots"))
-    self:button(target,"set:wallpaper",x,y,math.min(18,w),
-      string.upper(wallpaper),function()
-        local order={"dots","clean","grid","lines"}
-        local current=prefs.get("wallpaper","dots")
+    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
+      subtitle="Fond et densite de la barre des taches.",muted=t.muted})
+    local wallpaper=tostring(prefs.get("wallpaper","clean"))
+    self:button(target,"set:wallpaper",cx+2,py+2,math.min(15,cw-4),
+      "FOND: "..string.upper(wallpaper),function()
+        local order={"clean","dots","grid","lines"}
+        local current=prefs.get("wallpaper","clean")
         local nextValue=order[1]
         for i,value in ipairs(order) do
           if value==current then nextValue=order[(i%#order)+1];break end
         end
         prefs.set("wallpaper",nextValue)
       end)
-    y = y + 2
-
-    if y < l.h-2 then
+    if cw>=30 then
       local labels=prefs.get("taskbar_labels",false)
-      self:button(target,"set:taskbarlabels",x,y,math.min(18,w),
-        labels and "TACHES: TEXTE" or "TACHES: COMPACT",function()
+      self:button(target,"set:taskbarlabels",cx+18,py+2,math.min(16,cw-19),
+        labels and "TACHES: TEXTE" or "TACHES: ICONES",function()
           prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
         end)
-      y=y+2
     end
+    py=py+5
 
-    if y < l.h-4 then
-      draw.text(target,x,y,"Apps epinglees",t.muted,t.bg,w)
-      y=y+1
-      local pinCandidates={"messages","files","store","terminal","calculator"}
-      local pins=prefs.get("taskbar_pins",{})
-      local pinned={}
-      for _,id in ipairs(pins) do pinned[id]=true end
-      local cell=math.max(8,math.floor((w-1)/2))
-      for i,id in ipairs(pinCandidates) do
-        local app=shellui.find(id,self:isOperatorUI())
-        if app then
-          local col=(i-1)%2
-          local row=math.floor((i-1)/2)
-          local bx=x+col*(cell+1)
-          local by=y+row*2
-          local label=(pinned[id] and "- " or "+ ")..app.short
-          draw.button(target,bx,by,math.min(cell,w-(bx-x)),label,
-            colors.white,pinned[id] and t.accent or colors.black)
-          self:addButton("set:pin:"..id,bx,by,math.min(cell,w-(bx-x)),1,function()
-            local current=prefs.get("taskbar_pins",{})
-            local nextPins={}
-            local found=false
-            for _,value in ipairs(current) do
-              if value==id then found=true else nextPins[#nextPins+1]=value end
-            end
-            if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
-            prefs.set("taskbar_pins",nextPins)
-          end)
-        end
+    fluent.card(target,cx,py,cw,9,{bg=t.surface,accent=t.accent,title="Applications epinglees",
+      subtitle="Choisis les raccourcis visibles dans la barre des taches.",muted=t.muted})
+    local pinCandidates={"messages","files","store","terminal","calculator"}
+    local pins=prefs.get("taskbar_pins",{})
+    local pinned={}
+    for _,id in ipairs(pins) do pinned[id]=true end
+    local cell=math.max(8,math.floor((cw-3)/2))
+    for i,id in ipairs(pinCandidates) do
+      local app=shellui.find(id,self:isOperatorUI())
+      if app then
+        local col=(i-1)%2
+        local row=math.floor((i-1)/2)
+        local bx=cx+2+col*(cell+1)
+        local by=py+3+row*2
+        local selected=pinned[id]
+        local bg=selected and t.selection or t.surface2
+        draw.fill(target,bx,by,cell,1,bg)
+        fluent.drawMiniIcon(target,id,bx,by,selected,bg)
+        draw.text(target,bx+4,by,app.title,selected and t.text or t.muted,bg,math.max(1,cell-4))
+        self:addButton("set:pin:"..id,bx,by,cell,1,function()
+          local current=prefs.get("taskbar_pins",{})
+          local nextPins={}
+          local found=false
+          for _,value in ipairs(current) do
+            if value==id then found=true else nextPins[#nextPins+1]=value end
+          end
+          if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+          prefs.set("taskbar_pins",nextPins)
+        end)
       end
     end
 
-  elseif self.settingsTab == "display" then
-    draw.text(target, x, y, "Affichage principal", t.muted, t.bg, w)
-    y = y + 2
-
+  elseif self.settingsTab=="display" then
+    draw.text(target,cx,y,"Affichage",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Computer et Advanced Monitors",t.muted,t.bg,cw)
+    local py=y+3
     for _,d in ipairs(self.displays or {}) do
-      if y>=l.h-2 then break end
+      if py+3>=l.h-1 then break end
       local selected=self.active and d.id==self.active.id
-      local prefix=selected and "* " or "  "
       local size=tostring(d.width).."x"..tostring(d.height)
-      draw.fill(target,x,y,w,2,colors.black)
-      draw.text(target,x+1,y,prefix..d.label,selected and t.accent or t.text,
-        colors.black,math.max(1,w-10))
-      draw.text(target,math.max(x+1,x+w-#size),y,size,t.muted,colors.black,#size)
-      if d.kind=="monitor" and d.scale then
-        draw.text(target,x+3,y+1,"Echelle "..tostring(d.scale),t.muted,colors.black,math.max(1,w-4))
-      else
-        draw.text(target,x+3,y+1,d.kind=="computer" and "Ecran du Computer" or "Moniteur",
-          t.muted,colors.black,math.max(1,w-4))
-      end
+      fluent.card(target,cx,py,cw,4,{
+        bg=selected and t.selection or t.surface,
+        accent=selected and t.accent or t.muted,
+        title=(selected and "Actif - " or "")..d.label,
+        subtitle=(d.kind=="monitor" and ("Advanced Monitor / scale "..tostring(d.scale or "-"))
+          or "Ecran du Computer"),
+        muted=t.muted
+      })
+      draw.text(target,math.max(cx+2,cx+cw-#size-2),py+1,size,t.muted,
+        selected and t.selection or t.surface,#size)
       local displayId=d.id
-      self:addButton("display:"..displayId,x,y,w,2,function()
+      self:addButton("display:"..displayId,cx,py,cw,4,function()
         prefs.set("display_id",displayId)
         self:refreshDisplays()
         self:setNotice("Affichage principal change.",t.good)
       end)
-      y=y+3
+      py=py+5
     end
 
   else
-    draw.text(target, x, y, "LinkOS " .. tostring(config.VERSION), t.accent, t.bg, w)
-    y = y + 1
-    local channel=tostring(config.SOURCE_REF or "main")
-    draw.text(target, x, y, "Canal  " .. channel,
-      channel=="main" and t.muted or t.warn, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y,
-      self.service.updateAvailable
-        and ("Mise a jour disponible: " .. tostring(self.service.remoteVersion))
-        or "Systeme a jour",
-      self.service.updateAvailable and t.warn or t.muted, t.bg, w)
-    y = y + 2
+    draw.text(target,cx,y,"Systeme",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Version, session et alimentation",t.muted,t.bg,cw)
+    local py=y+3
 
-    self:button(target,"set:update",x,y,math.min(14,w),
+    local channel=tostring(config.SOURCE_REF or "main")
+    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=self.service.updateAvailable and t.warn or t.good,
+      title="LinkOS "..tostring(config.VERSION),
+      subtitle=self.service.updateAvailable
+        and ("Mise a jour disponible: "..tostring(self.service.remoteVersion))
+        or ("A jour / canal "..channel),
+      muted=t.muted})
+    self:button(target,"set:update",cx+2,py+3,math.min(16,cw-4),
       self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",
       function() self:runUpdateAction() end)
-    y = y + 3
+    py=py+6
 
-    draw.text(target,x,y,"Session",t.muted,t.bg,w)
-    y = y + 1
     local restore=prefs.get("restore_session",true)
-    self:button(target,"set:restore-session",x,y,math.min(18,w),
+    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=t.accent,title="Session",
+      subtitle="Rouvre les applications apres un redemarrage.",muted=t.muted})
+    self:button(target,"set:restore-session",cx+2,py+3,math.min(18,cw-4),
       restore and "RESTAURATION: OUI" or "RESTAURATION: NON",function()
         prefs.set("restore_session",not prefs.get("restore_session",true))
         self:setNotice(prefs.get("restore_session",true)
           and "Restauration de session activee."
-          or "Restauration de session desactivee.",
-          t.good)
+          or "Restauration de session desactivee.",t.good)
       end)
-    if w>=31 then
-      self:button(target,"set:forget-session",x+20,y,math.min(13,w-20),"OUBLIER SESSION",function()
+    if cw>=32 then
+      self:button(target,"set:forget-session",cx+21,py+3,math.min(13,cw-22),"OUBLIER",function()
         prefs.set("workspace_session",{windows={},active="home"})
         self:setNotice("Session sauvegardee effacee.",t.warn)
       end)
     end
-    y = y + 3
+    py=py+6
 
-    local half=math.max(8,math.floor((w-1)/2))
-    self:button(target,"set:reboot",x,y,half,"REDEMARRER",function() os.reboot() end)
-    if w>=18 then
-      self:button(target,"set:shutdown",x+half+1,y,math.min(half,w-half-1),"ARRETER",
-        function() os.shutdown() end)
-    end
-    y = y + 3
-
-    draw.text(target,x,y,"Maintenance",t.muted,t.bg,w)
-    y = y + 1
-    draw.button(target,x,y,math.min(16,w),"DESINSTALLER",colors.white,colors.red)
-    self:addButton("set:uninstall",x,y,math.min(16,w),1,function()
+    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.warn,title="Alimentation et maintenance",
+      subtitle="Actions systeme. La desinstallation conserve tes documents /user.",muted=t.muted})
+    local half=math.max(8,math.floor((cw-5)/2))
+    self:button(target,"set:reboot",cx+2,py+3,half,"REDEMARRER",function() os.reboot() end)
+    self:button(target,"set:shutdown",cx+3+half,py+3,math.min(half,cw-half-4),"ARRETER",
+      function() os.shutdown() end)
+    fluent.button(target,cx+2,py+4,math.min(16,cw-4),"DESINSTALLER",{danger=true})
+    self:addButton("set:uninstall",cx+2,py+4,math.min(16,cw-4),1,function()
       self:runUninstallAction()
     end)
   end
