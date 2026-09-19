@@ -438,6 +438,18 @@ function service:ghostSetSpread(targetId, enabled)
   return packet.payload
 end
 
+function service:ghostLiveComputers()
+  if malcraftBusAvailable() and type(malcraft_bus.listComputers) == "function" then
+    local data = jsonDecode(malcraft_bus.listComputers())
+    if data and type(data.computers) == "table" then
+      return data.computers
+    end
+    return {}, nil
+  end
+
+  return nil, "Malcraft Bridge 0.11.0 requis pour lister les Computers charges sans LinkOS."
+end
+
 function service:ghostList()
   if malcraftBusAvailable() then
     local data = jsonDecode(malcraft_bus.listInfected())
