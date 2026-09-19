@@ -194,12 +194,41 @@ function shellui.install(OS, prefs)
       query=="" and t.muted or t.text,colors.black,math.max(1,w-6))
 
     local apps={}
+    local kinds={}
     local q=query:lower()
-    for _,app in ipairs(shellui.apps(self:isOperatorUI())) do
-      if q=="" or app.title:lower():find(q,1,true) or app.id:lower():find(q,1,true) then
-        apps[#apps+1]=app
+    local available=shellui.apps(self:isOperatorUI())
+
+    if q=="" then
+      local map={}
+      for _,app in ipairs(available) do map[app.id]=app end
+      local seen={}
+
+      for _,id in ipairs(prefs.get("taskbar_pins",{})) do
+        if map[id] and not seen[id] then
+          apps[#apps+1]=map[id]; kinds[id]="PIN"
+          seen[id]=true
+        end
+      end
+
+      for _,id in ipairs(prefs.get("recent_apps",{})) do
+        if map[id] and not seen[id] then
+          apps[#apps+1]=map[id]; kinds[id]="RECENT"
+          seen[id]=true
+        end
+      end
+
+      for _,app in ipairs(available) do
+        if not seen[app.id] then apps[#apps+1]=app;seen[app.id]=true end
+      end
+    else
+      for _,app in ipairs(available) do
+        if app.title:lower():find(q,1,true) or app.id:lower():find(q,1,true) then
+          apps[#apps+1]=app
+        end
       end
     end
+
+    self.launcherKinds=kinds
     self.launcherApps=apps
     self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
 
@@ -219,7 +248,10 @@ function shellui.install(OS, prefs)
       draw.fill(target,x+2,by,w-4,1,bg)
       draw.text(target,x+2,by," "..(app.icon or "+").." ",colors.white,badge,3)
       draw.text(target,x+6,by,app.title,selected and colors.white or t.text,bg,math.max(1,w-11))
-      if w>=38 then draw.text(target,x+w-10,by,app.short or "",t.muted,bg,7) end
+      if w>=38 then
+        local kind=self.launcherKinds and self.launcherKinds[app.id]
+        draw.text(target,x+w-10,by,kind or app.short or "",kind and t.accent or t.muted,bg,7)
+      end
       self:addButton("launcher:"..app.id,x+2,by,w-4,1,function() self:openApp(app.id) end)
     end
 
