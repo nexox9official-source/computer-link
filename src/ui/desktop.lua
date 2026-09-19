@@ -164,8 +164,15 @@ function M.install(OS,shellui,prefs)
   end
   function OS:renderStore(target,l)
     local t=self:theme()
-    draw.text(target,2,1,'Applications',t.text,t.bg,l.w-3)
-    draw.text(target,2,2,'Catalogue officiel LinkOS',t.muted,t.bg,l.w-3)
+    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-16))
+    self:button(target,'store:refresh',math.max(2,l.w-12),1,11,'ACTUALISER',function()
+      local ok,result=packages.refreshCatalog()
+      self:setNotice(ok and (tostring(result)..' apps chargees.') or tostring(result),
+        ok and colors.lime or colors.orange)
+    end)
+    draw.text(target,2,2,
+      packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
+      packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
 
     local row=4
     for _,p in ipairs(packages.catalog) do
