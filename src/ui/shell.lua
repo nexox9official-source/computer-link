@@ -323,9 +323,9 @@ function shellui.install(OS, prefs)
     end
 
     draw.fill(target,x,footer,panelW,2,t.surface)
-    local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC #"..tostring(os.getComputerID and os.getComputerID() or "?"))
+    local identity="PC #"..tostring(os.getComputerID and os.getComputerID() or "?")
     draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
-    draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,panelW-25))
+    draw.text(target,x+4,footer,identity,t.text,t.surface,math.max(1,panelW-25))
 
     ccui.button(target,x+panelW-19,footer,10,"REGLAGES",t,{compact=true})
     self:addButton("launcher:settings",x+panelW-19,footer,10,1,function() self:openApp("settings") end)
