@@ -64,6 +64,7 @@ function M.install(OS,shellui,prefs)
   function OS:openApp(id)
     local list=self:workspace()
     self.startMenuOpen,self.quickPanelOpen=false,false
+    self.contextMenu=nil
     if id=='home' then
       for _,v in ipairs(list) do v.minimized=true end
       self.app='home'; self:render(); return
@@ -138,6 +139,85 @@ function M.install(OS,shellui,prefs)
     local item=table.remove(apps,from);table.insert(apps,to,item)
     local order={};for _,app in ipairs(apps) do order[#order+1]=app.id end
     prefs.set('desktop_order',order);self.selectedIcon=to
+  end
+
+  function OS:isTaskbarPinned(id)
+    for _,value in ipairs(prefs.get('taskbar_pins',{})) do
+      if value==id then return true end
+    end
+    return false
+  end
+
+  function OS:toggleTaskbarPin(id)
+    if not shellui.allowed(id,self:isOperatorUI()) or id=='home' then return false end
+    local current=prefs.get('taskbar_pins',{})
+    local nextPins={}
+    local found=false
+    for _,value in ipairs(current) do
+      if value==id then found=true else nextPins[#nextPins+1]=value end
+    end
+    if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+    prefs.set('taskbar_pins',nextPins)
+    self:setNotice(found and 'Application desepinglee.' or 'Application epinglee.',
+      self:theme().good)
+    return true
+  end
+
+  function OS:openDesktopContext(x,y)
+    local targetId=nil
+    for _,icon in ipairs(self.iconRects or {}) do
+      if inside(x,y,icon) then targetId=icon.id;break end
+    end
+    self.startMenuOpen=false
+    self.quickPanelOpen=false
+    self.contextMenu={x=x,y=y,targetId=targetId}
+  end
+
+  function OS:renderContextMenu(target,w,h)
+    local menu=self.contextMenu
+    if not menu then return end
+    local t=self:theme()
+    local mw=18
+    local options={}
+
+    local function add(label,action)
+      options[#options+1]={label=label,action=action}
+    end
+
+    if menu.targetId then
+      local app=shellui.find(menu.targetId,self:isOperatorUI())
+      add('OUVRIR',function() self:openApp(menu.targetId) end)
+      add(self:isTaskbarPinned(menu.targetId) and 'DESEPINGLER' or 'EPINGLER',function()
+        self:toggleTaskbarPin(menu.targetId)
+      end)
+      if app and app.id~='store' then
+        add('APPLICATIONS',function() self:openApp('store') end)
+      end
+      add('PARAMETRES',function() self:openApp('settings') end)
+    else
+      add('ACTUALISER',function() self:render() end)
+      add('FICHIERS',function() self:openApp('files') end)
+      add('APPLICATIONS',function() self:openApp('store') end)
+      add('PARAMETRES',function() self:openApp('settings') end)
+    end
+
+    local mh=#options+2
+    local mx=clamp(menu.x,1,math.max(1,w-mw+1))
+    local my=clamp(menu.y,1,math.max(1,h-mh))
+    self.shellOverlay={x=mx,y=my,w=mw,h=mh}
+
+    draw.fill(target,mx,my,mw,mh,colors.gray)
+    draw.fill(target,mx,my,mw,1,t.accent)
+    draw.text(target,mx+1,my,menu.targetId and 'APP' or 'BUREAU',colors.white,t.accent,mw-2)
+
+    for i,item in ipairs(options) do
+      local by=my+i
+      draw.button(target,mx+1,by,mw-2,item.label,colors.white,colors.black)
+      self:addButton('context:'..i,mx+1,by,mw-2,1,function()
+        self.contextMenu=nil
+        item.action()
+      end)
+    end
   end
   function OS:renderDesktop(target,w,h)
     local t=self:theme()
@@ -455,6 +535,9 @@ function M.install(OS,shellui,prefs)
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
+    if self.contextMenu and not self.startMenuOpen and not self.quickPanelOpen then
+      self:renderContextMenu(target,w,h)
+    end
 
     for row=1,h do
       physical.setCursorPos(1,row)
@@ -467,7 +550,11 @@ function M.install(OS,shellui,prefs)
   function OS:hit(x,y)
     local modal=self.shellOverlay
     if modal then
-      if not inside(x,y,modal) then self.startMenuOpen,self.quickPanelOpen=false,false;return true end
+      if not inside(x,y,modal) then
+        self.startMenuOpen,self.quickPanelOpen=false,false
+        self.contextMenu=nil
+        return true
+      end
     else
       for i=#self:workspace(),1,-1 do
         local win=self.windows[i]
