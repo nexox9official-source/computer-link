@@ -3824,7 +3824,7 @@ function LinkOS:uiLoop()
     elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
       self.lastActivity = os.clock()
 
-      if a == 2 and not self.startMenuOpen and self.openDesktopContext then
+      if a == 2 and self.openDesktopContext then
         self:openDesktopContext(b,c)
       else
         self:hit(b,c)
