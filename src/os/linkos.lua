@@ -2759,61 +2759,64 @@ end
 
 function LinkOS:renderSecurity(target, l)
   local t = self:theme()
-  local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
+  local x, y, w = l.contentX, l.contentY, l.contentW
   local passwordOn = security.enabled()
   local operator = self:isOperatorUI()
 
-  draw.text(target, x, y, "Securite", t.text, t.bg, w)
+  draw.text(target, x, y, "Securite", t.text, t.bg, math.max(1,w-12))
+  local state = passwordOn and "PROTEGE" or "STANDARD"
+  draw.text(target, math.max(x,x+w-#state), y, state,
+    passwordOn and t.good or t.warn, t.bg, #state)
   y = y + 2
 
-  draw.text(target, x, y,
-    "Mot de passe : " .. (passwordOn and "ACTIF" or "DESACTIVE"),
-    passwordOn and t.good or t.muted, t.bg, w)
-  y = y + 1
-
-  if passwordOn then
-    draw.text(target, x, y,
-      "Verrouillage auto : " .. tostring(security.autoLockSeconds()) .. "s d'inactivite",
-      t.muted, t.bg, w)
-  else
-    draw.text(target, x, y, "Active un mot de passe pour proteger ce PC.", t.muted, t.bg, w)
-  end
-  y = y + 2
+  draw.fill(target,x,y,w,4,colors.black)
+  draw.fill(target,x,y,1,4,passwordOn and t.good or t.warn)
+  draw.text(target,x+2,y,passwordOn and "Mot de passe actif" or "Aucun mot de passe",
+    t.text,colors.black,math.max(1,w-3))
+  draw.text(target,x+2,y+1,
+    passwordOn and ("Verrouillage auto apres "..tostring(security.autoLockSeconds()).."s")
+      or "Active une protection locale pour ce poste.",
+    t.muted,colors.black,math.max(1,w-3))
+  draw.text(target,x+2,y+2,
+    operator and "Privileges LinkSec autorises" or "Poste utilisateur standard",
+    operator and colors.red or t.muted,colors.black,math.max(1,w-3))
+  y = y + 5
 
   if not passwordOn then
-    self:button(target, "sec:password-on", x, y, math.min(18, w), "ACTIVER MOT DE PASSE", function()
+    self:button(target,"sec:password-on",x,y,math.min(18,w),"ACTIVER MDP",function()
       self:configurePassword()
     end)
   else
-    self:button(target, "sec:lock-now", x, y, math.min(13, w), "VERROUILLER", function()
+    local bw=math.max(8,math.floor((w-2)/3))
+    self:button(target,"sec:lock-now",x,y,bw,"VERROUILLER",function()
       self:lockSession()
     end)
-
-    if w >= 30 then
-      self:button(target, "sec:password-change", x + 15, y, math.min(13, w - 15), "MODIFIER MDP", function()
+    if x+bw+1<=x+w-1 then
+      self:button(target,"sec:password-change",x+bw+1,y,math.min(bw,w-bw-1),"MODIFIER",function()
         self:configurePassword()
       end)
     end
-
-    if w >= 45 then
-      self:button(target, "sec:password-off", x + 30, y, math.min(13, w - 30), "DESACTIVER", function()
+    if x+(bw+1)*2<=x+w-1 then
+      draw.button(target,x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"DESACTIVER",colors.white,colors.red)
+      self:addButton("sec:password-off",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),1,function()
         self:disablePassword()
       end)
     end
   end
 
-  y = y + 3
-
-  if operator and y < l.h - 3 then
-    draw.text(target, x, y, "LinkSec Operator", colors.red, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "Ce PC possede les privileges d'intrusion.", t.muted, t.bg, w)
-    y = y + 2
-    self:button(target, "sec:linksec", x, y, math.min(20, w), "OUVRIR LINKSEC CMD", function()
-      self:openHackerTerminal()
-    end)
-  elseif y < l.h - 2 then
-    draw.text(target, x, y, "Protection AstralNet active.", t.good, t.bg, w)
+  if operator then
+    y = y + 3
+    if y < l.h-2 then
+      draw.text(target,x,y,"LINKSEC",colors.red,t.bg,w)
+      y = y + 1
+      draw.text(target,x,y,"Outils operateur reserves a ce Computer ID.",t.muted,t.bg,w)
+      y = y + 2
+      if y < l.h then
+        self:button(target,"sec:linksec",x,y,math.min(18,w),"OUVRIR LINKSEC",function()
+          self:openHackerTerminal()
+        end)
+      end
+    end
   end
 end
 
