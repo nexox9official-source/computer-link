@@ -12,6 +12,20 @@ if fs and fs.exists and fs.exists(SOURCE_FILE) then
   end
 end
 
+local SOURCE_REF = "main"
+local sourcePath = "/computer-link/source_ref.txt"
+if fs and fs.exists and fs.exists(sourcePath) then
+  local handle = fs.open(sourcePath, "r")
+  if handle then
+    local value = tostring(handle.readAll() or ""):gsub("%s+", "")
+    handle.close()
+    if value ~= "" and not value:find("..", 1, true)
+      and value:match("^[%w%._%-%/]+$") then
+      SOURCE_REF = value
+    end
+  end
+end
+
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
