@@ -256,6 +256,7 @@ function shellui.install(OS, prefs)
       for _,id in ipairs(prefs.get("taskbar_pins",{})) do preferred[#preferred+1]=id end
       for _,id in ipairs(prefs.get("desktop_shortcuts",{})) do preferred[#preferred+1]=id end
       preferred[#preferred+1]="settings"
+      preferred[#preferred+1]="calculator"
       for _,id in ipairs(preferred) do
         if map[id] and not seen[id] and #apps<6 then
           apps[#apps+1]=map[id]
@@ -315,7 +316,9 @@ function shellui.install(OS, prefs)
 
       draw.fill(target,bx,by,cellW,tileH,bg)
       fluent.drawMiniIcon(target,app.id,bx+1,by,selected,bg)
-      draw.text(target,bx+5,by,app.title,selected and t.text or t.muted,bg,math.max(1,cellW-6))
+      local startLabels={store="Apps",settings="Reglages",calculator="Calcul"}
+      local displayTitle=startLabels[app.id] or app.title
+      draw.text(target,bx+5,by,displayTitle,selected and t.text or t.muted,bg,math.max(1,cellW-6))
       draw.text(target,bx+5,by+1,selected and "Ouvrir" or "",t.accent,bg,math.max(1,cellW-6))
       self:addButton("launcher:"..app.id,bx,by,cellW,tileH,function() self:openApp(app.id) end)
     end
