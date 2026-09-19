@@ -519,10 +519,11 @@ function M.install(OS,shellui,prefs)
   end
 
   function OS:appContext(win,target,l)
-    return {target=target,w=l.w,h=l.h,data=win.data,draw=draw,
+    local theme=self:theme()
+    return {target=target,w=l.w,h=l.h,data=win.data,draw=draw,ui=fluent,theme=theme,
       prompt=function(title,hint) return self:prompt(title,hint) end,
       button=function(id,x,y,width,label,fn) self:button(target,id,x,y,width,label,fn) end,
-      notice=function(s) self:setNotice(s,colors.cyan) end}
+      notice=function(s) self:setNotice(s,theme.accent) end}
   end
   function OS:renderStore(target,l)
     local t=self:theme()
