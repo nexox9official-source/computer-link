@@ -169,11 +169,15 @@ http={get=function(url)
 end}
 for _,p in ipairs(packages.catalog) do
   assert(packages.install(p.id));assert(packages.installed(p.id))
+  assert(packages.installedVersion(p.id)==p.version)
   assert(packages.install(p.id));assert(fs.exists(packages.path(p.id)..'.backup'))
   local o=OS.new();o:refreshDisplays();o:openApp('pkg:'..p.id)
   assert(#o.windows==1 and not o.windows[1].renderError)
   assert(packages.remove(p.id));assert(not packages.installed(p.id))
   assert(fs.exists(packages.path(p.id)..'.removed'))
+  assert(packages.install(p.id));assert(packages.installed(p.id))
+  assert(not fs.exists(packages.path(p.id)..'.removed'))
+  assert(packages.remove(p.id));assert(not packages.installed(p.id))
 end
 http.get=function() return nil,'offline' end
 assert(not packages.install('tasks'))
