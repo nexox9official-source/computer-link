@@ -78,7 +78,18 @@ if fs.exists("/computer-link/role.txt") then
     print()
     print("MER reinstalle avec succes.")
     colour(colors.white)
-    print("Tape: reboot")
+    print("Demarrage immediat du MER...")
+    sleep(0.5)
+
+    local started = shell.run("/computer-link/boot.lua")
+    if not started then
+      colour(colors.red)
+      print()
+      print("Le demarrage du MER s'est termine anormalement.")
+      colour(colors.white)
+      print("Verifie /startup.lua puis relance:")
+      print("/computer-link/boot.lua")
+    end
   else
     colour(colors.orange)
     print()
