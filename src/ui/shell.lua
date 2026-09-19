@@ -92,8 +92,8 @@ function shellui.wallpaper(target, x, y, w, h, mode, accent)
 end
 
 function shellui.startMenuRect(layout)
-  local w = math.min(math.max(28, math.floor(layout.w * 0.62)), math.max(24, layout.w - 2))
-  local h = math.min(math.max(10, math.floor(layout.h * 0.70)), math.max(8, layout.h - 2))
+  local w = math.min(math.max(30, math.floor(layout.w * 0.72)), math.max(24, layout.w - 2))
+  local h = math.min(math.max(11, math.floor(layout.h * 0.76)), math.max(8, layout.h - 2))
   return 2, math.max(1, layout.h - h), w, h
 end
 
@@ -226,9 +226,11 @@ function shellui.install(OS, prefs)
     if #apps==0 then draw.text(target,x+3,top+1,"Aucun resultat",t.muted,colors.gray,w-6) end
 
     draw.fill(target,x,footer,w,2,colors.black)
-    draw.text(target,x+2,footer,"F10 fermer",t.muted,colors.black,12)
-    self:button(target,"launcher:settings",x+w-21,footer,9,"SETTINGS",function() self:openApp("settings") end)
-    self:button(target,"launcher:power",x+w-10,footer,8,"REBOOT",function()
+    draw.text(target,x+2,footer,"ESC",t.muted,colors.black,3)
+    self:button(target,"launcher:settings",x+7,footer,10,"PARAMETRES",function()
+      self:openApp("settings")
+    end)
+    self:button(target,"launcher:power",x+w-9,footer,8,"REBOOT",function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
   end
