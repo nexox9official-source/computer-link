@@ -23,7 +23,7 @@ local PALETTE = {
 
 local ACCENTS = {
   cyan = colors.cyan,
-  blue = colors.lightBlue,
+  blue = colors.blue,
   lime = colors.lime,
   orange = colors.orange,
   purple = colors.purple,
