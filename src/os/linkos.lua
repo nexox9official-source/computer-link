@@ -3251,6 +3251,39 @@ function LinkOS:renderSettings(target, l)
         labels and "TACHES: TEXTE" or "TACHES: COMPACT",function()
           prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
         end)
+      y=y+2
+    end
+
+    if y < l.h-4 then
+      draw.text(target,x,y,"Apps epinglees",t.muted,t.bg,w)
+      y=y+1
+      local pinCandidates={"messages","files","store","terminal","calculator"}
+      local pins=prefs.get("taskbar_pins",{})
+      local pinned={}
+      for _,id in ipairs(pins) do pinned[id]=true end
+      local cell=math.max(8,math.floor((w-1)/2))
+      for i,id in ipairs(pinCandidates) do
+        local app=shellui.find(id,self:isOperatorUI())
+        if app then
+          local col=(i-1)%2
+          local row=math.floor((i-1)/2)
+          local bx=x+col*(cell+1)
+          local by=y+row*2
+          local label=(pinned[id] and "- " or "+ ")..app.short
+          draw.button(target,bx,by,math.min(cell,w-(bx-x)),label,
+            colors.white,pinned[id] and t.accent or colors.black)
+          self:addButton("set:pin:"..id,bx,by,math.min(cell,w-(bx-x)),1,function()
+            local current=prefs.get("taskbar_pins",{})
+            local nextPins={}
+            local found=false
+            for _,value in ipairs(current) do
+              if value==id then found=true else nextPins[#nextPins+1]=value end
+            end
+            if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+            prefs.set("taskbar_pins",nextPins)
+          end)
+        end
+      end
     end
 
   elseif self.settingsTab == "display" then
