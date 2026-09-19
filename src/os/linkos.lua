@@ -2118,129 +2118,110 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "malcraft_hub" then
-    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
-    self:addButton("malcraft:back", x, y, math.min(12, w), 1, function()
-      self.linksecView = "home"
+    ccui.button(target,x,y,10,"< LINKSEC",t,{compact=true})
+    self:addButton("malcraft:back",x,y,10,1,function()
+      self.linksecView="home"
       self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "MALCRAFT CONTROL CENTER", colors.red, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y,
-      tostring(#self.malcraftHosts) .. " infecte(s) | "
-        .. tostring(#(self.malcraftLiveHosts or {})) .. " charge(s) | "
-        .. tostring(#self.malcraftLocalDisks) .. " disque(s)",
-      t.muted, t.bg, w)
-    y = y + 2
-
-    local bw = math.min(18, math.max(11, math.floor((w - 2) / 2)))
+    ccui.panel(target,x,y,w,4,t,{accent=t.danger,title="Malcraft Control",
+      subtitle=tostring(#self.malcraftHosts).." infecte(s) / "
+        ..tostring(#(self.malcraftLiveHosts or {})).." charge(s) / "
+        ..tostring(#self.malcraftLocalDisks).." disque(s)"})
+    y=y+5
 
     if self.hackerConsole.target then
-      local currentId = tonumber(self.hackerConsole.target)
-      draw.button(target, x, y, bw, "CIBLE #" .. tostring(currentId), colors.white, t.panel)
-      self:addButton("malcraft:current", x, y, bw, 1, function()
+      local currentId=tonumber(self.hackerConsole.target)
+      ccui.panel(target,x,y,w,3,t,{accent=t.warn,
+        title="Cible actuelle: PC #"..tostring(currentId),
+        subtitle="Ouvre la fiche pour verifier ou controler."})
+      self:addButton("malcraft:current",x,y,w,3,function()
         self:malcraftSelectHost(currentId)
         self:render()
       end)
-
-      if w >= bw * 2 + 2 then
-        draw.text(target, x + bw + 2, y,
-          "Verifier / infecter / controler cette cible",
-          t.muted, t.bg, math.max(1, w - bw - 2))
-      end
-
-      y = y + 2
+      y=y+4
     end
 
-    draw.button(target, x, y, bw, "RESEAU INFECTE", colors.white, colors.red)
-    self:addButton("malcraft:hosts", x, y, bw, 1, function()
-      self:malcraftOpenHosts()
-      self:render()
+    local bw=math.max(11,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"RESEAU INFECTE",t,{danger=true,compact=true})
+    self:addButton("malcraft:hosts",x,y,bw,1,function()
+      self:malcraftOpenHosts();self:render()
     end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "PCS CHARGES", colors.white, t.panel)
-      self:addButton("malcraft:live", x + bw + 2, y, bw, 1, function()
-        self:malcraftOpenLiveHosts()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
-    self:addButton("malcraft:localdisks", x, y, bw, 1, function()
-      self:malcraftOpenLocalDisks()
-      self:render()
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"PCS CHARGES",t,{compact=true})
+    self:addButton("malcraft:live",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:malcraftOpenLiveHosts();self:render()
     end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "CIBLE PAR ID", colors.white, t.panel)
-      self:addButton("malcraft:byid", x + bw + 2, y, bw, 1, function()
-        self:malcraftSelectById()
-        self:render()
-      end)
+    ccui.button(target,x,y,bw,"DISQUES",t,{compact=true})
+    self:addButton("malcraft:localdisks",x,y,bw,1,function()
+      self:malcraftOpenLocalDisks();self:render()
+    end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"CIBLE PAR ID",t,{compact=true})
+    self:addButton("malcraft:byid",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:malcraftSelectById();self:render()
+    end)
+    y=y+3
+
+    if y+4<l.h then
+      ccui.panel(target,x,y,w,5,t,{title="Propagation",
+        subtitle="Proximite + disques contamines + propagation cible."})
+      draw.text(target,x+2,y+2,"Operateur: immunise",t.good,t.surface,math.max(1,w-4))
+      draw.text(target,x+2,y+3,"Persistance: Bridge + ROM",t.text,t.surface,math.max(1,w-4))
     end
-
-    y = y + 2
-
-    draw.text(target, x, y, "Propagation automatique :", t.text, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- proximite courte portee", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- disque contamine branche sur un PC", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- PC infecte -> nouveaux disques inseres", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- PC operateur immunise mais emetteur", t.good, t.bg, w)
     return
   end
 
   if self.linksecView == "malcraft_hosts" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("malcraft:hosts:back", x, y, math.min(14, w), 1, function()
-      self:malcraftOpenHub()
-      self:render()
+    ccui.button(target,x,y,11,"< MALCRAFT",t,{compact=true})
+    self:addButton("malcraft:hosts:back",x,y,11,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    y = y + 2
+    ccui.button(target,x+w-7,y,7,"MAJ",t,{compact=true})
+    self:addButton("malcraft:hosts:refresh",x+w-7,y,7,1,function()
+      self:malcraftOpenHosts();self:render()
+    end)
+    y=y+2
 
-    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
-    if w>=24 then
-      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
-        self:malcraftOpenHosts()
-        self:render()
+    draw.text(target,x,y,"Reseau infecte",t.text,t.bg,w)
+    draw.text(target,x,y+1,tostring(#self.malcraftHosts).." cible(s) enregistree(s)",t.muted,t.bg,w)
+    y=y+3
+
+    if #self.malcraftHosts==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune cible",
+        subtitle="Aucun PC marque Malcraft."})
+      return
+    end
+
+    local pageSize=math.max(1,math.floor((l.h-y-2)/3))
+    self.malcraftHostsOffset=self.malcraftHostsOffset or 0
+    local page=ccui.page(#self.malcraftHosts,pageSize,self.malcraftHostsOffset)
+    self.malcraftHostsOffset=page.offset
+
+    for i=page.first,page.last do
+      local item=self.malcraftHosts[i]
+      local by=y+(i-page.first)*3
+      local lastSeen=tonumber(item.last_seen) or 0
+      local online=item.online==true
+        or (item.online==nil and lastSeen>0 and (epochSeconds()-lastSeen)<=25)
+      local id=item.computer_id
+      local label=tostring(item.label or "")
+      if label=="" then label="Sans label" end
+      local source=tostring(item.source or item.last_source or "-")
+      local accent=online and (item.spread and t.danger or t.good) or t.muted
+
+      ccui.panel(target,x,by,w,3,t,{accent=accent,
+        title="PC #"..tostring(id).."  "..label,
+        subtitle=(online and "ONLINE" or "OFFLINE")
+          ..(item.spread and " / PROPAGATION" or "")
+          .." / "..source})
+      self:addButton("malcraft:host:"..tostring(id),x,by,w,3,function()
+        self:malcraftSelectHost(id);self:render()
       end)
     end
-    y = y + 2
 
-    if #self.malcraftHosts == 0 then
-      draw.text(target, x, y, "Aucun PC infecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.malcraftHosts, math.max(1, l.h - y - 2)) do
-        local item = self.malcraftHosts[i]
-        local lastSeen = tonumber(item.last_seen) or 0
-        local online = item.online == true
-          or (item.online == nil and lastSeen > 0 and (epochSeconds() - lastSeen) <= 25)
-        local source = tostring(item.source or item.last_source or "")
-        if #source > 12 then source = string.sub(source,1,12) end
-        local line = "PC #" .. tostring(item.computer_id)
-          .. " " .. tostring(item.label or "")
-          .. (online and " [ONLINE]" or " [OFFLINE]")
-          .. (item.spread and " [PROP]" or "")
-          .. (source ~= "" and (" <" .. source .. ">") or "")
-
-        draw.text(target, x, y, line,
-          online and (item.spread and colors.red or t.good) or t.muted,
-          t.panel, w)
-        local id = item.computer_id
-        self:addButton("malcraft:host:" .. tostring(id), x, y, w, 1, function()
-          self:malcraftSelectHost(id)
-          self:render()
-        end)
-        y = y + 1
-      end
-    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-2),page,t)
     return
   end
 
@@ -2444,231 +2425,167 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "ghost" then
-    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
-    self:addButton("ghost:back", x, y, math.min(12, w), 1, function()
-      self:malcraftOpenHub()
-      self:render()
+    ccui.button(target,x,y,11,"< MALCRAFT",t,{compact=true})
+    self:addButton("ghost:back",x,y,11,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    y = y + 2
+    ccui.button(target,x+w-7,y,7,"MAJ",t,{compact=true})
+    self:addButton("ghost:refresh",x+w-7,y,7,1,function()
+      self:ghostRefresh();self:render()
+    end)
+    y=y+2
 
-    local state = (self.ghostState and self.ghostState.state) or {}
-    local infected = state.infected == true
-    local spread = state.spread == true
-    local immune = self.ghostState and self.ghostState.immune == true
+    local state=(self.ghostState and self.ghostState.state) or {}
+    local infected=state.infected==true
+    local spread=state.spread==true
+    local immune=self.ghostState and self.ghostState.immune==true
+    local agent=self.ghostState and self.ghostState.agent_status or nil
+    local online=state.online==true
 
-    draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
-    if w>=24 then
-      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
-        self:ghostRefresh()
-        self:render()
-      end)
-    end
-    y = y + 1
-    draw.text(target, x, y,
-      immune and "IMMUNISE"
-        or (infected and "ACTIF" or "ABSENT"),
-      immune and t.good or (infected and colors.red or t.muted),
-      t.bg, w)
-    y = y + 1
+    local profile
+    if immune then profile="IMMUNISE"
+    elseif not infected then profile="NON INFECTE"
+    elseif not online then profile="HORS LIGNE"
+    elseif not agent then profile="AGENT MUET"
+    elseif agent.linkos_installed==true then profile="LINKOS + ROM"
+    else profile="ROM SEUL" end
+
+    ccui.panel(target,x,y,w,5,t,{
+      accent=immune and t.good or (infected and t.danger or t.muted),
+      title="PC #"..tostring(self:malcraftTargetId() or "?").." / "..profile,
+      subtitle=infected and ((online and "ONLINE" or "OFFLINE")
+        ..(spread and " / PROPAGATION" or "")) or "Aucune infection active."
+    })
 
     if infected then
-      local agent = self.ghostState and self.ghostState.agent_status or nil
-      local online = state.online == true
-      local profile
-      if not online then
-        profile = "HORS LIGNE"
-      elseif not agent then
-        profile = "AGENT MUET"
-      elseif agent.linkos_installed == true then
-        profile = "LINKOS + ROM"
-      else
-        profile = "ROM SEUL"
-      end
-      draw.text(target,x,y,
-        "Etat: " .. (online and "ONLINE" or "OFFLINE") .. " | " .. profile,
-        (online and agent) and t.good or (online and t.warn or t.muted),t.bg,w)
-      y = y + 1
-
       local source=tostring((agent and agent.source) or state.source or "-")
-      draw.text(target,x,y,"Source: "..source,t.muted,t.bg,w)
-      y = y + 1
-
-      if state.dimension and state.dimension ~= "" then
-        local pos=tostring(state.dimension).." "
-          ..tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
-        draw.text(target,x,y,"Pos: "..pos,t.muted,t.bg,w)
-        y = y + 1
+      draw.text(target,x+2,y+2,"Source: "..source,t.muted,t.surface,math.max(1,w-4))
+      if state.dimension and state.dimension~="" then
+        local pos=tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
+        draw.text(target,x+2,y+3,"Pos: "..pos,t.muted,t.surface,math.max(1,w-4))
       end
     end
-    y = y + 1
+    y=y+6
 
     if immune then
-      draw.text(target, x, y, "Ce poste est protege par la politique operateur.", t.muted, t.bg, w)
+      ccui.panel(target,x,y,w,4,t,{accent=t.good,title="Protection operateur",
+        subtitle="Ce poste ne peut pas etre infecte."})
       return
     end
 
     if not infected then
-      draw.button(target, x, y, math.min(18, w), "INFECTER MALCRAFT", colors.white, colors.red)
-      self:addButton("ghost:install", x, y, math.min(18, w), 1, function()
-        self:ghostInstall()
-        self:render()
+      ccui.button(target,x,y,18,"INFECTER",t,{danger=true})
+      self:addButton("ghost:install",x,y,18,1,function()
+        self:ghostInstall();self:render()
       end)
       return
     end
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "ECRAN DISTANT", colors.white, colors.red)
-    self:addButton("ghost:desktop", x, y, bw, 1, function()
-      self:openMalcraftDesktop()
+    local bw=math.max(10,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"ECRAN DISTANT",t,{danger=true,compact=true})
+    self:addButton("ghost:desktop",x,y,bw,1,function() self:openMalcraftDesktop() end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"OUTILS",t,{compact=true})
+    self:addButton("ghost:tools",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "OUTILS", colors.white, t.panel)
-      self:addButton("ghost:tools", x + bw + 2, y, bw, 1, function()
-        self.linksecView = "ghost_tools"
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw,
-      spread and "PROPAGATION ON" or "PROPAGATION OFF",
-      colors.white, spread and colors.red or t.panel)
-    self:addButton("ghost:spread", x, y, bw, 1, function()
-      self:ghostToggleSpread()
-      self:render()
+    ccui.button(target,x,y,bw,spread and "PROPAGATION ON" or "PROPAGATION OFF",t,{
+      danger=spread,selected=spread,compact=true
+    })
+    self:addButton("ghost:spread",x,y,bw,1,function()
+      self:ghostToggleSpread();self:render()
     end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "SYSTEME", colors.white, colors.red)
-      self:addButton("ghost:system", x + bw + 2, y, bw, 1, function()
-        self.linksecView = "ghost_system"
-        self:render()
-      end)
-    end
-
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"SYSTEME",t,{danger=true,compact=true})
+    self:addButton("ghost:system",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self.linksecView="ghost_system";self:render()
+    end)
     return
   end
 
   if self.linksecView == "ghost_tools" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:tools:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< CIBLE",t,{compact=true})
+    self:addButton("ghost:tools:back",x,y,11,1,function()
+      self.linksecView="ghost";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Outils de la cible", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Outils cible",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Peripheriques exposes par CC:Tweaked",t.muted,t.bg,w)
+    y=y+3
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "PERIPHERIQUES", colors.white, t.panel)
-    self:addButton("ghost:devices", x, y, bw, 1, function()
-      self:ghostLoadDevices()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "INVENTAIRES", colors.white, t.panel)
-      self:addButton("ghost:inventories", x + bw + 2, y, bw, 1, function()
-        self:ghostInventoryScan()
-        self:render()
-      end)
+    local bw=math.max(10,math.floor((w-1)/2))
+    local actions={
+      {"PERIPHERIQUES","ghost:devices",function() self:ghostLoadDevices() end},
+      {"INVENTAIRES","ghost:inventories",function() self:ghostInventoryScan() end},
+      {"REDSTONE","ghost:redstone",function() self:ghostLoadRedstone() end},
+      {"DISQUES","ghost:drives",function() self:ghostLoadDrives() end}
+    }
+    for i=1,#actions,2 do
+      local left=actions[i]
+      local right=actions[i+1]
+      ccui.button(target,x,y,bw,left[1],t,{compact=true})
+      self:addButton(left[2],x,y,bw,1,function() left[3]();self:render() end)
+      if right then
+        ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),right[1],t,{compact=true})
+        self:addButton(right[2],x+bw+1,y,math.max(10,w-bw-1),1,function()
+          right[3]();self:render()
+        end)
+      end
+      y=y+2
     end
 
-    y = y + 2
-
-    draw.button(target, x, y, bw, "REDSTONE", colors.white, t.panel)
-    self:addButton("ghost:redstone", x, y, bw, 1, function()
-      self:ghostLoadRedstone()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "DISQUES", colors.white, t.panel)
-      self:addButton("ghost:drives", x + bw + 2, y, bw, 1, function()
-        self:ghostLoadDrives()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, math.min(18, w), "PC PROCHES / CABLE", colors.white, t.panel)
-    self:addButton("ghost:nearby", x, y, math.min(18, w), 1, function()
-      self:ghostLoadNearbyComputers()
-      self:render()
+    ccui.button(target,x,y,20,"PC PROCHES / CABLE",t,{compact=true})
+    self:addButton("ghost:nearby",x,y,20,1,function()
+      self:ghostLoadNearbyComputers();self:render()
     end)
     return
   end
 
   if self.linksecView == "ghost_system" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:system:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< CIBLE",t,{compact=true})
+    self:addButton("ghost:system:back",x,y,11,1,function()
+      self.linksecView="ghost";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Systeme distant PC #" .. tostring(self:malcraftTargetId() or "?"),
-      colors.red, t.bg, w)
-    y = y + 2
+    ccui.panel(target,x,y,w,4,t,{accent=t.danger,
+      title="Systeme distant PC #"..tostring(self:malcraftTargetId() or "?"),
+      subtitle="Actions d'alimentation et infection."})
+    y=y+5
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "ALLUMER", colors.white, t.good)
-    self:addButton("ghost:sys:on", x, y, bw, 1, function()
-      self:ghostPower("turn_on")
-      self:render()
+    local bw=math.max(10,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"ALLUMER",t,{primary=true,compact=true})
+    self:addButton("ghost:sys:on",x,y,bw,1,function()
+      self:ghostPower("turn_on");self:render()
     end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"REBOOT",t,{compact=true})
+    self:addButton("ghost:sys:reboot",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:ghostPower("reboot");self:render()
+    end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "REBOOT", colors.white, t.panel)
-      self:addButton("ghost:sys:reboot", x + bw + 2, y, bw, 1, function()
-        self:ghostPower("reboot")
-        self:render()
+    ccui.button(target,x,y,bw,"ARRET",t,{danger=true,compact=true})
+    self:addButton("ghost:sys:shutdown",x,y,bw,1,function()
+      self:ghostPower("shutdown");self:render()
+    end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"CRASH",t,{danger=true,compact=true})
+    self:addButton("ghost:sys:crash",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:ghostPower("crash");self:render()
+    end)
+    y=y+3
+
+    ccui.panel(target,x,y,w,5,t,{title="Malcraft",
+      subtitle="Nettoyage et propagation vers une autre cible."})
+    ccui.button(target,x+2,y+3,bw,"NETTOYER",t,{compact=true})
+    self:addButton("ghost:sys:clean",x+2,y+3,bw,1,function()
+      self:ghostClean();self:render()
+    end)
+    if x+3+bw<=x+w-1 then
+      ccui.button(target,x+3+bw,y+3,math.min(bw,w-bw-4),"CONTAMINER",t,{danger=true,compact=true})
+      self:addButton("ghost:sys:spreadto",x+3+bw,y+3,math.min(bw,w-bw-4),1,function()
+        self:ghostSpreadTo();self:render()
       end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "ARRET", colors.white, colors.red)
-    self:addButton("ghost:sys:shutdown", x, y, bw, 1, function()
-      self:ghostPower("shutdown")
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "CRASH", colors.white, colors.red)
-      self:addButton("ghost:sys:crash", x + bw + 2, y, bw, 1, function()
-        self:ghostPower("crash")
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "NETTOYER", colors.white, t.panel)
-    self:addButton("ghost:sys:clean", x, y, bw, 1, function()
-      self:ghostClean()
-      self:render()
-    end)
-
-    y = y + 2
-
-    draw.button(target, x, y, math.min(18, w), "CONTAMINER PC", colors.white, colors.red)
-    self:addButton("ghost:sys:spreadto", x, y, math.min(18, w), 1, function()
-      self:ghostSpreadTo()
-      self:render()
-    end)
-
-    if y + 2 < l.h then
-      draw.text(target, x, y + 2,
-        "Malcraft Bridge peut rallumer un Computer infecte charge, sans modem.",
-        t.muted, t.bg, w)
     end
     return
   end
