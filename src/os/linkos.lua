@@ -2380,11 +2380,19 @@ function LinkOS:renderHacker(target, l)
     if infected then
       local agent = self.ghostState and self.ghostState.agent_status or nil
       local online = state.online == true
-      local profile = not online and "HORS LIGNE"
-        or (agent and agent.linkos_installed == true and "LINKOS + ROM" or "ROM SEUL")
+      local profile
+      if not online then
+        profile = "HORS LIGNE"
+      elseif not agent then
+        profile = "AGENT MUET"
+      elseif agent.linkos_installed == true then
+        profile = "LINKOS + ROM"
+      else
+        profile = "ROM SEUL"
+      end
       draw.text(target,x,y,
         "Etat: " .. (online and "ONLINE" or "OFFLINE") .. " | " .. profile,
-        online and t.good or t.muted,t.bg,w)
+        (online and agent) and t.good or (online and t.warn or t.muted),t.bg,w)
       y = y + 1
 
       local source=tostring((agent and agent.source) or state.source or "-")
