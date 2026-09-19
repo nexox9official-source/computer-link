@@ -700,6 +700,16 @@ function LinkOS:renderHome(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
 
+  shellui.wallpaper(
+    target,
+    1,
+    3,
+    l.w,
+    math.max(1, (l.mode == "compact" and l.h - 3 or l.h - 5)),
+    prefs.get("wallpaper", "grid"),
+    t.accent
+  )
+
   draw.text(target, x, y, "Bureau LinkOS", t.text, t.bg, w)
 
   if l.mode ~= "compact" and w >= 24 then
@@ -3332,6 +3342,11 @@ end
 function LinkOS:render()
   if not self.active then return end
 
+  if not shellui.allowed(self.app, self:isOperatorUI()) then
+    self.app = "home"
+    prefs.set("last_app", "home")
+  end
+
   if self:renderHijackState() then
     return
   end
@@ -3371,6 +3386,7 @@ function LinkOS:render()
   end
 
   self:renderNotice(target, l)
+  self:renderShellOverlays(target, l)
 
   if target.setCursorBlink then
     pcall(target.setCursorBlink, false)
@@ -3392,18 +3408,37 @@ function LinkOS:hit(x, y)
 end
 
 function LinkOS:handleKey(key)
-  if key == keys.f1 then self:openApp("home")
-  elseif key == keys.f2 then self:openApp("messages")
-  elseif key == keys.f3 then self:openApp("network")
-  elseif key == keys.f4 then self:openApp("security")
-  elseif key == keys.f5 then self:openApp("files")
-  elseif key == keys.f6 then self:openApp("settings")
-  elseif key == keys.f7 then self:openApp("contacts")
+  if key == keys.f1 then
+    self:openApp("home")
+  elseif key == keys.f2 then
+    self:openApp("messages")
+  elseif key == keys.f3 then
+    self:openApp("network")
+  elseif key == keys.f4 then
+    self:openApp("security")
+  elseif key == keys.f5 then
+    self:openApp("files")
+  elseif key == keys.f6 then
+    self:openApp("settings")
+  elseif key == keys.f7 then
+    self:openApp("contacts")
   elseif key == keys.f8 and self:isOperatorUI() then
     self:openHackerTerminal()
+  elseif key == keys.f9 then
+    self:cycleApp(1)
+  elseif key == keys.f10 then
+    self:toggleStartMenu()
+  elseif key == keys.f11 then
+    self:toggleQuickPanel()
   elseif key == keys.enter and self.app == "hacker" and self:isOperatorUI() then
     self:openHackerTerminal()
-  elseif key == keys.escape then self:openApp("home")
+  elseif key == keys.escape then
+    if self.startMenuOpen or self.quickPanelOpen then
+      self.startMenuOpen = false
+      self.quickPanelOpen = false
+    else
+      self:openApp("home")
+    end
   elseif key == keys.r then
     self:render()
   end
@@ -3469,7 +3504,13 @@ function LinkOS:uiLoop()
 
     elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
       self.lastActivity = os.clock()
-      self:hit(b, c)
+
+      if a == 2 and not self.startMenuOpen then
+        self:toggleQuickPanel()
+      else
+        self:hit(b, c)
+      end
+
       self:render()
 
     elseif event == "monitor_touch" then
