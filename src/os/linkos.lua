@@ -1,5 +1,6 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
+local fluent = dofile("/computer-link/src/ui/fluent.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local shellui = dofile("/computer-link/src/ui/shell.lua")
@@ -104,22 +105,13 @@ function LinkOS.new()
 end
 
 function LinkOS:theme()
-  local accentName = prefs.get("accent", "cyan")
-  local accent = ACCENTS[accentName] or colors.cyan
-
-  return {
-    bg = colors.black,
-    panel = colors.black,
-    panel2 = colors.gray,
-    text = colors.white,
-    muted = colors.lightGray,
-    accent = accent,
-    good = colors.lime,
-    warn = colors.orange,
-    danger = colors.red,
-    sidebar = colors.black,
-    button = colors.gray
-  }
+  local t = fluent.theme(prefs.get("accent", "blue"))
+  -- Compatibility aliases for the application renderers while the v0.19
+  -- redesign migrates them to the Fluent component vocabulary.
+  t.panel = t.surface
+  t.panel2 = t.elevated
+  t.sidebar = t.surface2
+  return t
 end
 
 function LinkOS:isOperatorUI()
@@ -131,6 +123,13 @@ end
 function LinkOS:refreshDisplays()
   local selected = prefs.get("display_id")
   self.displays, self.active = display.refresh(selected)
+
+  for _, d in ipairs(self.displays or {}) do
+    if d.color and d.target then fluent.applyPalette(d.target) end
+  end
+  if self.native and self.native.isColor and self.native.isColor() then
+    fluent.applyPalette(self.native)
+  end
 
   if self.active and self.active.id ~= selected then
     prefs.set("display_id", self.active.id)
@@ -145,7 +144,11 @@ end
 
 function LinkOS:button(target, id, x, y, w, label, callback, selected)
   local t = self:theme()
-  draw.button(target, x, y, w, label, t.text, selected and t.accent or t.button, false)
+  fluent.button(target, x, y, w, label, {
+    active = selected == true,
+    primary = selected == true,
+    accent = t.accent
+  })
   self:addButton(id, x, y, w, 1, callback)
 end
 
