@@ -56,28 +56,32 @@ function M.install(OS,shellui,prefs)
     end
     return out
   end
-  function OS:focusWindow(win)
-    local list=self:workspace()
-    for i,v in ipairs(list) do if v==win then table.remove(list,i);break end end
-    list[#list+1]=win; win.minimized=false; self.app=win.id
+  function OS:saveWorkspaceSession()
+    if self.restoringSession then return end
+    local windows={}
+    for _,win in ipairs(self:workspace()) do
+      windows[#windows+1]={
+        id=win.id,
+        minimized=win.minimized==true,
+        maximized=win.maximized==true,
+        scroll=tonumber(win.scroll) or 0
+      }
+    end
+    prefs.set('workspace_session',{
+      windows=windows,
+      active=self.app or 'home'
+    })
   end
-  function OS:openApp(id)
+
+  function OS:createWindow(id)
     local list=self:workspace()
-    self.startMenuOpen,self.quickPanelOpen=false,false
-    self.contextMenu=nil
-    if id=='home' then
-      for _,v in ipairs(list) do v.minimized=true end
-      self.app='home'; self:render(); return
-    end
-    if not shellui.allowed(id,self:isOperatorUI()) then return end
+    if not shellui.allowed(id,self:isOperatorUI()) then return nil end
 
-    if id=='store' and not self.storeCatalogTried then
-      self.storeCatalogTried=true
-      pcall(packages.refreshCatalog)
+    for _,win in ipairs(list) do
+      if win.id==id then return win end
     end
+    if not self.active or not self.active.target then return nil end
 
-    self:recordRecentApp(id)
-    for _,v in ipairs(list) do if v.id==id then self:focusWindow(v); self:render(); return end end
     local w,h=self.active.target.getSize()
     local offset=#list%4
     local defaultW=math.min(w-2,math.max(24,math.floor(w*0.82)))
@@ -92,33 +96,186 @@ function M.install(OS,shellui,prefs)
       defaultW=math.min(w,math.max(24,pref[1]))
       defaultH=math.min(h-1,math.max(8,pref[2]))
     end
-    local win={id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,data={},scroll=0}
+
+    local win={
+      id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,
+      data={},scroll=0,minimized=false,maximized=false
+    }
+
     local saved=prefs.get('window_geometry',{})[id]
     if type(saved)=='table' and type(saved.x)=='number' and type(saved.y)=='number'
       and type(saved.w)=='number' and type(saved.h)=='number' then
       win.x,win.y,win.w,win.h=saved.x,saved.y,saved.w,saved.h
     end
+
     if id:sub(1,4)=='pkg:' then
-      local ok,app=pcall(dofile,packages.path(id:sub(5)))
+      local packageId=id:sub(5)
+      if not packages.installed(packageId) then return nil end
+      local ok,app=pcall(dofile,packages.path(packageId))
       if not ok or type(app)~='table' or type(app.draw)~='function' then
-        self:setNotice('Application invalide: '..tostring(app),colors.red); self:render(); return
+        self:setNotice('Application invalide: '..tostring(app),colors.red)
+        return nil
       end
       win.program=app
     end
-    list[#list+1]=win; self.app=id
+
+    list[#list+1]=win
+    return win
+  end
+
+  function OS:focusWindow(win,quiet)
+    local list=self:workspace()
+    for i,v in ipairs(list) do
+      if v==win then table.remove(list,i);break end
+    end
+    list[#list+1]=win
+    win.minimized=false
+    self.app=win.id
+    self.showDesktopSnapshot=nil
+    if not quiet then self:saveWorkspaceSession() end
+  end
+
+  function OS:restoreWorkspaceSession()
+    if self.sessionRestored then return end
+    self.sessionRestored=true
+    if not prefs.get('restore_session',true) then return end
+
+    local session=prefs.get('workspace_session',{})
+    if type(session)~='table' or type(session.windows)~='table' then return end
+
+    self.restoringSession=true
+    for _,saved in ipairs(session.windows) do
+      if type(saved)=='table' and type(saved.id)=='string'
+        and shellui.allowed(saved.id,self:isOperatorUI()) then
+        local win=self:createWindow(saved.id)
+        if win then
+          win.minimized=saved.minimized==true
+          win.maximized=saved.maximized==true
+          win.scroll=math.max(0,tonumber(saved.scroll) or 0)
+        end
+      end
+    end
+
+    self.app='home'
+    local requested=tostring(session.active or 'home')
+    for _,win in ipairs(self:workspace()) do
+      if win.id==requested and not win.minimized then
+        self.app=win.id
+      end
+    end
+    if self.app=='home' then
+      for _,win in ipairs(self:workspace()) do
+        if not win.minimized then self.app=win.id end
+      end
+    end
+    self.restoringSession=false
+  end
+
+  function OS:cycleWindow(delta)
+    local list=self:workspace()
+    if #list==0 then return false end
+    delta=tonumber(delta) or 1
+
+    local current=0
+    for i,win in ipairs(list) do
+      if win.id==self.app then current=i;break end
+    end
+    local index=((current-1+delta)%#list)+1
+    self:focusWindow(list[index])
+    return true
+  end
+
+  function OS:toggleShowDesktop()
+    local list=self:workspace()
+    if #list==0 then self.app='home';return end
+
+    if self.showDesktopSnapshot then
+      local snapshot=self.showDesktopSnapshot
+      self.showDesktopSnapshot=nil
+      for _,win in ipairs(list) do
+        local state=snapshot.states[win.id]
+        win.minimized=state==nil and win.minimized or state
+      end
+      self.app='home'
+      if snapshot.active and snapshot.active~='home' then
+        for _,win in ipairs(list) do
+          if win.id==snapshot.active and not win.minimized then
+            self.app=win.id
+            break
+          end
+        end
+      end
+    else
+      local states={}
+      for _,win in ipairs(list) do
+        states[win.id]=win.minimized==true
+        win.minimized=true
+      end
+      self.showDesktopSnapshot={states=states,active=self.app}
+      self.app='home'
+    end
+    self:saveWorkspaceSession()
+  end
+
+  function OS:openApp(id)
+    local list=self:workspace()
+    self.startMenuOpen,self.quickPanelOpen=false,false
+    self.contextMenu=nil
+
+    if id=='home' then
+      self:toggleShowDesktop()
+      self:render()
+      return
+    end
+    if not shellui.allowed(id,self:isOperatorUI()) then return end
+
+    if id=='store' and not self.storeCatalogTried then
+      self.storeCatalogTried=true
+      pcall(packages.refreshCatalog)
+    end
+
+    self:recordRecentApp(id)
+    for _,win in ipairs(list) do
+      if win.id==id then
+        self:focusWindow(win)
+        self:render()
+        return
+      end
+    end
+
+    local win=self:createWindow(id)
+    if not win then
+      self:render()
+      return
+    end
+    self:focusWindow(win,true)
     if id=='messages' then self.service:markRead() end
+    self:saveWorkspaceSession()
     self:render()
   end
+
   function OS:closeWindow(win)
     if win.id=='notes' and self.noteDocument and self.noteDocument.dirty then
       local answer=self:prompt('Document modifie','OUI: sauver / NON: abandonner / Echap: annuler'):lower()
-      if answer=='oui' then self:saveNote();if self.noteDocument.dirty then return end
-      elseif answer~='non' then return end
+      if answer=='oui' then
+        self:saveNote()
+        if self.noteDocument.dirty then return end
+      elseif answer~='non' then
+        return
+      end
     end
+
     if win.id=='notes' then self.noteDocument=nil end
-    for i,v in ipairs(self:workspace()) do if v==win then table.remove(self.windows,i);break end end
+    for i,v in ipairs(self:workspace()) do
+      if v==win then table.remove(self.windows,i);break end
+    end
+
+    self.showDesktopSnapshot=nil
     self.app='home'
-    for _,v in ipairs(self.windows) do if not v.minimized then self.app=v.id end end
+    for _,v in ipairs(self.windows) do
+      if not v.minimized then self.app=v.id end
+    end
+    self:saveWorkspaceSession()
   end
   function OS:desktopApps()
     local items,seen={},{}
