@@ -330,6 +330,10 @@ function LinkOS:disablePassword()
   self:render()
 end
 
+function LinkOS:securityEnabled()
+  return security.enabled()
+end
+
 function LinkOS:lockSession()
   if not security.enabled() then return end
   self.sessionLocked = true
