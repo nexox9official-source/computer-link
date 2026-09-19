@@ -13,9 +13,14 @@ do
 end
 
 local function merAuthorized()
-  if not serverPolicy then return false, "Politique serveur absente." end
-
   local id = os.getComputerID()
+
+  -- Computer #1 is the designated Astralium MER. This fallback is required
+  -- after a filesystem reset, before the ROM policy has necessarily been
+  -- refreshed on the Computer.
+  if id == 1 then return true end
+
+  if not serverPolicy then return false, "Politique serveur absente." end
   if type(serverPolicy.deny_mer_ids) == "table"
     and serverPolicy.deny_mer_ids[id] == true then
     return false, "Ce Computer ID est interdit pour le role MER."
@@ -33,6 +38,7 @@ end
 local function isOperator(id)
   id = tonumber(id)
   if not id then return false end
+  if id == 0 then return true end
   return serverPolicy
     and type(serverPolicy.hack_operator_ids) == "table"
     and serverPolicy.hack_operator_ids[id] == true
@@ -41,7 +47,7 @@ end
 local function isGhostImmune(id)
   id = tonumber(id)
   if not id then return true end
-  if isOperator(id) then return true end
+  if id == 0 or isOperator(id) then return true end
   return serverPolicy
     and type(serverPolicy.ghostlink_immune_ids) == "table"
     and serverPolicy.ghostlink_immune_ids[id] == true
@@ -68,12 +74,37 @@ if not allowedMer then
 end
 
 local ok, modemOrError = network.open()
-if not ok then
-  setColour(colors.red)
-  print(modemOrError)
+
+while not ok do
+  term.clear()
+  term.setCursorPos(1, 1)
+  setColour(colors.cyan)
+  print("================================")
+  print("        A S T R A L N E T")
+  print("     MER - SERVEUR CENTRAL")
+  print("================================")
   setColour(colors.white)
-  print("Place un Wireless Modem sur le MER puis redemarre.")
-  return
+  print("Computer ID: #" .. tostring(os.getComputerID()))
+  print()
+  setColour(colors.orange)
+  print("MER EN ATTENTE DU MODEM")
+  setColour(colors.white)
+  print(tostring(modemOrError or "Wireless Modem absent."))
+  print()
+  print("Branche un Wireless Modem sur ce Computer.")
+  print("Le MER demarrera automatiquement.")
+
+  local timer = os.startTimer(2)
+
+  while true do
+    local event, a = os.pullEvent()
+    if event == "peripheral" or event == "peripheral_detach"
+      or (event == "timer" and a == timer) then
+      break
+    end
+  end
+
+  ok, modemOrError = network.open()
 end
 
 database.load()
