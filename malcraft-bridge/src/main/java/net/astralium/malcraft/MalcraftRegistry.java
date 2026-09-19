@@ -29,6 +29,7 @@ final class MalcraftRegistry {
     private static final Map<Integer, HostRecord> INFECTED = new ConcurrentHashMap<>();
     private static final Map<String, PendingRequest> PENDING = new ConcurrentHashMap<>();
     private static final Map<Integer, ScreenFrame> SCREENS = new ConcurrentHashMap<>();
+    private static final long METADATA_SAVE_INTERVAL_MS = 15_000L;
 
     private static MinecraftServer currentServer;
     private static boolean loaded;
@@ -37,13 +38,39 @@ final class MalcraftRegistry {
 
     static void attach(IComputerSystem computer) {
         ensureLoaded(computer);
-        LIVE.put(computer.getID(), computer);
+
+        int id = computer.getID();
+        var record = INFECTED.get(id);
+
+        // If a Computer block was broken and a replacement at the exact same
+        // Minecraft position received a new CC:Tweaked ID, migrate the
+        // infection record. This is intentionally limited to an offline,
+        // infected host at the same block position.
+        if (record == null && !isOperatorId(id)) {
+            var migrated = findOfflineInfectedAt(computer);
+            if (migrated != null && migrated.id != id) {
+                int oldId = migrated.id;
+                INFECTED.remove(oldId);
+                migrated.id = id;
+                migrated.source = "replaced:" + oldId + ":" + safe(migrated.source);
+                record = migrated;
+                INFECTED.put(id, migrated);
+                save(computer);
+            }
+        }
+
+        LIVE.put(id, computer);
         touch(computer);
 
-        var record = INFECTED.get(computer.getID());
-        if (record != null && record.infected) {
+        record = INFECTED.get(id);
+        if (record != null) {
             try {
-                computer.queueEvent("malcraft_bus_state", true, record.spread, safe(record.source));
+                computer.queueEvent(
+                    "malcraft_bus_state",
+                    record.infected,
+                    record.infected && record.spread,
+                    safe(record.source)
+                );
             } catch (RuntimeException ignored) {
             }
         }
@@ -56,6 +83,8 @@ final class MalcraftRegistry {
         var record = INFECTED.get(id);
         if (record != null) {
             record.online = false;
+            record.lastSeen = System.currentTimeMillis();
+            save(computer);
         }
     }
 
@@ -63,16 +92,22 @@ final class MalcraftRegistry {
         ensureLoaded(computer);
 
         var record = INFECTED.get(computer.getID());
-        if (record == null || !record.infected) return;
+        if (record == null) return;
 
+        long now = System.currentTimeMillis();
         record.online = true;
-        record.lastSeen = System.currentTimeMillis();
+        record.lastSeen = now;
         record.label = computer.getLabel();
         record.dimension = computer.getLevel().dimension().location().toString();
         var pos = computer.getPosition();
         record.x = pos.getX();
         record.y = pos.getY();
         record.z = pos.getZ();
+
+        if (now - record.lastPersisted >= METADATA_SAVE_INTERVAL_MS) {
+            record.lastPersisted = now;
+            save(computer);
+        }
     }
 
     static boolean isInfected(IComputerSystem computer) {
@@ -152,6 +187,19 @@ final class MalcraftRegistry {
         return true;
     }
 
+    static boolean acknowledgeClean(IComputerSystem computer) {
+        ensureLoaded(computer);
+
+        int id = computer.getID();
+        var record = INFECTED.get(id);
+        if (record == null || record.infected) return false;
+
+        INFECTED.remove(id);
+        SCREENS.remove(id);
+        save(computer);
+        return true;
+    }
+
     static boolean setSpread(IComputerSystem caller, int targetId, boolean enabled) {
         ensureLoaded(caller);
         if (!isOperator(caller)) return false;
@@ -181,15 +229,7 @@ final class MalcraftRegistry {
 
         record.spread = spread;
         if (source != null && !source.isBlank()) record.source = source;
-        record.online = true;
-        record.lastSeen = System.currentTimeMillis();
-        record.label = computer.getLabel();
-        record.dimension = computer.getLevel().dimension().location().toString();
-
-        var pos = computer.getPosition();
-        record.x = pos.getX();
-        record.y = pos.getY();
-        record.z = pos.getZ();
+        touch(computer);
         return true;
     }
 
@@ -396,6 +436,20 @@ final class MalcraftRegistry {
         return true;
     }
 
+    private static HostRecord findOfflineInfectedAt(IComputerSystem computer) {
+        String dimension = computer.getLevel().dimension().location().toString();
+        var pos = computer.getPosition();
+
+        for (var record : INFECTED.values()) {
+            if (!record.infected || LIVE.containsKey(record.id)) continue;
+            if (!Objects.equals(record.dimension, dimension)) continue;
+            if (record.x == pos.getX() && record.y == pos.getY() && record.z == pos.getZ()) {
+                return record;
+            }
+        }
+        return null;
+    }
+
     private static boolean canSpread(int callerId) {
         if (isOperatorId(callerId)) return true;
 
@@ -441,7 +495,13 @@ final class MalcraftRegistry {
         try {
             String json = Files.readString(path, StandardCharsets.UTF_8);
             Map<Integer, HostRecord> stored = GSON.fromJson(json, STORE_TYPE);
-            if (stored != null) INFECTED.putAll(stored);
+            if (stored != null) {
+                for (var record : stored.values()) {
+                    record.online = false;
+                    record.lastPersisted = 0L;
+                }
+                INFECTED.putAll(stored);
+            }
         } catch (Exception ignored) {
         }
     }
@@ -471,13 +531,14 @@ final class MalcraftRegistry {
         boolean spread = true;
         String source = "";
         long infectedAt;
-        transient long lastSeen;
+        long lastSeen;
+        String label = "";
+        String dimension = "";
+        int x;
+        int y;
+        int z;
         transient boolean online;
-        transient String label = "";
-        transient String dimension = "";
-        transient int x;
-        transient int y;
-        transient int z;
+        transient long lastPersisted;
 
         HostRecord(int id) {
             this.id = id;
