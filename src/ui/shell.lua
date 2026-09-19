@@ -262,6 +262,14 @@ function shellui.install(OS, prefs)
     self:button(target,"launcher:settings",x+7,footer,10,"PARAMETRES",function()
       self:openApp("settings")
     end)
+
+    if w>=36 and self.securityEnabled and self:securityEnabled() then
+      self:button(target,"launcher:lock",x+18,footer,7,"LOCK",function()
+        self.startMenuOpen=false
+        self:lockSession()
+      end)
+    end
+
     self:button(target,"launcher:power",x+w-9,footer,8,"REBOOT",function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
@@ -314,6 +322,12 @@ function shellui.install(OS, prefs)
 
     local by=footer
     self:button(target,"quick:settings",x+2,by,10,"SETTINGS",function() self:openApp("settings") end)
+    if w>=34 and self.securityEnabled and self:securityEnabled() then
+      self:button(target,"quick:lock",x+13,by,7,"LOCK",function()
+        self.quickPanelOpen=false
+        self:lockSession()
+      end)
+    end
     self:button(target,"quick:desktop",x+w-11,by,9,"BUREAU",function() self:openApp("home") end)
   end
 
