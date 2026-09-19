@@ -296,6 +296,7 @@ function M.install(OS,shellui,prefs)
 
   function OS:render()
     if self.dialogOpen or not self.active then return end
+    local t=self:theme()
     local list=self:workspace()
     if self:renderHijackState() or self:renderUserLock() then return end
 
