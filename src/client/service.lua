@@ -342,7 +342,12 @@ function service:ghostStatus(targetId)
         spread = found and found.spread == true or false,
         online = found and found.online == true or false,
         source = found and found.source or nil,
-        label = found and found.label or nil
+        label = found and found.label or nil,
+        last_seen = found and found.last_seen or nil,
+        dimension = found and found.dimension or nil,
+        x = found and found.x or nil,
+        y = found and found.y or nil,
+        z = found and found.z or nil
       },
       immune = targetId == 0,
       transport = "malcraft_bridge"
