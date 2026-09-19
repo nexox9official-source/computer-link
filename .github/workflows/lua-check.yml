@@ -56,7 +56,11 @@ jobs:
         run: |
           set -euo pipefail
           for frame in \
+            linkos-desktop.frame \
             linkos-launcher.frame \
+            linkos-system-panel.frame \
+            linkos-context.frame \
+            linkos-lock.frame \
             linkos-store.frame \
             linkos-settings.frame \
             linkos-files.frame \
