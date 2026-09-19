@@ -1,19 +1,25 @@
 # Computer Link — LinkOS / AstralNet
 
-## Desktop 0.17 — session & windowing
+## LinkOS 0.18 — Malcraft / GhostLink rebuild
 
-LinkOS 0.17 ajoute une vraie session de travail persistante : restauration des apps
-ouvertes et de leurs etats, Alt+Tab avec switcher visuel, bouton Afficher le bureau,
-Ctrl+D, F12 simplifie et persistance des actions de fenetre importantes.
+LinkOS 0.18 reconstruit le gameplay Malcraft autour de l'agent ROM CC:Tweaked et de
+Malcraft Bridge 0.11. Une cible n'a plus besoin d'avoir installe LinkOS ni meme un
+modem pour etre decouverte par le Bridge, contaminee et controlee dans le serveur.
 
-Cette version corrige aussi une ancienne duplication du renderer Fichiers : le nouvel
-Explorateur 0.16 est maintenant l'unique implementation active en jeu.
+La contamination par disque persiste apres retrait du disque, l'etat infecte survit
+aux redemarrages, la derniere position est conservee et une machine infectee
+remplacee au meme bloc peut recuperer l'infection avec son nouvel ID.
 
-Voir [le guide 0.17](docs/DESKTOP-0.17.md) pour la restauration de session, les
-raccourcis de fenetres, Alt+Tab, Afficher le bureau et la validation.
+Le nettoyage distant hors-ligne utilise maintenant un tombstone serveur applique
+avant le scan des carriers, afin qu'un disque encore insere ne puisse pas annuler
+le nettoyage au prochain boot.
 
-La couche graphique reste une implementation propre a Computer Link, inspiree de
-bons patterns vus dans LevelOS, OneOS et Opus sans reprendre leur code.
+LinkSec fait de MALCRAFT son chemin principal et garde SCAN LINKOS comme mode
+secondaire. Voir [le guide 0.18](docs/MALCRAFT-0.18.md) pour l'architecture,
+les cas ROM-only, la persistance, le controle distant et l'installation serveur.
+
+Les fonctions de bureau/session de 0.17 restent disponibles ; voir aussi
+[le guide Desktop 0.17](docs/DESKTOP-0.17.md).
 
 ## Interface 0.13.0
 
