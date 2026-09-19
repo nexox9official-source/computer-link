@@ -3081,7 +3081,7 @@ function LinkOS:listFiles(path)
   return entries
 end
 
-function LinkOS:renderFiles(target, l)
+function LinkOS:renderFiles(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
@@ -3091,137 +3091,250 @@ function LinkOS:renderFiles(target, l)
     if name:find("[/\\]") or name:find("..",1,true) then return nil end
     return name
   end
-  local function childPath(name) return fs.combine(self.filePath,safeName(name) or "") end
 
-  fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
+  local function childPath(name)
+    return fs.combine(self.filePath,safeName(name) or "")
+  end
+
+  local function fileMeta(name,isDir)
+    if isDir then return "files","Dossier" end
+    local ext=tostring(name):match("%.([^%.]+)$")
+    ext=ext and ext:lower() or ""
+    if ext=="lua" then return "terminal","Code Lua" end
+    if ext=="txt" or ext=="md" or ext=="log" then return "notes","Document" end
+    if ext=="json" or ext=="cfg" or ext=="conf" then return "settings","Configuration" end
+    return "notes","Fichier"
+  end
+
+  draw.text(target,x,y,"Explorateur",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Fichiers personnels",t.muted,t.bg,w)
   y=y+3
 
-  -- Explorer command bar + breadcrumb, based on familiar file-manager patterns.
+  local useSidebar=w>=60
+  local sideW=useSidebar and 14 or 0
+  local mainX=useSidebar and (x+sideW+1) or x
+  local mainW=useSidebar and (w-sideW-1) or w
+
+  if useSidebar then
+    ccui.panel(target,x,y,sideW,math.max(8,l.h-y-1),t,{title="Acces rapide"})
+    local sy=y+2
+
+    local function quick(label,path)
+      if sy>=l.h-2 then return end
+      local selected=self.filePath==path
+      ccui.button(target,x+1,sy,sideW-2,label,t,{selected=selected,compact=true})
+      self:addButton("file:quick:"..path,x+1,sy,sideW-2,1,function()
+        self.filePath=path
+        self.filePreview=nil
+        self.fileOffset=0
+      end)
+      sy=sy+1
+    end
+
+    quick("Accueil","/user")
+
+    local ok,items=pcall(fs.list,"/user")
+    if ok and type(items)=="table" then
+      table.sort(items)
+      local shown=0
+      for _,name in ipairs(items) do
+        local full=fs.combine("/user",name)
+        if fs.isDir(full) and not self:isHiddenFilePath(full) then
+          quick(name,full)
+          shown=shown+1
+          if shown>=5 then break end
+        end
+      end
+    end
+
+    if sy+2<l.h then
+      draw.text(target,x+1,sy+1,"Espace libre",t.muted,t.surface,sideW-2)
+      draw.text(target,x+1,sy+2,humanBytes(fs.getFreeSpace("/")),t.text,t.surface,sideW-2)
+    end
+  end
+
   local parts={{label="Accueil"}}
   if self.filePath~="/user" then
     local relative=self.filePath:sub(7)
     for part in relative:gmatch("[^/]+") do parts[#parts+1]={label=part} end
   end
-  ccui.breadcrumb(target,x,y,w-18,parts,t)
+
+  ccui.breadcrumb(target,mainX,y,math.max(8,mainW-18),parts,t)
+
   if self.filePath~="/user" then
-    self:button(target,"file:parent",x,y,3,"<",function()
+    ccui.button(target,mainX,y,3,"<",t,{compact=true})
+    self:addButton("file:parent",mainX,y,3,1,function()
       local parent="/"..fs.getDir(string.sub(self.filePath,2))
       if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
         parent="/user"
       end
       self.filePath=parent
       self.filePreview=nil
+      self.fileOffset=0
     end)
   end
-  draw.text(target,x+1,y+1,self.filePath,t.muted,t.bg,math.max(1,w-2))
 
-  if not self.filePreview and w>=32 then
-    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
+  if not self.filePreview and mainW>=28 then
+    ccui.button(target,mainX+mainW-17,y,8,"DOSSIER",t,{compact=true})
+    self:addButton("file:new-folder",mainX+mainW-17,y,8,1,function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
-      if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
+      if not name then return end
       local full=childPath(name)
-      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
+      if fs.exists(full) then self:setNotice("Ce nom existe deja.",t.warn);return end
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
-    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"TEXTE",function()
-      local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
-      if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
+
+    ccui.button(target,mainX+mainW-8,y,8,"TEXTE",t,{compact=true})
+    self:addButton("file:new-text",mainX+mainW-8,y,8,1,function()
+      local name=safeName(self:prompt("Nouveau fichier","Exemple: note.txt"))
+      if not name then return end
       local full=childPath(name)
-      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
+      if fs.exists(full) then self:setNotice("Ce nom existe deja.",t.warn);return end
       local handle=fs.open(full,"w")
       if not handle then self:setNotice("Creation impossible.",t.danger);return end
-      handle.write("");handle.close()
+      handle.write("")
+      handle.close()
       self:runNativeProgram("edit",full)
     end)
   end
+
+  draw.text(target,mainX+1,y+1,self.filePath,t.muted,t.bg,math.max(1,mainW-2))
   y=y+3
 
   if self.filePreview then
     local path=self.filePreview.path
-    fluent.card(target,x,y,w,3,{
-      bg=t.surface,accent=t.accent,title=fs.getName(path),subtitle=path,muted=t.muted
-    })
+    ccui.panel(target,mainX,y,mainW,3,t,{accent=t.accent,
+      title=fs.getName(path),subtitle=path})
     y=y+4
-    self:button(target,"file:back",x,y,8,"FERMER",function() self.filePreview=nil end)
-    if w>=21 then
-      self:button(target,"file:edit",x+9,y,8,"EDITER",function()
+
+    ccui.button(target,mainX,y,7,"FERMER",t,{compact=true})
+    self:addButton("file:back",mainX,y,7,1,function() self.filePreview=nil end)
+
+    if mainW>=18 then
+      ccui.button(target,mainX+8,y,7,"EDITER",t,{compact=true})
+      self:addButton("file:edit",mainX+8,y,7,1,function()
         self:runNativeProgram("edit",path)
         local handle=fs.open(path,"r")
         if handle then self.filePreview.content=handle.read(4096) or "";handle.close() end
       end)
     end
-    if w>=31 then
-      self:button(target,"file:rename",x+18,y,9,"RENOMMER",function()
+
+    if mainW>=28 then
+      ccui.button(target,mainX+16,y,9,"RENOMMER",t,{compact=true})
+      self:addButton("file:rename",mainX+16,y,9,1,function()
         local name=safeName(self:prompt("Renommer",fs.getName(path)))
-        if not name then self:setNotice("Nouveau nom invalide.",t.danger);return end
+        if not name then return end
         local dest=fs.combine(fs.getDir(path),name)
         if fs.exists(dest) then self:setNotice("Ce nom existe deja.",t.warn);return end
         local ok,err=pcall(fs.move,path,dest)
-        if ok then self.filePreview.path=dest;self:setNotice("Fichier renomme.",t.good)
-        else self:setNotice(tostring(err),t.danger) end
-      end)
-    end
-    if w>=40 then
-      fluent.button(target,x+28,y,10,"SUPPRIMER",{danger=true})
-      self:addButton("file:delete",x+28,y,10,1,function()
-        if self:confirm("Supprimer "..fs.getName(path).." ?") then
-          local ok,err=pcall(fs.delete,path)
-          if ok then self.filePreview=nil;self:setNotice("Fichier supprime.",t.warn)
-          else self:setNotice(tostring(err),t.danger) end
+        if ok then
+          self.filePreview.path=dest
+          self:setNotice("Fichier renomme.",t.good)
+        else
+          self:setNotice(tostring(err),t.danger)
         end
       end)
     end
+
+    if mainW>=39 then
+      ccui.button(target,mainX+26,y,10,"SUPPRIMER",t,{danger=true,compact=true})
+      self:addButton("file:delete",mainX+26,y,10,1,function()
+        if self:confirm("Supprimer "..fs.getName(path).." ?") then
+          local ok,err=pcall(fs.delete,path)
+          if ok then
+            self.filePreview=nil
+            self:setNotice("Fichier supprime.",t.warn)
+          else
+            self:setNotice(tostring(err),t.danger)
+          end
+        end
+      end)
+    end
+
     y=y+2
-    draw.fill(target,x,y,w,math.max(3,l.h-y-1),t.surface2)
-    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w-2))
+    draw.fill(target,mainX,y,mainW,math.max(3,l.h-y-1),t.surface2)
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,mainW-2))
     for i,line in ipairs(lines) do
       if y+i>=l.h-1 then break end
-      draw.text(target,x+1,y+i-1,line,t.text,t.surface2,w-2)
+      draw.text(target,mainX+1,y+i-1,line,t.text,t.surface2,mainW-2)
     end
     return
   end
 
   local entries,err=self:listFiles(self.filePath)
-  if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
-  if #entries==0 then
-    fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
-      subtitle="Utilise DOSSIER ou TEXTE pour commencer.",muted=t.muted})
+  if err then
+    draw.text(target,mainX,y,err,t.danger,t.bg,mainW)
     return
   end
 
-  draw.text(target,x,y,"NOM",t.muted,t.bg,math.max(1,w-14))
-  draw.text(target,math.max(x+1,x+w-9),y,"TAILLE",t.muted,t.bg,8)
-  y=y+1
-  for _,name in ipairs(entries) do
-    if y+1>=l.h-1 then break end
+  if #entries==0 then
+    ccui.panel(target,mainX,y,mainW,4,t,{accent=t.muted,title="Dossier vide",
+      subtitle="Utilise DOSSIER ou TEXTE."})
+    return
+  end
+
+  local listTop=y+1
+  local footer=l.h-2
+  local rowH=2
+  local pageSize=math.max(1,math.floor((footer-listTop)/rowH))
+  self.fileOffset=self.fileOffset or 0
+  local page=ccui.page(#entries,pageSize,self.fileOffset)
+  self.fileOffset=page.offset
+
+  draw.text(target,mainX,y,"NOM",t.muted,t.bg,math.max(1,mainW-14))
+  draw.text(target,math.max(mainX+1,mainX+mainW-9),y,"TAILLE",t.muted,t.bg,8)
+
+  for i=page.first,page.last do
+    local name=entries[i]
     local full=fs.combine(self.filePath,name)
-    if self:isHiddenFilePath(full) then break end
-    local isDir=fs.isDir(full)
-    local bg=t.surface2
-    draw.fill(target,x,y,w,2,bg)
-    fluent.drawMiniIcon(target,isDir and "files" or "notes",x+1,y,false,bg)
-    draw.text(target,x+5,y,name,isDir and t.accent or t.text,bg,math.max(1,w-16))
-    draw.text(target,x+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,w-16))
-    if not isDir then
-      local size=humanBytes(fs.getSize(full))
-      draw.text(target,math.max(x+5,x+w-#size-1),y,size,t.muted,bg,#size)
-    end
-    self:addButton("file:"..full,x,y,w,2,function()
-      if fs.isDir(full) then
-        self.filePath=full
-      else
-        local handle=fs.open(full,"r")
-        if handle then
-          local content=handle.read(4096) or ""
-          handle.close()
-          self.filePreview={path=full,content=content}
-        else
-          self:setNotice("Fichier non lisible.",t.danger)
-        end
+    if not self:isHiddenFilePath(full) then
+      local by=listTop+(i-page.first)*rowH
+      local isDir=fs.isDir(full)
+      local icon,kind=fileMeta(name,isDir)
+      local bg=t.surface2
+
+      draw.fill(target,mainX,by,mainW,2,bg)
+      fluent.drawMiniIcon(target,icon,mainX+1,by,false,bg)
+      draw.text(target,mainX+5,by,name,isDir and t.accent or t.text,bg,math.max(1,mainW-16))
+      draw.text(target,mainX+5,by+1,kind,t.muted,bg,math.max(1,mainW-16))
+
+      if not isDir then
+        local size=humanBytes(fs.getSize(full))
+        draw.text(target,math.max(mainX+5,mainX+mainW-#size-1),by,size,t.muted,bg,#size)
       end
+
+      self:addButton("file:"..full,mainX,by,mainW,2,function()
+        if fs.isDir(full) then
+          self.filePath=full
+          self.fileOffset=0
+        else
+          local handle=fs.open(full,"r")
+          if handle then
+            local content=handle.read(4096) or ""
+            handle.close()
+            self.filePreview={path=full,content=content}
+          else
+            self:setNotice("Fichier non lisible.",t.danger)
+          end
+        end
+      end)
+    end
+  end
+
+  ccui.scrollbar(target,mainX+mainW-1,listTop,math.max(1,footer-listTop),page,t)
+
+  if page.canUp then
+    ccui.button(target,mainX,footer,6,"< PREC",t,{compact=true})
+    self:addButton("file:prev",mainX,footer,6,1,function()
+      self.fileOffset=math.max(0,self.fileOffset-pageSize)
     end)
-    y=y+3
+  end
+  if page.canDown then
+    ccui.button(target,mainX+mainW-7,footer,7,"SUIV >",t,{compact=true})
+    self:addButton("file:next",mainX+mainW-7,footer,7,1,function()
+      self.fileOffset=self.fileOffset+pageSize
+    end)
   end
 end
 
