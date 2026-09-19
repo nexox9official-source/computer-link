@@ -10,9 +10,17 @@ function M.install(OS,shellui,prefs)
   function shellui.apps(operator)
     local apps=originalApps(operator)
     apps[#apps+1]={id='store',title='Applications',icon='+',short='STORE'}
+    local packageIcons={
+      tasks='T',stopwatch='C',units='=',devices='D',
+      calendar='J',system='I',redstone='R',gps='G'
+    }
     for _,p in ipairs(packages.catalog) do
       if packages.installed(p.id) then
-        apps[#apps+1]={id='pkg:'..p.id,title=p.title,icon='+',short=p.id}
+        apps[#apps+1]={
+          id='pkg:'..p.id,title=p.title,
+          icon=packageIcons[p.id] or '+',
+          short=string.upper(string.sub(p.id,1,5))
+        }
       end
     end
     return apps
@@ -329,15 +337,17 @@ function M.install(OS,shellui,prefs)
     local rightX=math.max(7,w-statusW+1)
     local taskX=7
     local available=math.max(0,rightX-taskX-1)
-    local visible=0
-    for _ in ipairs(list) do visible=visible+1 end
-    local taskW=visible>0 and math.max(5,math.min(9,math.floor(available/visible))) or 0
+    local total=#list
+    local labels=prefs.get('taskbar_labels',false)
+    local preferred=labels and 9 or 5
+    local taskW=total>0 and math.max(4,math.min(preferred,math.floor(available/math.max(1,total)))) or 0
+    local shown=0
 
     for _,win in ipairs(list) do
       if taskW<=0 or taskX+taskW-1>=rightX then break end
       local app=shellui.find(win.id,self:isOperatorUI())
       local label=(app and (app.icon or app.short) or win.id)
-      if taskW>=7 and app then label=label..' '..app.short end
+      if labels and taskW>=7 and app then label=label..' '..app.short end
       local active=(win.id==self.app and not win.minimized)
       draw.button(target,taskX,h,taskW,label,colors.white,active and t.accent or colors.black)
       self:addButton('wm:task:'..win.id,taskX,h,taskW,1,function()
@@ -349,6 +359,14 @@ function M.install(OS,shellui,prefs)
         end
       end)
       taskX=taskX+taskW
+      shown=shown+1
+    end
+
+    if shown<total and taskX<rightX then
+      local hidden=total-shown
+      local ow=math.min(4,rightX-taskX)
+      draw.button(target,taskX,h,ow,'+'..tostring(hidden),colors.white,colors.black)
+      self:addButton('wm:overflow',taskX,h,ow,1,function() self:toggleStartMenu() end)
     end
 
     local netLabel=self.service.online and 'ON' or 'OFF'
