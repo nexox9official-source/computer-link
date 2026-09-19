@@ -6,7 +6,11 @@ M.catalog = {
   {id='tasks',title='Mes taches',version='1.0',description='Checklist personnelle sauvegardee.'},
   {id='stopwatch',title='Chronometre',version='1.0',description='Chrono avec pause et remise a zero.'},
   {id='units',title='Convertisseur',version='1.0',description='Distance, temperature et temps.'},
-  {id='devices',title='Peripheriques',version='1.0',description='Inspecter les appareils et inventaires.'}
+  {id='devices',title='Peripheriques',version='1.0',description='Inspecter les appareils et inventaires.'},
+  {id='calendar',title='Calendrier',version='1.0',description='Heure et jour du monde Minecraft.'},
+  {id='system',title='Infos systeme',version='1.0',description='Etat local du Computer et de ses peripheriques.'},
+  {id='redstone',title='Controle Redstone',version='1.0',description='Piloter les sorties redstone du poste local.'},
+  {id='gps',title='GPS',version='1.0',description='Localiser le Computer avec le reseau GPS.'}
 }
 function M.find(id)
   for _,p in ipairs(M.catalog) do if p.id==id then return p end end
