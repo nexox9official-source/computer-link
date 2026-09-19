@@ -572,7 +572,7 @@ function M.install(OS,shellui,prefs)
       return
     end
 
-    local cols=l.w>=40 and 2 or 1
+    local cols=l.w>=60 and 2 or 1
     local gap=1
     local cardW=math.max(16,math.floor((l.w-3-(cols-1)*gap)/cols))
     local cardH=6
@@ -691,7 +691,7 @@ function M.install(OS,shellui,prefs)
 
     local virtualH=math.max(30,bodyH)
     if win.id=="store" then
-      local storeCols=bodyW>=40 and 2 or 1
+      local storeCols=bodyW>=60 and 2 or 1
       virtualH=math.max(virtualH,math.ceil(#packages.catalog/storeCols)*7+8)
     elseif win.id=="settings" then
       virtualH=math.max(virtualH,38)
