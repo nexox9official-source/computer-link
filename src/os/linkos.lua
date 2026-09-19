@@ -1721,13 +1721,17 @@ function LinkOS:ghostLoadDrives()
     return
   end
 
-  self.ghostDrives = data.disk_ids or {}
-  self.ghostDiskStates = {}
+  self.ghostDrives = data.drives or {}
+  if #self.ghostDrives == 0 then
+    for _,diskId in ipairs(data.disk_ids or {}) do
+      self.ghostDrives[#self.ghostDrives+1]={id=diskId,malcraft=false}
+    end
+  end
 
-  local registry = self.service:ghostList()
-  if registry and type(registry.disks) == "table" then
-    for _, item in ipairs(registry.disks) do
-      self.ghostDiskStates[tonumber(item.disk_id)] = true
+  self.ghostDiskStates = {}
+  for _,drive in ipairs(self.ghostDrives) do
+    if drive.id then
+      self.ghostDiskStates[tonumber(drive.id)] = drive.malcraft == true
     end
   end
 
@@ -1738,20 +1742,32 @@ function LinkOS:ghostCarrier(diskId)
   diskId = tonumber(diskId)
   if not diskId then return end
 
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
   local infected = self.ghostDiskStates[diskId] == true
-  local data, err = self.service:ghostDiskSet(diskId, not infected)
+  local wanted = not infected
+  local data, err = self.service:ghostRemote(targetId, "disk_set", {
+    disk_id=diskId,
+    infected=wanted
+  })
 
   if not data then
-    self:setNotice("Support Malcraft: " .. tostring(err), self:theme().danger)
+    self:setNotice("Disque distant: " .. tostring(err), self:theme().danger)
     return
   end
 
-  self.ghostDiskStates[diskId] = not infected
+  -- Keep the MER compatibility registry aligned when available, but the
+  -- physical marker on the remote disk is the authoritative state.
+  pcall(self.service.ghostDiskSet, self.service, diskId, wanted)
+
+  self.ghostDiskStates[diskId] = wanted
   self:setNotice(
     "Disque #" .. tostring(diskId)
-      .. (infected and " nettoye." or " marque comme vecteur Malcraft."),
+      .. (wanted and " contamine physiquement." or " nettoye physiquement."),
     self:theme().good
   )
+  self:ghostLoadDrives()
 end
 
 function LinkOS:openMalcraftDesktop()
@@ -2761,16 +2777,21 @@ function LinkOS:renderHacker(target, l)
       draw.text(target, x, y, "Aucun disque detecte.", t.muted, t.bg, w)
     else
       for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
-        local diskId = self.ghostDrives[i]
-        local active = self.ghostDiskStates[tonumber(diskId)] == true
-        local line = "Disk #" .. tostring(diskId)
-          .. (active and "  [MALCRAFT ACTIF - NETTOYER]"
-            or "  [CONTAMINER MALCRAFT]")
+        local drive = self.ghostDrives[i]
+        local diskId = tonumber(type(drive)=="table" and drive.id or drive)
+        local active = diskId and self.ghostDiskStates[diskId] == true
+        local label = type(drive)=="table" and tostring(drive.label or "") or ""
+        local line = "Disk #" .. tostring(diskId or "?")
+          .. (label ~= "" and (" " .. label) or "")
+          .. (active and "  [MALCRAFT - NETTOYER]"
+            or "  [CONTAMINER]")
         draw.text(target, x, y, line, active and colors.red or t.text, t.panel, w)
-        self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
-          self:ghostCarrier(diskId)
-          self:render()
-        end)
+        if diskId then
+          self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
+            self:ghostCarrier(diskId)
+            self:render()
+          end)
+        end
         y = y + 1
       end
     end
