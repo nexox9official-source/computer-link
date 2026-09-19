@@ -3026,7 +3026,7 @@ function LinkOS:renderCalculator(target, l)
   local gap=1
   local bw=math.max(3,math.floor((w-3*gap)/4))
   for row,items in ipairs(keysGrid) do
-    local by=y+(row-1)*2
+    local by=y+(row-1)
     for col,label in ipairs(items) do
       local bx=x+(col-1)*(bw+gap)
       local width=col==4 and math.max(3,x+w-bx) or bw
@@ -3047,7 +3047,7 @@ function LinkOS:renderCalculator(target, l)
     end
   end
 
-  local by=y+#keysGrid*2
+  local by=y+#keysGrid+1
   if by<l.h-1 then
     self:button(target,"calc:keyboard",x,by,math.min(18,w),"SAISIE CLAVIER",function()
       local expression=self:prompt("Calcul LinkOS","Operateurs: + - * / % ^ ( )")
