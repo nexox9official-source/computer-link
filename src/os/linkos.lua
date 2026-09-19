@@ -1890,22 +1890,19 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "LinkSec", colors.red, t.bg, w)
+  fluent.sectionTitle(target,x,y,w,"LinkSec","Console operateur / securite reseau",t.danger)
 
-  local malcraftView = string.sub(tostring(self.linksecView or ""), 1, 5) == "ghost"
-    or string.sub(tostring(self.linksecView or ""), 1, 8) == "malcraft"
-  local shownTarget = malcraftView and self:malcraftTargetId() or tonumber(self.hackerConsole.target)
+  local malcraftView=string.sub(tostring(self.linksecView or ""),1,5)=="ghost"
+    or string.sub(tostring(self.linksecView or ""),1,8)=="malcraft"
+  local shownTarget=malcraftView and self:malcraftTargetId() or tonumber(self.hackerConsole.target)
+  local targetText=shownTarget and ("Cible PC #"..tostring(shownTarget)) or "Aucune cible"
 
-  local targetText = shownTarget
-    and ("Cible PC #" .. tostring(shownTarget))
-    or "Aucune cible"
-
-  if w >= 26 then
-    draw.text(target, math.max(x, x + w - #targetText), y, targetText,
-      shownTarget and t.good or t.warn, t.bg, #targetText)
+  if w>=26 then
+    draw.text(target,math.max(x,x+w-#targetText),y+1,targetText,
+      shownTarget and t.good or t.warn,t.bg,#targetText)
   end
 
-  y = y + 2
+  y=y+4
 
   if self.linksecView == "targets" then
     draw.text(target, x, y, "< ACCUEIL", t.accent, t.bg, w)
@@ -2792,88 +2789,55 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "Poste operateur PC #" .. os.getComputerID(), t.muted, t.bg, w)
-  y = y + 2
+  fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.danger,
+    title="Poste operateur PC #"..tostring(os.getComputerID()),
+    subtitle="Malcraft gere les cibles ROM-only; le scan LinkOS reste disponible.",muted=t.muted})
+  y=y+5
 
-  local buttonW = math.min(18, math.max(10, math.floor((w - 2) / 2)))
-
-  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
-  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
-    self:malcraftOpenHub()
-    self:render()
+  local buttonW=math.min(18,math.max(10,math.floor((w-2)/2)))
+  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="Malcraft",
+    subtitle="PC vierges, disques, ROM et controle persistant.",muted=t.muted})
+  fluent.button(target,x+2,y+3,buttonW,"OUVRIR MALCRAFT",{primary=true,accent=t.danger})
+  self:addButton("linksec:malcraft",x+2,y+3,buttonW,1,function()
+    self:malcraftOpenHub();self:render()
   end)
+  y=y+6
 
-  if w >= buttonW * 2 + 2 then
-    draw.text(target, x + buttonW + 2, y,
-      "PC vierges + disques + ROM + controle persistant",
-      t.muted, t.bg, math.max(1, w - buttonW - 2))
-  end
-
-  y = y + 2
-
-  draw.button(target, x, y, buttonW, "SCAN LINKOS", colors.white, t.panel)
-  self:addButton("linksec:scan", x, y, buttonW, 1, function()
-    self:linksecScan()
-    self:render()
+  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Outils LinkOS",
+    subtitle="Scan clients LinkOS et terminal operateur avance.",muted=t.muted})
+  self:button(target,"linksec:scan",x+2,y+3,buttonW,"SCAN LINKOS",function()
+    self:linksecScan();self:render()
   end)
-
-  if w >= buttonW * 2 + 2 then
-    draw.button(target, x + buttonW + 2, y, buttonW, "TERMINAL", colors.white, t.panel)
-    self:addButton("linksec:terminal", x + buttonW + 2, y, buttonW, 1, function()
+  if w>=buttonW*2+5 then
+    self:button(target,"linksec:terminal",x+3+buttonW,y+3,buttonW,"TERMINAL",function()
       self:openHackerTerminal()
     end)
   end
-
-  y = y + 2
+  y=y+6
 
   if self.hackerConsole.target then
-    local actionW = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, actionW, "CONVERSATIONS", colors.white, t.panel)
-    self:addButton("linksec:conversations", x, y, actionW, 1, function()
-      self:linksecLoadConversationIndex()
-      self:render()
+    fluent.card(target,x,y,w,7,{bg=t.surface,accent=t.good,
+      title="Session active / PC #"..tostring(self.hackerConsole.target),
+      subtitle="Outils disponibles pour la cible LinkOS selectionnee.",muted=t.muted})
+    local actionW=math.min(16,math.max(10,math.floor((w-2)/2)))
+    self:button(target,"linksec:conversations",x+2,y+3,actionW,"MESSAGES",function()
+      self:linksecLoadConversationIndex();self:render()
     end)
-
-    if w >= actionW * 2 + 2 then
-      draw.button(target, x + actionW + 2, y, actionW, "PERIPHERIQUES", colors.white, t.panel)
-      self:addButton("linksec:devices", x + actionW + 2, y, actionW, 1, function()
-        self:linksecLoadDevices()
-        self:render()
+    if w>=actionW*2+5 then
+      self:button(target,"linksec:devices",x+3+actionW,y+3,actionW,"PERIPHERIQUES",function()
+        self:linksecLoadDevices();self:render()
       end)
     end
-
-    y = y + 2
-
-    draw.button(target, x, y, actionW, "REDSTONE", colors.white, t.panel)
-    self:addButton("linksec:redstone", x, y, actionW, 1, function()
-      self:linksecLoadRedstone()
-      self:render()
+    self:button(target,"linksec:redstone",x+2,y+5,actionW,"REDSTONE",function()
+      self:linksecLoadRedstone();self:render()
     end)
-
-    if w >= actionW * 2 + 2 then
-      draw.button(target, x + actionW + 2, y, actionW, "DISQUES", colors.white, t.panel)
-      self:addButton("linksec:drives", x + actionW + 2, y, actionW, 1, function()
-        self:linksecLoadDrives()
-        self:render()
+    if w>=actionW*2+5 then
+      self:button(target,"linksec:drives",x+3+actionW,y+5,actionW,"DISQUES",function()
+        self:linksecLoadDrives();self:render()
       end)
     end
-
-    y = y + 2
-
-    draw.text(target, x, y,
-      "Session active sur PC #" .. tostring(self.hackerConsole.target),
-      t.good, t.bg, w)
   else
-    draw.text(target, x, y,
-      "1. SCAN PC  2. Clique une cible  3. Ouvre ses outils",
-      t.muted, t.bg, w)
-  end
-
-  if y + 2 < l.h - 1 then
-    draw.text(target, x, y + 2,
-      "F8 ouvre toujours le terminal avance.",
-      t.muted, t.bg, w)
+    draw.text(target,x,y,"Aucune session LinkOS active. Malcraft fonctionne sans LinkOS.",t.muted,t.bg,w)
   end
 end
 
