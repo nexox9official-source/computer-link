@@ -476,7 +476,7 @@ function M.install(OS,shellui,prefs)
   function OS:renderDesktop(target,w,h)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
-    shellui.wallpaper(target,1,1,w,desktopH,prefs.get("wallpaper","clean"),t.accent)
+    shellui.wallpaper(target,1,1,w,desktopH,prefs.get("wallpaper","fluent"),t.accent)
     self.iconRects={}
 
     -- Subtle identity mark instead of a permanent information bar.
