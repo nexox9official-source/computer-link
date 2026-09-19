@@ -166,9 +166,48 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
 
   if size[1]>=51 then
     local oldList=fs.list
-    for i=1,14 do disk[string.format('/user/file%02d.txt',i)]='x' end
+    for i=1,14 do
+      disk[string.format('/user/file%02d.txt',i)]='x'
+    end
     fs.list=function(path)
-      local prefix=tostring(path):gsub('/+
+      local prefix=tostring(path):gsub("/+$","").."/"
+      local out,seen={},{}
+      for p in pairs(disk) do
+        if p:sub(1,#prefix)==prefix then
+          local rest=p:sub(#prefix+1)
+          local name=rest:match("^([^/]+)")
+          if name and not seen[name] then
+            seen[name]=true
+            out[#out+1]=name
+          end
+        end
+      end
+      table.sort(out)
+      return out
+    end
+
+    o.filePath='/user'
+    o.fileOffset=0
+    o:openApp('files')
+    o:render()
+
+    local nextButton=nil
+    for _,button in ipairs(o.buttons) do
+      if button.id=='file:next' then
+        nextButton=button
+        break
+      end
+    end
+    assert(nextButton,'Explorer next-page button missing for long folder')
+    nextButton.callback()
+    assert(o.fileOffset>0,'Explorer pagination did not advance')
+
+    fs.list=oldList
+    for i=1,14 do
+      disk[string.format('/user/file%02d.txt',i)]=nil
+    end
+  end
+
   for _,app in ipairs({'network','messages','contacts','files','security','settings','calculator','terminal','about'}) do
     o:openApp(app)
     -- All actual built-in renderers run in the mock terminal.
