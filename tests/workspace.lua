@@ -75,6 +75,23 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   native=terminal(size[1],size[2])
   local o=OS.new()
   o:refreshDisplays();o:render()
+
+  local taskButtons={}
+  for _,button in ipairs(o.buttons) do taskButtons[button.id]=button end
+  assert(taskButtons['wm:task:messages'],'Pinned Messages missing from taskbar')
+  if size[1]>=39 then
+    assert(taskButtons['wm:task:files'],'Pinned Files missing from taskbar')
+    assert(taskButtons['wm:task:store'],'Pinned Store missing from taskbar')
+  end
+
+  local messageTask=taskButtons['wm:task:messages']
+  o:openDesktopContext(messageTask.x,messageTask.y)
+  assert(o.contextMenu and o.contextMenu.targetId=='messages')
+  o:render()
+  assert(o.shellOverlay,'Taskbar context menu did not render')
+  o:hit(size[1],1)
+  assert(not o.contextMenu,'Context menu did not close outside')
+
   local firstIcon=o:desktopApps()[1].id
   o:moveIcon(1,3);assert(o:desktopApps()[3].id==firstIcon)
   o:openApp('store');assert(#o.windows==1)
