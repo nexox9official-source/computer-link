@@ -294,7 +294,7 @@ function shellui.install(OS, prefs)
       draw.fill(target,x+2,by,panelW-4,2,bg)
       fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
       draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
-      draw.text(target,x+7,by+1,selected and "Entrer pour ouvrir" or "",t.accent,bg,panelW-12)
+      draw.text(target,x+7,by+1,selected and "Ouvrir" or "",t.accent,bg,panelW-12)
       self:addButton("launcher:"..app.id,x+2,by,panelW-4,2,function() self:openApp(app.id) end)
     end
 
@@ -325,8 +325,8 @@ function shellui.install(OS, prefs)
     draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
     draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,panelW-23))
 
-    ccui.button(target,x+panelW-18,footer,9,"REGLAGES",t,{})
-    self:addButton("launcher:settings",x+panelW-18,footer,9,1,function() self:openApp("settings") end)
+    ccui.button(target,x+panelW-19,footer,10,"REGLAGES",t,{compact=true})
+    self:addButton("launcher:settings",x+panelW-19,footer,10,1,function() self:openApp("settings") end)
     ccui.button(target,x+panelW-8,footer,7,"POWER",t,{danger=true})
     self:addButton("launcher:power",x+panelW-8,footer,7,1,function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
