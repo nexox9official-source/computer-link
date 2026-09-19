@@ -3023,6 +3023,7 @@ end
 function LinkOS:renderFiles(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
+  local viewH=self.drawingWindow and math.max(8,self.drawingWindow.h-2) or l.h
 
   local function safeName(name)
     name=tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
@@ -3055,11 +3056,11 @@ function LinkOS:renderFiles(target,l)
   local mainW=useSidebar and (w-sideW-1) or w
 
   if useSidebar then
-    ccui.panel(target,x,y,sideW,math.max(8,l.h-y-1),t,{title="Acces rapide"})
+    ccui.panel(target,x,y,sideW,math.max(8,viewH-y-1),t,{title="Acces rapide"})
     local sy=y+2
 
     local function quick(label,path)
-      if sy>=l.h-2 then return end
+      if sy>=viewH-2 then return end
       local selected=self.filePath==path
       ccui.button(target,x+1,sy,sideW-2,label,t,{selected=selected,compact=true})
       self:addButton("file:quick:"..path,x+1,sy,sideW-2,1,function()
@@ -3086,7 +3087,7 @@ function LinkOS:renderFiles(target,l)
       end
     end
 
-    if sy+2<l.h then
+    if sy+2<viewH then
       draw.text(target,x+1,sy+1,"Espace libre",t.muted,t.surface,sideW-2)
       draw.text(target,x+1,sy+2,humanBytes(fs.getFreeSpace("/")),t.text,t.surface,sideW-2)
     end
@@ -3192,10 +3193,10 @@ function LinkOS:renderFiles(target,l)
     end
 
     y=y+2
-    draw.fill(target,mainX,y,mainW,math.max(3,l.h-y-1),t.surface2)
+    draw.fill(target,mainX,y,mainW,math.max(3,viewH-y-1),t.surface2)
     local lines=draw.wrap(self.filePreview.content or "",math.max(1,mainW-2))
     for i,line in ipairs(lines) do
-      if y+i>=l.h-1 then break end
+      if y+i>=viewH-1 then break end
       draw.text(target,mainX+1,y+i-1,line,t.text,t.surface2,mainW-2)
     end
     return
@@ -3214,7 +3215,7 @@ function LinkOS:renderFiles(target,l)
   end
 
   local listTop=y+1
-  local footer=l.h-2
+  local footer=viewH-2
   local rowH=2
   local pageSize=math.max(1,math.floor((footer-listTop)/rowH))
   self.fileOffset=self.fileOffset or 0
