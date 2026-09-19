@@ -200,16 +200,22 @@ function M.install(OS,shellui,prefs)
     if #list==0 then return end
 
     local t=self:theme()
-    local visible=math.min(6,#list)
-    local cardW=w>=58 and 12 or 10
+    -- CC:Tweaked cannot blur the scene behind Alt+Tab, so use a clean
+    -- darkened desktop surface. This is far easier to read than stacking the
+    -- switcher on top of every open window.
+    draw.fill(target,1,1,w,math.max(1,h-1),t.desktop)
+
+    local visible=math.min(5,#list)
+    local cardW=w>=48 and 12 or 10
     local mw=math.min(w-4,visible*(cardW+1)+3)
-    local mh=7
+    local mh=8
     local x=math.max(1,math.floor((w-mw)/2)+1)
     local y=math.max(1,math.floor((h-mh)/2))
 
     draw.fill(target,x,y,mw,mh,t.elevated)
     draw.fill(target,x,y,mw,1,t.surface)
-    draw.text(target,x+2,y,"Changer de fenetre",t.text,t.surface,mw-4)
+    draw.text(target,x+2,y,"ALT + TAB",t.accent,t.surface,9)
+    draw.text(target,x+13,y,"Changer de fenetre",t.text,t.surface,math.max(1,mw-15))
 
     local first=math.max(1,#list-visible+1)
     local col=0
@@ -219,12 +225,17 @@ function M.install(OS,shellui,prefs)
       local active=win.id==self.app and not win.minimized
       local bx=x+2+col*(cardW+1)
       local bg=active and t.selection or t.surface2
-      draw.fill(target,bx,y+2,cardW,4,bg)
-      fluent.drawMiniIcon(target,win.id,bx+1,y+2,active,bg)
-      draw.text(target,bx+1,y+4,app and app.title or win.id,
-        active and t.text or t.muted,bg,cardW-2)
-      draw.text(target,bx+1,y+5,win.minimized and "Minimise" or (active and "Active" or "Ouverte"),
-        win.minimized and t.muted or (active and t.accent or t.muted),bg,cardW-2)
+      draw.fill(target,bx,y+2,cardW,5,bg)
+      fluent.drawIcon(target,win.id,bx+1,y+3,false,bg)
+      draw.text(target,bx+5,y+2,app and app.title or win.id,
+        active and t.text or t.muted,bg,math.max(1,cardW-6))
+      draw.text(target,bx+5,y+3,
+        win.minimized and "Minimise" or (active and "Active" or "Ouverte"),
+        win.minimized and t.muted or (active and t.accent or t.muted),
+        bg,math.max(1,cardW-6))
+      if active then
+        draw.fill(target,bx,y+6,cardW,1,t.accent)
+      end
       col=col+1
     end
   end
