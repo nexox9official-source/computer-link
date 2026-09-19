@@ -358,27 +358,42 @@ function M.install(OS,shellui,prefs)
       if q=='' or hay:find(q,1,true) then
         shown=shown+1
         local installed=packages.installed(p.id)
+        local installedVersion=installed and packages.installedVersion(p.id) or nil
+        local outdated=installed and installedVersion and installedVersion~=p.version
+        local stateColour=outdated and t.warn or (installed and colors.lime or t.accent)
+        local stateText
+        if outdated then
+          stateText='MAJ '..p.version
+        elseif installed then
+          stateText='v'..tostring(installedVersion or '?')
+        else
+          stateText='v'..p.version
+        end
+
         draw.fill(target,2,row,l.w-3,3,colors.black)
-        draw.fill(target,2,row,2,3,installed and colors.lime or t.accent)
+        draw.fill(target,2,row,2,3,stateColour)
         draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
         draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
-        draw.text(target,math.max(5,l.w-10),row,installed and 'INSTALLE' or p.version,
-          installed and colors.lime or t.muted,colors.black,9)
+        draw.text(target,math.max(5,l.w-10),row,stateText,stateColour,colors.black,9)
 
-        self:button(target,'store:install:'..p.id,5,row+2,installed and 10 or 9,
-          installed and 'REINSTALL' or 'INSTALLER',function()
-            if self:confirm('Installer '..p.title..' depuis le depot officiel ?') then
-              local ok,msg=packages.install(p.id)
-              self:setNotice(msg,ok and colors.lime or colors.red)
-            end
-          end)
+        local installLabel=outdated and 'METTRE A JOUR' or (installed and 'REINSTALL' or 'INSTALLER')
+        local installW=outdated and 12 or (installed and 10 or 9)
+        self:button(target,'store:install:'..p.id,5,row+2,installW,installLabel,function()
+          local verb=outdated and 'Mettre a jour ' or 'Installer '
+          if self:confirm(verb..p.title..' depuis le depot officiel ?') then
+            local ok,msg=packages.install(p.id)
+            self:setNotice(msg,ok and colors.lime or colors.red)
+          end
+        end)
 
         if installed then
-          self:button(target,'store:open:'..p.id,16,row+2,7,'OUVRIR',function()
+          local openX=6+installW
+          self:button(target,'store:open:'..p.id,openX,row+2,7,'OUVRIR',function()
             self:openApp('pkg:'..p.id)
           end)
-          if l.w>=35 then
-            self:button(target,'store:remove:'..p.id,24,row+2,8,'RETIRER',function()
+          local removeX=openX+8
+          if removeX+7<=l.w then
+            self:button(target,'store:remove:'..p.id,removeX,row+2,8,'RETIRER',function()
               if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
                 local ok,err=packages.remove(p.id)
                 if ok then
