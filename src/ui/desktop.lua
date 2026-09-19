@@ -52,6 +52,16 @@ function M.install(OS,shellui,prefs)
     local offset=#list%4
     local defaultW=math.min(w-2,math.max(24,math.floor(w*0.82)))
     local defaultH=math.min(h-2,math.max(8,math.floor((h-1)*0.78)))
+    local preferred={
+      messages={45,17},files={45,17},settings={45,17},
+      calculator={36,17},store={48,18},terminal={38,14},
+      notes={45,17},network={40,15},security={40,15}
+    }
+    local pref=preferred[id]
+    if pref then
+      defaultW=math.min(w,math.max(24,pref[1]))
+      defaultH=math.min(h-1,math.max(8,pref[2]))
+    end
     local win={id=id,x=2+offset*2,y=1+offset,w=defaultW,h=defaultH,data={},scroll=0}
     local saved=prefs.get('window_geometry',{})[id]
     if type(saved)=='table' and type(saved.x)=='number' and type(saved.y)=='number'
@@ -107,7 +117,8 @@ function M.install(OS,shellui,prefs)
     self.iconRects={}
 
     local apps=self:desktopApps()
-    local tileW,tileH=9,3
+    local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
+    local tileH=3
     local cols=math.max(1,math.floor((w-2)/(tileW+1)))
     local rows=math.max(1,math.floor((desktopH-2)/(tileH+1)))
     local capacity=math.max(1,cols*rows)
