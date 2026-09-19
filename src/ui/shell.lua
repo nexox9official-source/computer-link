@@ -98,8 +98,8 @@ function shellui.startMenuRect(layout)
 end
 
 function shellui.quickPanelRect(layout)
-  local w = math.min(math.max(22, math.floor(layout.w * 0.42)), math.max(20, layout.w - 2))
-  local h = math.min(10, math.max(7, layout.h - 3))
+  local w = math.min(math.max(24, math.floor(layout.w * 0.46)), math.max(20, layout.w - 2))
+  local h = math.min(14, math.max(8, layout.h - 3))
   return math.max(1, layout.w - w), math.max(1, layout.h - h), w, h
 end
 
@@ -261,7 +261,26 @@ function shellui.install(OS, prefs)
     line("Ecran",self.active and self.active.label or "-",t.text)
     line("Heure",textutils.formatTime(os.time(),true),t.accent)
 
-    local by=y+h-2
+    local footer=y+h-2
+    local history=self.notificationHistory or {}
+    if #history>0 and row<footer-1 then
+      row=row+1
+      if row<footer then
+        draw.text(target,x+2,row,"RECENT",t.muted,colors.gray,math.max(1,w-4))
+        row=row+1
+      end
+      for i=1,math.min(3,#history) do
+        if row>=footer then break end
+        local item=history[i]
+        local prefix=tostring(item.time or "").." "
+        draw.text(target,x+2,row,prefix,t.muted,colors.gray,math.min(#prefix,math.max(1,w-4)))
+        draw.text(target,x+2+#prefix,row,tostring(item.text or ""),item.colour or t.text,
+          colors.gray,math.max(1,w-4-#prefix))
+        row=row+1
+      end
+    end
+
+    local by=footer
     self:button(target,"quick:settings",x+2,by,10,"SETTINGS",function() self:openApp("settings") end)
     self:button(target,"quick:desktop",x+w-11,by,9,"BUREAU",function() self:openApp("home") end)
   end
