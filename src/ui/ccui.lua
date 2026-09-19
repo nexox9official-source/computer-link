@@ -120,7 +120,7 @@ end
 function C.modal(target,title,subtitle,theme,opts)
   opts=opts or {}
   local sw,sh=target.getSize()
-  local w=math.min(opts.w or math.max(28,math.floor(sw*0.70)),math.max(18,sw-4))
+  local w=math.min(opts.w or math.max(28,math.floor(sw*0.70)),math.max(18,sw-2))
   local h=math.min(opts.h or 8,math.max(6,sh-2))
   local x=math.max(1,math.floor((sw-w)/2)+1)
   local y=math.max(1,math.floor((sh-h)/2)+1)
