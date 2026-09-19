@@ -543,35 +543,37 @@ function service:ghostRemote(targetId, action, argument)
       jsonEncode(argument)
     )
 
-    if sent then
-      local timer = os.startTimer(4)
+    if not sent then
+      return nil, "Malcraft Bridge: cible hors ligne ou agent ROM indisponible."
+    end
 
-      while true do
-        local event, a, b, d, e, f = os.pullEvent()
+    local timer = os.startTimer(4)
 
-        if event == "timer" and a == timer then
-          return nil, "Malcraft Bridge: cible hors ligne ou sans agent actif."
+    while true do
+      local event, a, b, d, e, f = os.pullEvent()
+
+      if event == "timer" and a == timer then
+        return nil, "Malcraft Bridge: cible hors ligne ou sans agent actif."
+      end
+
+      if event == "malcraft_bus_response"
+        and tonumber(a) == targetId
+        and tostring(b) == tostring(requestId) then
+
+        local ok = d == true
+        local payload = jsonDecode(e) or {}
+
+        if ok then return payload end
+        return nil, tostring(f or "Commande Malcraft refusee.")
+      end
+
+      if event == "rednet_message" then
+        local sender, message, protocol = a, b, d
+        if protocol == config.HACK_PROTOCOL then
+          hack.handleRednet(sender, message, protocol, storage)
         end
-
-        if event == "malcraft_bus_response"
-          and tonumber(a) == targetId
-          and tostring(b) == tostring(requestId) then
-
-          local ok = d == true
-          local payload = jsonDecode(e) or {}
-
-          if ok then return payload end
-          return nil, tostring(f or "Commande Malcraft refusee.")
-        end
-
-        if event == "rednet_message" then
-          local sender, message, protocol = a, b, d
-          if protocol == config.HACK_PROTOCOL then
-            hack.handleRednet(sender, message, protocol, storage)
-          end
-        elseif event == "modem_message" then
-          hack.handleModem(self.modemName, b, d, e, f)
-        end
+      elseif event == "modem_message" then
+        hack.handleModem(self.modemName, b, d, e, f)
       end
     end
   end
