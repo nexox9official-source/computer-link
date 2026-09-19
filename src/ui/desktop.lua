@@ -529,89 +529,98 @@ function M.install(OS,shellui,prefs)
     local query=tostring(self.storeQuery or "")
     local q=query:lower()
 
-    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-25))
-    self:button(target,'store:search',math.max(2,l.w-21),1,9,'CHERCHER',function()
-      self.storeQuery=self:prompt('Rechercher une app','Nom, ID ou description')
+    fluent.sectionTitle(target,2,1,l.w-3,"Applications","Catalogue officiel LinkOS",t.accent)
+    fluent.searchBox(target,2,4,math.max(12,l.w-15),query,"Rechercher",t.accent)
+    self:addButton("store:search",2,4,math.max(12,l.w-15),1,function()
+      self.storeQuery=self:prompt("Rechercher une app","Nom, ID ou description") or ""
     end)
-    self:button(target,'store:refresh',math.max(2,l.w-11),1,10,'ACTUALISER',function()
+    self:button(target,"store:refresh",math.max(2,l.w-11),4,10,"ACTUALISER",function()
       local ok,result=packages.refreshCatalog()
-      self:setNotice(ok and (tostring(result)..' apps chargees.') or tostring(result),
-        ok and colors.lime or colors.orange)
+      self:setNotice(ok and (tostring(result).." apps chargees.") or tostring(result),
+        ok and t.good or t.warn)
     end)
 
-    if query~='' then
-      draw.text(target,2,2,'Recherche: '..query,t.accent,t.bg,math.max(1,l.w-10))
-      self:button(target,'store:clear',math.max(2,l.w-7),2,6,'TOUS',function()
-        self.storeQuery=''
+    if query~="" then
+      self:button(target,"store:clear",math.max(2,l.w-11),5,10,"TOUT AFFICHER",function()
+        self.storeQuery=""
       end)
     else
-      draw.text(target,2,2,
-        packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
-        packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+      draw.text(target,2,5,
+        packages.catalogSource=="remote" and "Catalogue en ligne" or "Catalogue local hors-ligne",
+        packages.catalogSource=="remote" and t.good or t.muted,t.bg,l.w-3)
     end
 
-    local row=4
-    local shown=0
+    local visible={}
     for _,p in ipairs(packages.catalog) do
-      local hay=(p.title..' '..p.id..' '..p.description):lower()
-      if q=='' or hay:find(q,1,true) then
-        shown=shown+1
-        local installed=packages.installed(p.id)
-        local installedVersion=installed and packages.installedVersion(p.id) or nil
-        local outdated=installed and installedVersion and installedVersion~=p.version
-        local stateColour=outdated and t.warn or (installed and colors.lime or t.accent)
-        local stateText
-        if outdated then
-          stateText='MAJ '..p.version
-        elseif installed then
-          stateText='v'..tostring(installedVersion or '?')
-        else
-          stateText='v'..p.version
-        end
-
-        draw.fill(target,2,row,l.w-3,3,colors.black)
-        draw.fill(target,2,row,2,3,stateColour)
-        draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
-        draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
-        draw.text(target,math.max(5,l.w-10),row,stateText,stateColour,colors.black,9)
-
-        local installLabel=outdated and 'METTRE A JOUR' or (installed and 'REINSTALL' or 'INSTALLER')
-        local installW=outdated and 12 or (installed and 10 or 9)
-        self:button(target,'store:install:'..p.id,5,row+2,installW,installLabel,function()
-          local verb=outdated and 'Mettre a jour ' or 'Installer '
-          if self:confirm(verb..p.title..' depuis le depot officiel ?') then
-            local ok,msg=packages.install(p.id)
-            self:setNotice(msg,ok and colors.lime or colors.red)
-          end
-        end)
-
-        if installed then
-          local openX=6+installW
-          self:button(target,'store:open:'..p.id,openX,row+2,7,'OUVRIR',function()
-            self:openApp('pkg:'..p.id)
-          end)
-          local removeX=openX+8
-          if removeX+7<=l.w then
-            self:button(target,'store:remove:'..p.id,removeX,row+2,8,'RETIRER',function()
-              if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
-                local ok,err=packages.remove(p.id)
-                if ok then
-                  for j=#self.windows,1,-1 do
-                    if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
-                  end
-                end
-                self:setNotice(ok and 'Application retiree.' or tostring(err),
-                  ok and colors.orange or colors.red)
-              end
-            end)
-          end
-        end
-        row=row+4
-      end
+      local hay=(p.title.." "..p.id.." "..p.description):lower()
+      if q=="" or hay:find(q,1,true) then visible[#visible+1]=p end
     end
 
-    if shown==0 then
-      draw.text(target,3,5,'Aucune application correspondante.',t.muted,t.bg,math.max(1,l.w-5))
+    if #visible==0 then
+      fluent.card(target,2,8,math.max(10,l.w-3),5,{
+        bg=t.surface,accent=t.muted,title="Aucune application",
+        subtitle="Essaie une autre recherche.",muted=t.muted
+      })
+      return
+    end
+
+    local cols=l.w>=40 and 2 or 1
+    local gap=1
+    local cardW=math.max(16,math.floor((l.w-3-(cols-1)*gap)/cols))
+    local cardH=6
+    local top=7
+
+    for i,p in ipairs(visible) do
+      local col=(i-1)%cols
+      local row=math.floor((i-1)/cols)
+      local x=2+col*(cardW+gap)
+      local y=top+row*(cardH+1)
+
+      local installed=packages.installed(p.id)
+      local installedVersion=installed and packages.installedVersion(p.id) or nil
+      local outdated=installed and installedVersion and installedVersion~=p.version
+      local stateColour=outdated and t.warn or (installed and t.good or t.accent)
+      local stateText=outdated and ("MAJ "..p.version)
+        or (installed and ("Installee v"..tostring(installedVersion or "?")) or ("Version "..p.version))
+
+      draw.fill(target,x,y,cardW,cardH,t.surface)
+      fluent.drawIcon(target,p.id,x+1,y+1,false,t.surface)
+      draw.text(target,x+5,y,p.title,t.text,t.surface,math.max(1,cardW-6))
+      draw.text(target,x+5,y+1,stateText,stateColour,t.surface,math.max(1,cardW-6))
+      draw.text(target,x+5,y+2,p.description,t.muted,t.surface,math.max(1,cardW-6))
+
+      local installLabel=outdated and "METTRE A JOUR" or (installed and "REINSTALL" or "INSTALLER")
+      local installW=math.min(12,math.max(8,cardW-10))
+      self:button(target,"store:install:"..p.id,x+1,y+4,installW,installLabel,function()
+        local verb=outdated and "Mettre a jour " or "Installer "
+        if self:confirm(verb..p.title.." depuis le depot officiel ?") then
+          local ok,msg=packages.install(p.id)
+          self:setNotice(msg,ok and t.good or t.danger)
+        end
+      end)
+
+      if installed then
+        local openX=x+2+installW
+        if openX+6<=x+cardW-1 then
+          self:button(target,"store:open:"..p.id,openX,y+4,7,"OUVRIR",function()
+            self:openApp("pkg:"..p.id)
+          end)
+        end
+        if cardW>=28 then
+          self:button(target,"store:remove:"..p.id,x+cardW-8,y+5,7,"RETIRER",function()
+            if self:confirm("Retirer "..p.title.." ? Donnees conservees.") then
+              local ok,err=packages.remove(p.id)
+              if ok then
+                for j=#self.windows,1,-1 do
+                  if self.windows[j].id=="pkg:"..p.id then table.remove(self.windows,j) end
+                end
+              end
+              self:setNotice(ok and "Application retiree." or tostring(err),
+                ok and t.warn or t.danger)
+            end
+          end)
+        end
+      end
     end
   end
   function OS:renderWindow(target,win,w,h)
