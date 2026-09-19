@@ -108,15 +108,15 @@ function LinkOS:theme()
 
   return {
     bg = colors.black,
-    panel = colors.gray,
-    panel2 = colors.lightGray,
+    panel = colors.black,
+    panel2 = colors.gray,
     text = colors.white,
     muted = colors.lightGray,
     accent = accent,
     good = colors.lime,
     warn = colors.orange,
     danger = colors.red,
-    sidebar = colors.gray,
+    sidebar = colors.black,
     button = colors.gray
   }
 end
