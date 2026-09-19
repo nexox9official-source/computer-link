@@ -1,7 +1,7 @@
 -- LinkOS package devices 1.1
 local ui=dofile('/computer-link/src/ui/fluent.lua')
 return {draw=function(ctx)
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Peripheriques','Materiel connecte au Computer',t.accent)
   local names=peripheral.getNames();table.sort(names)
   if ctx.data.selected then
