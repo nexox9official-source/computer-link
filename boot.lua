@@ -1,7 +1,24 @@
 local ROOT = "/computer-link"
 local ROLE_FILE = ROOT .. "/role.txt"
 local CONFIG_FILE = ROOT .. "/src/common/config.lua"
-local MANIFEST_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/manifest.lua"
+
+local function sourceRef()
+  local path = ROOT .. "/source_ref.txt"
+  if not fs.exists(path) then return "main" end
+  local f = fs.open(path, "r")
+  if not f then return "main" end
+  local value = tostring(f.readAll() or ""):gsub("%s+", "")
+  f.close()
+  if value == "" or value:find("..", 1, true)
+    or not value:match("^[%w%._%-%/]+$") then
+    return "main"
+  end
+  return value
+end
+
+local SOURCE_REF = sourceRef()
+local MANIFEST_URL = "https://raw.githubusercontent.com/nexox9official-source/computer-link/"
+  .. SOURCE_REF .. "/manifest.lua"
 
 local function cleanupLegacyInternalNames()
   local legacy = {
@@ -96,6 +113,9 @@ local function autoUpdate()
   print("================================")
   setColour(colors.white)
   print("Verification des mises a jour...")
+  setColour(colors.lightGray)
+  print("Canal : " .. SOURCE_REF)
+  setColour(colors.white)
 
   local remote, err = fetchRemoteManifest()
 
