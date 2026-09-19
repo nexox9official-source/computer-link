@@ -225,6 +225,8 @@ function shellui.install(OS, prefs)
     self.shellOverlay={x=x,y=y,w=panelW,h=h}
     self.buttons={}
 
+    -- OneOS-style small-screen focus: hide desktop noise while Start is open.
+    draw.fill(target,1,1,l.w,math.max(1,l.h-1),t.desktop)
     draw.fill(target,x,y,panelW,h,t.elevated)
     draw.text(target,x+2,y,"Demarrer",t.text,t.elevated,panelW-4)
 
@@ -323,7 +325,7 @@ function shellui.install(OS, prefs)
     draw.fill(target,x,footer,panelW,2,t.surface)
     local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC #"..tostring(os.getComputerID and os.getComputerID() or "?"))
     draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
-    draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,panelW-23))
+    draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,panelW-25))
 
     ccui.button(target,x+panelW-19,footer,10,"REGLAGES",t,{compact=true})
     self:addButton("launcher:settings",x+panelW-19,footer,10,1,function() self:openApp("settings") end)
