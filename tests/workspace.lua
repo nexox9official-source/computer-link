@@ -92,6 +92,15 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   o:workspaceEvent('mouse_drag',1,100,100)
   assert(store.x+store.w-1<=size[1] and store.y+store.h-1<=size[2]-1)
   o:workspaceEvent('mouse_up',1,100,100)
+  if size[1]>=51 then
+    store.maximized=false
+    store.x,store.y,store.w,store.h=5,3,30,10
+    o.windowDrag={win=store,dx=0,dy=0,original={5,3,30,10}}
+    o:workspaceEvent('mouse_drag',1,1,5)
+    o:workspaceEvent('mouse_up',1,1,5)
+    assert(store.snapped=='left' and store.x==1 and store.y==1)
+    assert(store.h==size[2]-1)
+  end
   store.maximized=true;o:render();assert(store.w==size[1])
   o:openApp('home');assert(store.minimized and notes.minimized)
   o:handleKey(keys.f12);assert(o.app~='home')
