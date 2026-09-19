@@ -91,6 +91,7 @@ function LinkOS.new()
   self.ghostInventories = {}
   self.ghostNearbyComputers = {}
   self.malcraftHosts = {}
+  self.malcraftLiveHosts = {}
   self.malcraftLocalDisks = {}
   self.malcraftTarget = nil
   self.startMenuOpen = false
@@ -1384,6 +1385,28 @@ function LinkOS:malcraftOpenHosts()
   self.linksecView = "malcraft_hosts"
 end
 
+function LinkOS:malcraftOpenLiveHosts()
+  local computers, err = self.service:ghostLiveComputers()
+  if not computers then
+    self:setNotice("Malcraft Bridge: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.malcraftLiveHosts = computers
+  self.linksecView = "malcraft_live_hosts"
+end
+
+function LinkOS:malcraftSelectById()
+  local value = self:prompt("Cible Malcraft", "Computer ID a verifier / contaminer.")
+  local id = tonumber(value)
+  if not id or id < 0 or math.floor(id) ~= id then
+    self:setNotice("Computer ID invalide.", self:theme().danger)
+    return
+  end
+
+  self:malcraftSelectHost(id)
+end
+
 function LinkOS:malcraftSelectHost(computerId)
   computerId = tonumber(computerId)
   if not computerId then return end
@@ -2021,9 +2044,25 @@ function LinkOS:renderHacker(target, l)
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
-      self:addButton("malcraft:localdisks", x + bw + 2, y, bw, 1, function()
-        self:malcraftOpenLocalDisks()
+      draw.button(target, x + bw + 2, y, bw, "PCS CHARGES", colors.white, t.panel)
+      self:addButton("malcraft:live", x + bw + 2, y, bw, 1, function()
+        self:malcraftOpenLiveHosts()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
+    self:addButton("malcraft:localdisks", x, y, bw, 1, function()
+      self:malcraftOpenLocalDisks()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "CIBLE PAR ID", colors.white, t.panel)
+      self:addButton("malcraft:byid", x + bw + 2, y, bw, 1, function()
+        self:malcraftSelectById()
         self:render()
       end)
     end
@@ -2078,6 +2117,43 @@ function LinkOS:renderHacker(target, l)
           self:render()
         end)
         y = y + 1
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "malcraft_live_hosts" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("malcraft:live:back", x, y, math.min(14, w), 1, function()
+      self:malcraftOpenHub()
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, w)
+    y = y + 1
+    draw.text(target, x, y, "LinkOS ou modem non requis.", t.muted, t.bg, w)
+    y = y + 2
+
+    if #self.malcraftLiveHosts == 0 then
+      draw.text(target, x, y, "Aucun Computer cible actuellement charge.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.malcraftLiveHosts, math.max(1, l.h - y - 2)) do
+        local item = self.malcraftLiveHosts[i]
+        local infected = item.infected == true
+        local pos = tostring(item.x or "?") .. "," .. tostring(item.y or "?") .. "," .. tostring(item.z or "?")
+        local line = "PC #" .. tostring(item.computer_id)
+          .. " " .. tostring(item.label or "")
+          .. (infected and " [INFECTE]" or " [SAIN]")
+          .. " " .. pos
+
+        draw.text(target,x,y,line,infected and colors.red or t.good,t.panel,w)
+        local id=item.computer_id
+        self:addButton("malcraft:live:"..tostring(id),x,y,w,1,function()
+          self:malcraftSelectHost(id)
+          self:render()
+        end)
+        y=y+1
       end
     end
     return
@@ -2682,7 +2758,21 @@ function LinkOS:renderHacker(target, l)
 
   local buttonW = math.min(18, math.max(10, math.floor((w - 2) / 2)))
 
-  draw.button(target, x, y, buttonW, "SCAN PC", colors.white, colors.red)
+  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
+  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
+    self:malcraftOpenHub()
+    self:render()
+  end)
+
+  if w >= buttonW * 2 + 2 then
+    draw.text(target, x + buttonW + 2, y,
+      "PC vierges + disques + ROM + controle persistant",
+      t.muted, t.bg, math.max(1, w - buttonW - 2))
+  end
+
+  y = y + 2
+
+  draw.button(target, x, y, buttonW, "SCAN LINKOS", colors.white, t.panel)
   self:addButton("linksec:scan", x, y, buttonW, 1, function()
     self:linksecScan()
     self:render()
@@ -2693,20 +2783,6 @@ function LinkOS:renderHacker(target, l)
     self:addButton("linksec:terminal", x + buttonW + 2, y, buttonW, 1, function()
       self:openHackerTerminal()
     end)
-  end
-
-  y = y + 2
-
-  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
-  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
-    self:malcraftOpenHub()
-    self:render()
-  end)
-
-  if w >= buttonW * 2 + 2 then
-    draw.text(target, x + buttonW + 2, y,
-      "Propagation auto + disques + controle persistant",
-      t.muted, t.bg, math.max(1, w - buttonW - 2))
   end
 
   y = y + 2
@@ -2818,7 +2894,7 @@ function LinkOS:renderSecurity(target, l)
       y = y + 2
       if y < l.h then
         self:button(target,"sec:linksec",x,y,math.min(18,w),"OUVRIR LINKSEC",function()
-          self:openHackerTerminal()
+          self:openApp("hacker")
         end)
       end
     end
