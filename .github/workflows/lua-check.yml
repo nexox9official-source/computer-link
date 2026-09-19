@@ -2,7 +2,7 @@ name: Lua Syntax Check
 
 on:
   push:
-    branches: [ "main", "ui/**" ]
+    branches: [ "main", "ui/**", "feature/**" ]
   pull_request:
     branches: [ "main" ]
     paths:
@@ -29,6 +29,7 @@ jobs:
         run: |
           lua5.3 tests/shell_layout.lua
           lua5.3 tests/workspace.lua
+          lua5.3 tests/malcraft_agent.lua
 
       - name: Collect UI frame previews
         if: always()
