@@ -2,7 +2,7 @@
 local ui=dofile('/computer-link/src/ui/fluent.lua')
 return {draw=function(ctx)
   local d=ctx.data
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   local elapsed=(d.elapsed or 0)+(d.started and os.clock()-d.started or 0)
   ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Chronometre','Temps ecoule',t.accent)
   ui.card(ctx.target,2,6,ctx.w-3,7,{bg=t.surface,accent=d.started and t.good or t.accent,
