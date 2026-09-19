@@ -1,5 +1,19 @@
-local BASE = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/"
 local ROOT = "/computer-link"
+local SOURCE_REF = "main"
+local sourcePath = ROOT .. "/source_ref.txt"
+if fs.exists(sourcePath) then
+  local f = fs.open(sourcePath, "r")
+  if f then
+    local value = tostring(f.readAll() or ""):gsub("%s+", "")
+    f.close()
+    if value ~= "" and not value:find("..", 1, true)
+      and value:match("^[%w%._%-%/]+$") then
+      SOURCE_REF = value
+    end
+  end
+end
+local BASE = "https://raw.githubusercontent.com/nexox9official-source/computer-link/"
+  .. SOURCE_REF .. "/"
 
 local function readAll(path)
   if not fs.exists(path) then return nil end
@@ -94,6 +108,7 @@ local function cleanup(role)
 end
 
 print("Computer Link - mise a jour")
+print("Canal: " .. SOURCE_REF)
 
 if not http or not http.get then
   error("HTTP indisponible.")
