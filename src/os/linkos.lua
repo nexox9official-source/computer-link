@@ -855,89 +855,98 @@ function LinkOS:peerName(id)
 end
 
 function LinkOS:renderMessages(target, l)
-  local t = self:theme()
-  local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
+  local t=self:theme()
+  local x,y,w,h=l.contentX,l.contentY,l.contentW,l.contentH
 
-  draw.text(target, x, y, "Messages", t.text, t.bg, math.max(1,w-12))
-  self:button(target, "msg:new", math.max(x,x+w-10), y, math.min(10,w), "+ NOUVEAU", function()
-    local targetId = tonumber(self:prompt("Nouveau message", "Computer ID du destinataire"))
-    if not targetId then
-      self:setNotice("Computer ID invalide.", t.danger)
-      return
-    end
-    local body = self:prompt("PC #" .. targetId, "Ecris ton message")
-    if body and body ~= "" then
-      local message, err = self.service:sendMessage(targetId, body)
+  fluent.sectionTitle(target,x,y,w,"Messages","Conversations AstralNet",t.accent)
+  self:button(target,"msg:new",math.max(x,x+w-10),y,10,"+ NOUVEAU",function()
+    local targetId=tonumber(self:prompt("Nouveau message","Computer ID du destinataire"))
+    if not targetId then self:setNotice("Computer ID invalide.",t.danger);return end
+    local body=self:prompt("PC #"..targetId,"Ecris ton message")
+    if body and body~="" then
+      local message,err=self.service:sendMessage(targetId,body)
       if message then
-        self.selectedPeer = targetId
-        self:setNotice("Message envoye.", t.good)
+        self.selectedPeer=targetId
+        self:setNotice("Message envoye.",t.good)
       else
-        self:setNotice(tostring(err), t.danger)
+        self:setNotice(tostring(err),t.danger)
       end
     end
   end)
-  y=y+2
+  y=y+4
 
   local peers=self.service:peers()
-  if not self.selectedPeer then
-    if #peers==0 then
-      draw.text(target,x,y+1,"Aucune conversation",t.text,t.bg,w)
-      draw.text(target,x,y+3,"Utilise + NOUVEAU pour contacter un Computer.",t.muted,t.bg,w)
-      return
-    end
+  local sideW=w>=34 and math.min(14,math.floor(w*0.36)) or w
+  local chatX=x+sideW+1
+  local chatW=math.max(1,w-sideW-1)
 
-    draw.text(target,x,y,"CONVERSATIONS",t.muted,t.bg,w)
-    y=y+2
+  draw.fill(target,x,y,sideW,math.max(5,h-5),t.surface)
+  draw.text(target,x+1,y,"CONVERSATIONS",t.muted,t.surface,math.max(1,sideW-2))
+  local row=y+2
+  if #peers==0 then
+    draw.text(target,x+1,row,"Aucune discussion",t.muted,t.surface,math.max(1,sideW-2))
+  else
     for _,peer in ipairs(peers) do
-      if y+1>=l.h-1 then break end
-      local name=self:peerName(peer.id)
-      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
-      draw.fill(target,x,y,w,2,colors.black)
-      draw.fill(target,x,y,1,2,t.accent)
-      draw.text(target,x+2,y,name,t.text,colors.black,math.max(1,w-3))
-      draw.text(target,x+2,y+1,last,t.muted,colors.black,math.max(1,w-3))
+      if row+1>=l.h-1 then break end
       local pid=peer.id
-      self:addButton("peer:"..pid,x,y,w,2,function()
+      local selected=tonumber(self.selectedPeer)==tonumber(pid)
+      local bg=selected and t.selection or t.surface
+      local name=self:peerName(pid)
+      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
+      draw.fill(target,x,row,sideW,2,bg)
+      fluent.drawMiniIcon(target,"messages",x+1,row,selected,bg)
+      draw.text(target,x+5,row,name,selected and t.text or t.muted,bg,math.max(1,sideW-6))
+      draw.text(target,x+1,row+1,last,t.muted,bg,math.max(1,sideW-2))
+      self:addButton("peer:"..pid,x,row,sideW,2,function()
         self.selectedPeer=pid
         self.service:markRead()
       end)
-      y=y+3
+      row=row+2
     end
+  end
+
+  if w<34 then return end
+
+  draw.fill(target,chatX,y,chatW,math.max(5,h-5),t.bg)
+  if not self.selectedPeer then
+    fluent.card(target,chatX+1,y+2,math.max(8,chatW-2),5,{
+      bg=t.surface,accent=t.accent,title="Selectionne une conversation",
+      subtitle="Ou utilise + NOUVEAU pour contacter un Computer.",muted=t.muted
+    })
     return
   end
 
   local peerId=self.selectedPeer
   local name=self:peerName(peerId)
-  draw.text(target,x,y,"< Conversations",t.accent,t.bg,math.min(16,w))
-  self:addButton("msg:back",x,y,math.min(16,w),1,function() self.selectedPeer=nil end)
-  if w>=26 then
-    draw.text(target,x+18,y,name,t.text,t.bg,math.max(1,w-18))
-  end
-  y=y+2
+  draw.text(target,chatX+1,y,name,t.text,t.bg,math.max(1,chatW-2))
+  draw.text(target,chatX+1,y+1,"Computer #"..tostring(peerId),t.muted,t.bg,math.max(1,chatW-2))
 
-  local history=self.service:history(peerId,math.max(8,h-7))
-  local maxLines=math.max(1,math.min(#history,l.h-y-5))
+  local history=self.service:history(peerId,math.max(8,h-9))
+  local maxLines=math.max(1,math.min(#history,l.h-(y+7)))
   local first=math.max(1,#history-maxLines+1)
+  local cy=y+3
   for i=first,#history do
-    if y>=l.h-4 then break end
+    if cy>=l.h-3 then break end
     local m=history[i]
     local mine=tonumber(m.from_id)==os.getComputerID()
-    local prefix=mine and "MOI  " or "EUX  "
-    local fg=mine and t.accent or t.text
-    draw.text(target,x,y,prefix..tostring(m.body),fg,t.bg,w)
-    y=y+1
+    local bubbleBg=mine and t.selection or t.surface
+    local prefix=mine and "MOI" or string.upper(string.sub(name,1,3))
+    draw.fill(target,chatX+1,cy,chatW-2,1,bubbleBg)
+    draw.text(target,chatX+2,cy,prefix,mine and t.accent or t.muted,bubbleBg,4)
+    draw.text(target,chatX+7,cy,tostring(m.body),t.text,bubbleBg,math.max(1,chatW-9))
+    cy=cy+1
   end
 
-  local actionY=math.min(l.h-2,math.max(y+1,l.h-4))
-  self:button(target,"msg:reply",x,actionY,math.min(12,w),"REPONDRE",function()
+  local actionY=math.max(y+4,l.h-2)
+  self:button(target,"msg:reply",chatX+1,actionY,10,"REPONDRE",function()
     local body=self:prompt(name,"Ecris ton message")
     if body and body~="" then
       local _,err=self.service:sendMessage(peerId,body)
       self:setNotice(err or "Message envoye.",err and t.danger or t.good)
     end
   end)
-  if w>=27 then
-    self:button(target,"msg:alias",x+14,actionY,math.min(10,w-14),"ALIAS",function()
+  if chatW>=22 then
+    self:button(target,"msg:alias",chatX+12,actionY,8,"ALIAS",function()
       local alias=self:prompt("Alias de PC #"..peerId,"Vide = supprimer")
       prefs.setAlias(peerId,alias)
       self:setNotice("Alias mis a jour.",t.good)
@@ -3039,46 +3048,42 @@ function LinkOS:renderFiles(target, l)
     if name:find("[/\\]") or name:find("..",1,true) then return nil end
     return name
   end
+  local function childPath(name) return fs.combine(self.filePath,safeName(name) or "") end
 
-  local function childPath(name)
-    return fs.combine(self.filePath,safeName(name) or "")
+  fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
+  y=y+3
+
+  -- Command bar.
+  draw.fill(target,x,y,w,1,t.surface)
+  if self.filePath~="/user" then
+    self:button(target,"file:parent",x,y,5,"<",function()
+      local parent="/"..fs.getDir(string.sub(self.filePath,2))
+      if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
+        parent="/user"
+      end
+      self.filePath=parent
+      self.filePreview=nil
+    end)
   end
-
-  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-18))
+  draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
 
   if not self.filePreview and w>=32 then
     self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"+ DOSSIER",function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
-      if not name then
-        self:setNotice("Nom de dossier invalide.",t.danger)
-        return
-      end
+      if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
       local full=childPath(name)
-      if fs.exists(full) then
-        self:setNotice("Un element porte deja ce nom.",t.warn)
-        return
-      end
+      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
     self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"+ TEXTE",function()
       local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
-      if not name then
-        self:setNotice("Nom de fichier invalide.",t.danger)
-        return
-      end
+      if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
       local full=childPath(name)
-      if fs.exists(full) then
-        self:setNotice("Un element porte deja ce nom.",t.warn)
-        return
-      end
+      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
       local handle=fs.open(full,"w")
-      if not handle then
-        self:setNotice("Creation impossible.",t.danger)
-        return
-      end
-      handle.write("")
-      handle.close()
+      if not handle then self:setNotice("Creation impossible.",t.danger);return end
+      handle.write("");handle.close()
       self:runNativeProgram("edit",full)
     end)
   end
@@ -3086,110 +3091,73 @@ function LinkOS:renderFiles(target, l)
 
   if self.filePreview then
     local path=self.filePreview.path
-    self:button(target,"file:back",x,y,9,"< RETOUR",function() self.filePreview=nil end)
+    fluent.card(target,x,y,w,3,{
+      bg=t.surface,accent=t.accent,title=fs.getName(path),subtitle=path,muted=t.muted
+    })
+    y=y+4
+    self:button(target,"file:back",x,y,8,"FERMER",function() self.filePreview=nil end)
     if w>=21 then
-      self:button(target,"file:edit",x+10,y,8,"EDITER",function()
+      self:button(target,"file:edit",x+9,y,8,"EDITER",function()
         self:runNativeProgram("edit",path)
         local handle=fs.open(path,"r")
-        if handle then
-          self.filePreview.content=handle.read(4096) or ""
-          handle.close()
-        end
+        if handle then self.filePreview.content=handle.read(4096) or "";handle.close() end
       end)
     end
     if w>=31 then
-      self:button(target,"file:rename",x+19,y,10,"RENOMMER",function()
+      self:button(target,"file:rename",x+18,y,9,"RENOMMER",function()
         local name=safeName(self:prompt("Renommer",fs.getName(path)))
-        if not name then
-          self:setNotice("Nouveau nom invalide.",t.danger)
-          return
-        end
+        if not name then self:setNotice("Nouveau nom invalide.",t.danger);return end
         local dest=fs.combine(fs.getDir(path),name)
-        if fs.exists(dest) then
-          self:setNotice("Ce nom existe deja.",t.warn)
-          return
-        end
+        if fs.exists(dest) then self:setNotice("Ce nom existe deja.",t.warn);return end
         local ok,err=pcall(fs.move,path,dest)
-        if ok then
-          self.filePreview.path=dest
-          self:setNotice("Fichier renomme.",t.good)
-        else
-          self:setNotice(tostring(err),t.danger)
-        end
+        if ok then self.filePreview.path=dest;self:setNotice("Fichier renomme.",t.good)
+        else self:setNotice(tostring(err),t.danger) end
       end)
     end
-    if w>=41 then
-      draw.button(target,x+30,y,9,"SUPPRIMER",colors.white,colors.red)
-      self:addButton("file:delete",x+30,y,9,1,function()
+    if w>=40 then
+      fluent.button(target,x+28,y,10,"SUPPRIMER",{danger=true})
+      self:addButton("file:delete",x+28,y,10,1,function()
         if self:confirm("Supprimer "..fs.getName(path).." ?") then
           local ok,err=pcall(fs.delete,path)
-          if ok then
-            self.filePreview=nil
-            self:setNotice("Fichier supprime.",t.warn)
-          else
-            self:setNotice(tostring(err),t.danger)
-          end
+          if ok then self.filePreview=nil;self:setNotice("Fichier supprime.",t.warn)
+          else self:setNotice(tostring(err),t.danger) end
         end
       end)
     end
-
     y=y+2
-    draw.text(target,x,y,tostring(path),t.accent,t.bg,w)
-    y=y+2
-    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w))
-    for _,line in ipairs(lines) do
-      if y>=l.h-1 then break end
-      draw.text(target,x,y,line,t.text,t.bg,w)
-      y=y+1
+    draw.fill(target,x,y,w,math.max(3,l.h-y-1),t.surface2)
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w-2))
+    for i,line in ipairs(lines) do
+      if y+i>=l.h-1 then break end
+      draw.text(target,x+1,y+i-1,line,t.text,t.surface2,w-2)
     end
     return
-  end
-
-  draw.fill(target,x,y,w,1,colors.black)
-  draw.text(target,x+1,y,self.filePath,t.muted,colors.black,math.max(1,w-2))
-  y=y+2
-
-  if self.filePath~="/user" then
-    draw.fill(target,x,y,w,1,colors.black)
-    draw.text(target,x+1,y,"^  DOSSIER PARENT",t.accent,colors.black,math.max(1,w-2))
-    self:addButton("file:parent",x,y,w,1,function()
-      local parent="/"..fs.getDir(string.sub(self.filePath,2))
-      if parent=="/" or parent=="//"
-        or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
-        parent="/user"
-      end
-      self.filePath=parent
-    end)
-    y=y+2
   end
 
   local entries,err=self:listFiles(self.filePath)
-  if err then
-    draw.text(target,x,y,err,t.danger,t.bg,w)
-    return
-  end
+  if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
   if #entries==0 then
-    draw.text(target,x,y,"Ce dossier est vide.",t.muted,t.bg,w)
+    fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
+      subtitle="Cree un dossier ou un fichier depuis la barre d'outils.",muted=t.muted})
     return
   end
 
+  draw.text(target,x,y,"NOM",t.muted,t.bg,math.max(1,w-14))
+  draw.text(target,math.max(x+1,x+w-9),y,"TAILLE",t.muted,t.bg,8)
+  y=y+1
   for _,name in ipairs(entries) do
-    if y>=l.h-1 then break end
+    if y+1>=l.h-1 then break end
     local full=fs.combine(self.filePath,name)
     if self:isHiddenFilePath(full) then break end
     local isDir=fs.isDir(full)
-    local icon=isDir and "D" or "F"
-    local badge=isDir and t.accent or colors.gray
-    draw.fill(target,x,y,w,2,colors.black)
-    draw.fill(target,x,y,2,2,badge)
-    draw.text(target,x,y,icon,colors.white,badge,2)
-    draw.text(target,x+3,y,name,isDir and t.accent or t.text,colors.black,math.max(1,w-12))
+    local bg=t.surface2
+    draw.fill(target,x,y,w,2,bg)
+    fluent.drawMiniIcon(target,isDir and "files" or "notes",x+1,y,false,bg)
+    draw.text(target,x+5,y,name,isDir and t.accent or t.text,bg,math.max(1,w-16))
+    draw.text(target,x+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,w-16))
     if not isDir then
       local size=humanBytes(fs.getSize(full))
-      draw.text(target,math.max(x+3,x+w-#size-1),y,size,t.muted,colors.black,#size)
-      draw.text(target,x+3,y+1,"Cliquer pour previsualiser",t.muted,colors.black,math.max(1,w-4))
-    else
-      draw.text(target,x+3,y+1,"Dossier",t.muted,colors.black,math.max(1,w-4))
+      draw.text(target,math.max(x+5,x+w-#size-1),y,size,t.muted,bg,#size)
     end
     self:addButton("file:"..full,x,y,w,2,function()
       if fs.isDir(full) then
@@ -3208,6 +3176,7 @@ function LinkOS:renderFiles(target, l)
     y=y+3
   end
 end
+
 function LinkOS:runNativeProgram(program, ...)
   local previous = term.current()
   term.redirect(self.native)
