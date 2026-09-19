@@ -4,6 +4,23 @@ Refonte graphique du bureau Computer Link pour CC:Tweaked 1.20.1.
 
 Cette version conserve le backend AstralNet, les autorisations serveur et les applications existantes. Le travail porte sur le shell graphique : bureau, fenetres, launcher, barre des taches, panneaux systeme et Link Store.
 
+## Tester la branche preview sans modifier main
+
+Sur un Computer de test :
+
+```text
+wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/ui/linkos-v0.15-desktop-rebuild/install.lua client ui/linkos-v0.15-desktop-rebuild
+```
+
+Le canal est sauvegarde dans `/computer-link/source_ref.txt`. Les mises a jour et le
+Link Store restent ensuite sur cette meme source.
+
+Pour remettre ce PC sur la version stable actuelle :
+
+```text
+wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/ui/linkos-v0.15-desktop-rebuild/install.lua client main
+```
+
 ## Objectifs
 
 - donner la priorite a l'espace utile sur les Computers 51x19 ;
