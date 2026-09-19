@@ -419,6 +419,11 @@ function M.install(OS,shellui,prefs)
     control(3,'X',colors.red,function() self:closeWindow(win) end)
 
     local virtualH=math.max(30,bodyH)
+    if win.id=='store' then
+      virtualH=math.max(virtualH,#packages.catalog*4+5)
+    elseif win.id=='settings' then
+      virtualH=math.max(virtualH,34)
+    end
     local maxScroll=math.max(0,virtualH-bodyH)
     win.scroll=clamp(win.scroll or 0,0,maxScroll)
 
