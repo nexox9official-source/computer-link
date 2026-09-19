@@ -13,6 +13,7 @@ local CHECK_SECONDS = 10
 local LOCAL_INFECTED = "astralium.malcraft.infected"
 local LOCAL_SPREAD = "astralium.malcraft.spread"
 local LOCAL_SOURCE = "astralium.malcraft.source"
+local LOCAL_CLEAN_LOCK = "astralium.malcraft.clean_lock"
 
 local MARKER_DIR = ".malcraft"
 local MARKER_FILE = "carrier.dat"
@@ -263,6 +264,18 @@ local function localCarrierInfection()
   end
 
   local present, drive = carrierPresent()
+
+  -- A remote cleanup must remain effective even if the contaminated disk is
+  -- still physically inserted. Once the carrier is removed, the lock clears;
+  -- reinserting it later counts as a new infection.
+  if settings.get(LOCAL_CLEAN_LOCK, false) == true then
+    if not present then
+      settings.unset(LOCAL_CLEAN_LOCK)
+      saveSettings()
+    end
+    return false
+  end
+
   if present then
     local source = "disk:" .. tostring(drive.id or "?")
     setLocalState(true, true, source)
@@ -334,10 +347,9 @@ local function syncState()
           state.source or settings.get(LOCAL_SOURCE) or "bridge"
         )
       else
-        -- A remote cleanup persists across reboot/break/place. A carrier which
-        -- is currently inserted may infect the machine again on its next event.
-        local present = carrierPresent()
-        if not present then setLocalState(false, false, nil) end
+        settings.set(LOCAL_CLEAN_LOCK, true)
+        saveSettings()
+        setLocalState(false, false, nil)
       end
     elseif infected and type(bus.infectSelf) == "function" then
       pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
@@ -1016,9 +1028,13 @@ while true do
     local source = tostring(c or "bridge")
 
     if value and not isImmune(os.getComputerID()) then
+      settings.unset(LOCAL_CLEAN_LOCK)
+      saveSettings()
       setLocalState(true, spread, source)
       infectConnectedDisks()
     else
+      settings.set(LOCAL_CLEAN_LOCK, true)
+      saveSettings()
       setLocalState(false, false, nil)
     end
 
