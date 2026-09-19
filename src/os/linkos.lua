@@ -298,31 +298,43 @@ function LinkOS:prompt(title,hint)
   return self:inputDialog(title,hint,false)
 end
 
-function LinkOS:confirm(title)
+function LinkOS:choiceDialog(title,subtitle,choices,defaultIndex)
   local t=self:theme()
   local active=self.active
-  if not active or not active.target then return false end
+  if not active or not active.target then return nil end
+  if type(choices)~="table" or #choices==0 then return nil end
 
   self.dialogOpen=true
-  local selected=false
+  local selected=math.max(1,math.min(#choices,tonumber(defaultIndex) or 1))
   local regions={}
 
   local function drawOn(target,keyboardSource)
     fluent.applyPalette(target)
-    local box=ccui.modal(target,tostring(title or "Confirmer"),
-      "Cette action demande une confirmation.",t,{w=34,h=8,accent=t.warn})
+    local sw=select(1,target.getSize())
+    local width=math.min(math.max(32,#choices*12+4),math.max(20,sw-4))
+    local box=ccui.modal(target,tostring(title or "Choisir"),
+      tostring(subtitle or ""),t,{w=width,h=8,accent=t.warn})
 
-    local cancelX=box.x+2
-    local confirmX=box.x+box.w-13
-    ccui.button(target,cancelX,box.y+4,10,"ANNULER",t,{selected=not selected})
-    ccui.button(target,confirmX,box.y+4,11,"CONFIRMER",t,{primary=selected})
+    local available=box.w-4
+    local gap=1
+    local bw=math.max(7,math.floor((available-(#choices-1)*gap)/#choices))
+    local x=box.x+2
+    local out={}
+    for i,choice in ipairs(choices) do
+      local widthHere=(i==#choices) and (box.x+box.w-2-x) or bw
+      local danger=choice.danger==true
+      local primary=i==selected and not danger
+      ccui.button(target,x,box.y+4,widthHere,tostring(choice.label or choice.value or i),t,{
+        selected=i==selected,primary=primary,danger=danger and i==selected,compact=true
+      })
+      out[i]={x=x,y=box.y+4,w=widthHere,h=1}
+      x=x+widthHere+gap
+    end
+
     draw.text(target,box.x+2,box.y+6,
-      keyboardSource and "Gauche/Droite + Entree" or "Choisis sur le Computer",
+      keyboardSource and "Gauche/Droite + Entree  |  Echap" or "Choisis sur le Computer",
       t.muted,t.elevated,math.max(1,box.w-4))
-    return {
-      cancel={x=cancelX,y=box.y+4,w=10,h=1},
-      confirm={x=confirmX,y=box.y+4,w=11,h=1}
-    }
+    return out
   end
 
   local function redraw()
@@ -332,41 +344,49 @@ function LinkOS:confirm(title)
     end
   end
 
-  local function insideRegion(px,py,r)
-    return r and px>=r.x and px<r.x+r.w and py>=r.y and py<r.y+r.h
+  local function hit(px,py)
+    for i,r in ipairs(regions or {}) do
+      if px>=r.x and px<r.x+r.w and py>=r.y and py<r.y+r.h then return i end
+    end
+    return nil
   end
 
   redraw()
-  local result=false
-
+  local result=nil
   while true do
     local event,a1,a2,a3=os.pullEvent()
     if event=="key" then
-      if a1==keys.left or a1==keys.right or a1==keys.tab then
-        selected=not selected
+      if a1==keys.left or a1==keys.up then
+        selected=((selected-2)%#choices)+1
+        redraw()
+      elseif a1==keys.right or a1==keys.down or a1==keys.tab then
+        selected=(selected%#choices)+1
         redraw()
       elseif a1==keys.enter then
-        result=selected
+        result=choices[selected].value
         break
-      elseif a1==keys.escape or a1==keys.n then
-        result=false
-        break
-      elseif a1==keys.y then
-        result=true
+      elseif a1==keys.escape then
         break
       end
     elseif event=="mouse_click" and active.kind=="computer" then
-      if insideRegion(a2,a3,regions.confirm) then result=true;break end
-      if insideRegion(a2,a3,regions.cancel) then result=false;break end
+      local i=hit(a2,a3)
+      if i then result=choices[i].value;break end
     elseif event=="monitor_touch" and active.kind=="monitor" and tostring(a1)==tostring(active.name) then
-      if insideRegion(a2,a3,regions.confirm) then result=true;break end
-      if insideRegion(a2,a3,regions.cancel) then result=false;break end
+      local i=hit(a2,a3)
+      if i then result=choices[i].value;break end
     end
   end
 
   self.dialogOpen=false
   self:render()
   return result
+end
+
+function LinkOS:confirm(title)
+  return self:choiceDialog(title,"Confirmer cette action ?",{
+    {label="ANNULER",value=false},
+    {label="CONFIRMER",value=true}
+  },1)==true
 end
 
 function LinkOS:promptSecret(title,hint)
