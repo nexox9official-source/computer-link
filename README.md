@@ -1,14 +1,16 @@
 # Computer Link — LinkOS / AstralNet
 
-## Desktop 0.16 — productivity shell
+## Desktop 0.17 — session & windowing
 
-LinkOS 0.16 garde la refonte visuelle 0.15 et pousse le comportement d'un vrai
-desktop : apps epinglees, raccourcis bureau personnalisables, clic droit contextuel,
-launcher priorisant PIN/RECENT, historique de notifications, Explorateur capable
-de creer/editer/renommer/supprimer et Link Store searchable avec catalogue distant.
+LinkOS 0.17 ajoute une vraie session de travail persistante : restauration des apps
+ouvertes et de leurs etats, Alt+Tab avec switcher visuel, bouton Afficher le bureau,
+Ctrl+D, F12 simplifie et persistance des actions de fenetre importantes.
 
-Voir [le guide 0.16](docs/DESKTOP-0.16.md) pour la taskbar, le bureau, les menus
-contextuels, l'Explorateur, le Store et les regles de migration des preferences.
+Cette version corrige aussi une ancienne duplication du renderer Fichiers : le nouvel
+Explorateur 0.16 est maintenant l'unique implementation active en jeu.
+
+Voir [le guide 0.17](docs/DESKTOP-0.17.md) pour la restauration de session, les
+raccourcis de fenetres, Alt+Tab, Afficher le bureau et la validation.
 
 La couche graphique reste une implementation propre a Computer Link, inspiree de
 bons patterns vus dans LevelOS, OneOS et Opus sans reprendre leur code.
