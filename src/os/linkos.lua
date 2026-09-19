@@ -237,7 +237,7 @@ function LinkOS:inputDialog(title,hint,secret)
     local box=ccui.modal(target,
       tostring(title or (secret and "Mot de passe" or "Saisie")),
       tostring(hint or ""),
-      t,{w=math.max(32,math.floor(select(1,target.getSize())*0.84)),h=8,
+      t,{w=math.min(54,math.max(32,select(1,target.getSize())-2)),h=8,
         accent=secret and t.warn or t.accent})
 
     local shown=secret and string.rep("*",#value) or value
@@ -312,7 +312,7 @@ function LinkOS:choiceDialog(title,subtitle,choices,defaultIndex)
   local function drawOn(target,keyboardSource)
     fluent.applyPalette(target)
     local sw=select(1,target.getSize())
-    local width=math.min(math.max(32,#choices*12+4),math.max(20,sw-4))
+    local width=math.min(math.max(46,#choices*12+4),math.max(20,sw-2))
     local box=ccui.modal(target,tostring(title or "Choisir"),
       tostring(subtitle or ""),t,{w=width,h=8,accent=t.warn})
 
