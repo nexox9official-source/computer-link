@@ -22,6 +22,9 @@ Le clic droit ouvre un menu contextuel permettant notamment d'epingler ou de des
 
 Les epingles sont configurables dans Parametres > Style.
 
+Si la protection par mot de passe est active, le launcher et le panneau Systeme
+retrouvent aussi une action LOCK pour verrouiller la session immediatement.
+
 ## Bureau
 
 Le bureau n'affiche plus automatiquement toutes les applications installees.
@@ -97,7 +100,10 @@ Le catalogue officiel distant de 0.15 reste valide avant utilisation et conserve
 - recherche par identifiant ;
 - recherche dans la description ;
 - remise a zero du filtre ;
-- contenu scrollable dimensionne selon tout le catalogue.
+- contenu scrollable dimensionne selon tout le catalogue ;
+- detection de la version reellement installee ;
+- etat MISE A JOUR lorsqu'une version distante differe ;
+- cycle suppression -> reinstallation -> suppression corrige.
 
 Un catalogue de plusieurs dizaines d'applications peut donc etre affiche sans perdre les entrees situees apres la premiere page.
 
