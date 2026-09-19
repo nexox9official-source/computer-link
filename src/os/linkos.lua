@@ -926,53 +926,56 @@ function LinkOS:renderMessages(target, l)
 end
 
 function LinkOS:renderContacts(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target, x, y, "Contacts", t.text, t.bg, w)
-  self:button(target, "contact:add", math.max(x, x + w - 10), y, math.min(10, w), "+ Ajouter", function()
-    local id = tonumber(self:prompt("Computer ID du contact", "Exemple: 42"))
+  draw.text(target,x,y,"Contacts",t.text,t.bg,math.max(1,w-11))
+  self:button(target,"contact:add",math.max(x,x+w-10),y,math.min(10,w),"+ AJOUTER",function()
+    local id=tonumber(self:prompt("Nouveau contact","Computer ID"))
     if not id then
-      self:setNotice("ID invalide.", t.danger)
+      self:setNotice("Computer ID invalide.",t.danger)
       return
     end
-
-    local name = self:prompt("Nom local pour PC #" .. id, "Exemple: QG Nord")
-    if name and name ~= "" then
-      prefs.setAlias(id, name)
-      self:setNotice("Contact ajoute.", t.good)
+    local name=self:prompt("PC #"..id,"Nom local du contact")
+    if name and name~="" then
+      prefs.setAlias(id,name)
+      self:setNotice("Contact ajoute.",t.good)
     end
   end)
-  y = y + 2
+  y=y+2
 
-  local aliases = prefs.all().aliases or {}
-  local contacts = {}
-  for id, name in pairs(aliases) do
-    contacts[#contacts + 1] = {id=tonumber(id) or id, name=name}
+  local contacts={}
+  for id,name in pairs(prefs.all().aliases or {}) do
+    contacts[#contacts+1]={id=tonumber(id) or id,name=name}
   end
-  table.sort(contacts, function(a,b)
-    return string.lower(tostring(a.name)) < string.lower(tostring(b.name))
+  table.sort(contacts,function(a,b)
+    return string.lower(tostring(a.name))<string.lower(tostring(b.name))
   end)
 
-  if #contacts == 0 then
-    draw.text(target, x, y, "Aucun contact enregistre.", t.muted, t.bg, w)
-    y = y + 2
-    draw.text(target, x, y, "Les contacts restent locaux a ce PC.", t.muted, t.bg, w)
+  if #contacts==0 then
+    draw.text(target,x,y+1,"Aucun contact",t.text,t.bg,w)
+    draw.text(target,x,y+3,"Les alias restent uniquement sur ce Computer.",t.muted,t.bg,w)
     return
   end
 
-  for i, contact in ipairs(contacts) do
-    if y >= l.h - 3 then break end
-    local label = tostring(contact.name) .. "  |  PC #" .. tostring(contact.id)
-    draw.text(target, x, y, label, t.accent, t.bg, w)
-    local cid = tonumber(contact.id)
-    self:addButton("contact:" .. tostring(contact.id), x, y, w, 1, function()
+  for _,contact in ipairs(contacts) do
+    if y+1>=l.h-1 then break end
+    local cid=tonumber(contact.id)
+    draw.fill(target,x,y,w,2,colors.black)
+    draw.fill(target,x,y,2,2,t.accent)
+    draw.text(target,x,y,"@",colors.white,t.accent,2)
+    draw.text(target,x+3,y,tostring(contact.name),t.text,colors.black,math.max(1,w-11))
+    local idText="#"..tostring(contact.id)
+    draw.text(target,math.max(x+3,x+w-#idText),y,idText,t.muted,colors.black,#idText)
+    draw.text(target,x+3,y+1,cid and "Ouvrir la conversation" or "Alias local",
+      t.muted,colors.black,math.max(1,w-4))
+    self:addButton("contact:"..tostring(contact.id),x,y,w,2,function()
       if cid then
-        self.selectedPeer = cid
+        self.selectedPeer=cid
         self:openApp("messages")
       end
     end)
-    y = y + 1
+    y=y+3
   end
 end
 
@@ -3414,55 +3417,60 @@ end
 
 function LinkOS:renderCompanion(d)
   if not d or not d.target then return end
-  if self.active and d.id == self.active.id then return end
+  if self.active and d.id==self.active.id then return end
 
-  local target = d.target
-  local t = self:theme()
-  local w, h = target.getSize()
+  local target=d.target
+  local t=self:theme()
+  local w,h=target.getSize()
+  draw.clear(target,colors.black,colors.white)
 
-  draw.clear(target, colors.black, colors.white)
-  draw.text(target, 2, 1, "LINK OS", t.accent, colors.black, math.max(1, w - 2))
-  draw.text(target, 2, 2, "PC #" .. os.getComputerID(), t.text, colors.black, math.max(1, w - 2))
+  local clock=nowText()
+  draw.fill(target,1,1,w,1,t.accent)
+  draw.text(target,2,1,"LINKOS",colors.white,t.accent,math.max(1,w-9))
+  draw.text(target,math.max(1,w-#clock-1),1,clock,colors.white,t.accent,#clock)
 
-  local status = self.service.online and "MER ONLINE" or "MER OFFLINE"
-  draw.text(target, 2, 4, status, self.service.online and t.good or t.danger,
-    colors.black, math.max(1, w - 2))
-
-  if h >= 7 then
-    draw.text(target, 2, 6, "App: " .. tostring(self.app), t.muted, colors.black, math.max(1, w - 2))
+  local label=os.getComputerLabel() or ("PC-"..os.getComputerID())
+  if h>=5 then
+    draw.text(target,2,3,label,t.text,colors.black,math.max(1,w-3))
+    draw.text(target,2,4,"Computer #"..tostring(os.getComputerID()),t.muted,colors.black,math.max(1,w-3))
   end
 
-  if h >= 9 then
-    draw.text(target, 2, 8, "Messages: " .. tostring(self.service.unread or 0),
-      (self.service.unread or 0) > 0 and t.warn or t.muted,
-      colors.black, math.max(1, w - 2))
+  local row=h>=12 and 6 or 5
+  if row<=h-2 then
+    local net=self.service.online and "ONLINE" or "OFFLINE"
+    draw.text(target,2,row,"ASTRALNET",t.muted,colors.black,10)
+    draw.text(target,math.max(12,w-#net-1),row,net,
+      self.service.online and t.good or t.danger,colors.black,#net)
+    row=row+2
+  end
+  if row<=h-2 then
+    local unread=tostring(self.service.unread or 0)
+    draw.text(target,2,row,"MESSAGES",t.muted,colors.black,10)
+    draw.text(target,math.max(12,w-#unread-1),row,unread,
+      (self.service.unread or 0)>0 and t.warn or t.text,colors.black,#unread)
+    row=row+2
+  end
+  if row<=h-2 then
+    local app=shellui.find(self.app,self:isOperatorUI())
+    draw.text(target,2,row,"APP",t.muted,colors.black,5)
+    draw.text(target,8,row,app and app.title or tostring(self.app),t.text,colors.black,math.max(1,w-9))
   end
 
-  if self.service.updateAvailable and h >= 10 then
-    draw.text(target, 2, 9, "MISE A JOUR DISPONIBLE", colors.yellow, colors.black, math.max(1, w - 2))
+  self.companionButtons[d.name]=nil
+  if self.service.updateAvailable and d.touch and h>=13 and w>=14 then
+    local bw=math.min(16,w-4)
+    local by=h-3
+    draw.button(target,2,by,bw,"INSTALLER MAJ",colors.black,colors.yellow)
+    self.companionButtons[d.name]={x=2,y=by,w=bw,h=1,action="update"}
   end
 
-  if h >= 11 then
-    draw.text(target, 2, 10, nowText(), t.muted, colors.black, math.max(1, w - 2))
+  if h>=2 then
+    draw.fill(target,1,h,w,1,colors.gray)
+    draw.center(target,h,d.touch and "TOUCHER POUR UTILISER CET ECRAN" or "AFFICHAGE SECONDAIRE",
+      d.touch and colors.white or t.muted,colors.gray)
   end
 
-  self.companionButtons[d.name] = nil
-  if self.service.updateAvailable and d.touch and h >= 13 and w >= 12 then
-    local bw = math.min(14, w - 3)
-    local by = h - 2
-    draw.button(target, 2, by, bw, "MISE A JOUR", colors.black, colors.yellow)
-    self.companionButtons[d.name] = {
-      x = 2, y = by, w = bw, h = 1, action = "update"
-    }
-  end
-
-  if d.touch and h >= 13 then
-    draw.text(target, 2, h - 1, "Touchez pour ouvrir ici", t.accent, colors.black, math.max(1, w - 2))
-  elseif h >= 13 then
-    draw.text(target, 2, h - 1, "Affichage secondaire", t.muted, colors.black, math.max(1, w - 2))
-  end
-
-  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+  if target.setCursorBlink then pcall(target.setCursorBlink,false) end
 end
 
 function LinkOS:renderCompanions()
