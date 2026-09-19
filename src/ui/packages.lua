@@ -18,7 +18,59 @@ M.catalogSource = 'local'
 
 local function validEntry(value)
   return type(value)=='table'
-    and type(value.id)=='string' and value.id:match('^[%w_%-]+
+    and type(value.id)=='string'
+    and #value.id>=1 and #value.id<=32
+    and not value.id:find('[^%w_%-]')
+    and type(value.title)=='string' and #value.title>=1 and #value.title<=40
+    and type(value.version)=='string' and #value.version>=1 and #value.version<=16
+    and type(value.description)=='string' and #value.description<=120
+end
+
+function M.refreshCatalog()
+  if not http or not http.get or not textutils or not textutils.unserializeJSON then
+    return false,'Catalogue distant indisponible'
+  end
+
+  local ok,response,err=pcall(http.get,BASE..'catalog.json')
+  if not ok or not response then
+    return false,tostring(err or response or 'Reseau indisponible')
+  end
+
+  local source=response.read(32769)
+  pcall(response.close)
+  if type(source)~='string' or #source>32768 then
+    return false,'Catalogue invalide ou trop volumineux'
+  end
+
+  local decoded=textutils.unserializeJSON(source)
+  if type(decoded)~='table' or tonumber(decoded.schema)~=1 or type(decoded.apps)~='table' then
+    return false,'Format de catalogue invalide'
+  end
+
+  local nextCatalog={}
+  local seen={}
+  for _,entry in ipairs(decoded.apps) do
+    if not validEntry(entry) or seen[entry.id] then
+      return false,'Entree de catalogue invalide'
+    end
+    seen[entry.id]=true
+    nextCatalog[#nextCatalog+1]={
+      id=entry.id,
+      title=entry.title,
+      version=entry.version,
+      description=entry.description
+    }
+  end
+
+  if #nextCatalog==0 or #nextCatalog>100 then
+    return false,'Catalogue vide ou trop grand'
+  end
+
+  M.catalog=nextCatalog
+  M.catalogSource='remote'
+  return true,#nextCatalog
+end
+
 function M.find(id)
   for _,p in ipairs(M.catalog) do if p.id==id then return p end end
 end
