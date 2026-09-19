@@ -329,9 +329,10 @@ function M.install(OS,shellui,prefs)
       end
     end
 
-    -- One-row Windows-like taskbar. Status details live in the system panel.
-    draw.fill(target,1,h,w,1,colors.gray)
-    self:button(target,'wm:start',1,h,5,'LINK',function() self:toggleStartMenu() end)
+    -- One-row Windows-like taskbar. Keep the empty surface visually quiet.
+    draw.fill(target,1,h,w,1,colors.black)
+    draw.button(target,1,h,5,'LINK',colors.white,t.accent)
+    self:addButton('wm:start',1,h,5,1,function() self:toggleStartMenu() end)
 
     local statusW=10
     local rightX=math.max(7,w-statusW+1)
