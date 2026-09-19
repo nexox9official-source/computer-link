@@ -546,7 +546,7 @@ function M.install(OS,shellui,prefs)
       self.storeQuery=self:prompt("Rechercher","Nom de l'application") or ""
     end)
 
-    ccui.button(target,l.w-10,4,9,"MAJ LISTE",t,{})
+    ccui.button(target,l.w-10,4,9,"MAJ LISTE",t,{compact=true})
     self:addButton("store:refresh",l.w-10,4,9,1,function()
       local ok,result=packages.refreshCatalog()
       self:setNotice(ok and (tostring(result).." apps chargees.") or tostring(result),
