@@ -91,6 +91,7 @@ function LinkOS.new()
   self.ghostInventories = {}
   self.ghostNearbyComputers = {}
   self.malcraftHosts = {}
+  self.malcraftLiveHosts = {}
   self.malcraftLocalDisks = {}
   self.malcraftTarget = nil
   self.startMenuOpen = false
@@ -1006,8 +1007,8 @@ function LinkOS:renderNetwork(target, l)
     info.online and t.good or t.danger, t.bg, #status)
   y = y + 2
 
-  draw.fill(target, x, y, w, 5, colors.black)
-  draw.fill(target, x, y, 1, 5, info.online and t.good or t.danger)
+  draw.fill(target, x, y, w, 6, colors.black)
+  draw.fill(target, x, y, 1, 6, info.online and t.good or t.danger)
 
   local label = tostring(info.label or ("PC-" .. tostring(info.computer_id)))
   draw.text(target, x+2, y, label, t.text, colors.black, math.max(1,w-3))
@@ -1018,7 +1019,10 @@ function LinkOS:renderNetwork(target, l)
   draw.text(target, x+2, y+3,
     "Modem  " .. tostring(info.modem or "absent"),
     info.modem and t.text or t.warn, colors.black, math.max(1,w-3))
-  y = y + 6
+  draw.text(target, x+2, y+4,
+    "Malcraft Bridge  " .. (info.malcraft_bridge and "ONLINE" or "ABSENT"),
+    info.malcraft_bridge and t.good or t.muted, colors.black, math.max(1,w-3))
+  y = y + 7
 
   local bw = math.max(7, math.floor((w-2)/3))
   self:button(target, "net:ping", x, y, bw, "PING", function()
@@ -1345,8 +1349,10 @@ end
 
 function LinkOS:malcraftOpenHub()
   local registry, err = self.service:ghostList()
+  local live = self.service:ghostLiveComputers()
 
   self.malcraftHosts = registry and (registry.hosts or {}) or {}
+  self.malcraftLiveHosts = type(live)=="table" and live or {}
   self.malcraftLocalDisks = self:malcraftLocalDiskList()
   self.ghostDiskStates = {}
 
@@ -1384,6 +1390,28 @@ function LinkOS:malcraftOpenHosts()
   self.linksecView = "malcraft_hosts"
 end
 
+function LinkOS:malcraftOpenLiveHosts()
+  local computers, err = self.service:ghostLiveComputers()
+  if not computers then
+    self:setNotice("Malcraft Bridge: " .. tostring(err), self:theme().danger)
+    return
+  end
+
+  self.malcraftLiveHosts = computers
+  self.linksecView = "malcraft_live_hosts"
+end
+
+function LinkOS:malcraftSelectById()
+  local value = self:prompt("Cible Malcraft", "Computer ID a verifier / contaminer.")
+  local id = tonumber(value)
+  if not id or id < 0 or math.floor(id) ~= id then
+    self:setNotice("Computer ID invalide.", self:theme().danger)
+    return
+  end
+
+  self:malcraftSelectHost(id)
+end
+
 function LinkOS:malcraftSelectHost(computerId)
   computerId = tonumber(computerId)
   if not computerId then return end
@@ -1394,6 +1422,12 @@ function LinkOS:malcraftSelectHost(computerId)
   if not data then
     self:setNotice("Malcraft: " .. tostring(err), self:theme().danger)
     return
+  end
+
+  local state = data.state or {}
+  if state.infected == true and state.online == true then
+    local agent = self.service:ghostRemote(computerId, "status")
+    if agent then data.agent_status = agent end
   end
 
   self.ghostState = data
@@ -1479,6 +1513,12 @@ function LinkOS:ghostRefresh()
   if not data then
     self:setNotice("Malcraft: " .. tostring(err), self:theme().danger)
     return
+  end
+
+  local state = data.state or {}
+  if state.infected == true and state.online == true then
+    local agent = self.service:ghostRemote(targetId, "status")
+    if agent then data.agent_status = agent end
   end
 
   self.ghostState = data
@@ -1681,13 +1721,17 @@ function LinkOS:ghostLoadDrives()
     return
   end
 
-  self.ghostDrives = data.disk_ids or {}
-  self.ghostDiskStates = {}
+  self.ghostDrives = data.drives or {}
+  if #self.ghostDrives == 0 then
+    for _,diskId in ipairs(data.disk_ids or {}) do
+      self.ghostDrives[#self.ghostDrives+1]={id=diskId,malcraft=false}
+    end
+  end
 
-  local registry = self.service:ghostList()
-  if registry and type(registry.disks) == "table" then
-    for _, item in ipairs(registry.disks) do
-      self.ghostDiskStates[tonumber(item.disk_id)] = true
+  self.ghostDiskStates = {}
+  for _,drive in ipairs(self.ghostDrives) do
+    if drive.id then
+      self.ghostDiskStates[tonumber(drive.id)] = drive.malcraft == true
     end
   end
 
@@ -1698,20 +1742,32 @@ function LinkOS:ghostCarrier(diskId)
   diskId = tonumber(diskId)
   if not diskId then return end
 
+  local targetId = self:malcraftTargetId()
+  if not targetId then return end
+
   local infected = self.ghostDiskStates[diskId] == true
-  local data, err = self.service:ghostDiskSet(diskId, not infected)
+  local wanted = not infected
+  local data, err = self.service:ghostRemote(targetId, "disk_set", {
+    disk_id=diskId,
+    infected=wanted
+  })
 
   if not data then
-    self:setNotice("Support Malcraft: " .. tostring(err), self:theme().danger)
+    self:setNotice("Disque distant: " .. tostring(err), self:theme().danger)
     return
   end
 
-  self.ghostDiskStates[diskId] = not infected
+  -- Keep the MER compatibility registry aligned when available, but the
+  -- physical marker on the remote disk is the authoritative state.
+  pcall(self.service.ghostDiskSet, self.service, diskId, wanted)
+
+  self.ghostDiskStates[diskId] = wanted
   self:setNotice(
     "Disque #" .. tostring(diskId)
-      .. (infected and " nettoye." or " marque comme vecteur Malcraft."),
+      .. (wanted and " contamine physiquement." or " nettoye physiquement."),
     self:theme().good
   )
+  self:ghostLoadDrives()
 end
 
 function LinkOS:openMalcraftDesktop()
@@ -1978,8 +2034,9 @@ function LinkOS:renderHacker(target, l)
     draw.text(target, x, y, "MALCRAFT CONTROL CENTER", colors.red, t.bg, w)
     y = y + 1
     draw.text(target, x, y,
-      tostring(#self.malcraftHosts) .. " PC infecte(s)  |  "
-        .. tostring(#self.malcraftLocalDisks) .. " disque(s) local(aux)",
+      tostring(#self.malcraftHosts) .. " infecte(s) | "
+        .. tostring(#(self.malcraftLiveHosts or {})) .. " charge(s) | "
+        .. tostring(#self.malcraftLocalDisks) .. " disque(s)",
       t.muted, t.bg, w)
     y = y + 2
 
@@ -2009,9 +2066,25 @@ function LinkOS:renderHacker(target, l)
     end)
 
     if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
-      self:addButton("malcraft:localdisks", x + bw + 2, y, bw, 1, function()
-        self:malcraftOpenLocalDisks()
+      draw.button(target, x + bw + 2, y, bw, "PCS CHARGES", colors.white, t.panel)
+      self:addButton("malcraft:live", x + bw + 2, y, bw, 1, function()
+        self:malcraftOpenLiveHosts()
+        self:render()
+      end)
+    end
+
+    y = y + 2
+
+    draw.button(target, x, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
+    self:addButton("malcraft:localdisks", x, y, bw, 1, function()
+      self:malcraftOpenLocalDisks()
+      self:render()
+    end)
+
+    if w >= bw * 2 + 2 then
+      draw.button(target, x + bw + 2, y, bw, "CIBLE PAR ID", colors.white, t.panel)
+      self:addButton("malcraft:byid", x + bw + 2, y, bw, 1, function()
+        self:malcraftSelectById()
         self:render()
       end)
     end
@@ -2038,7 +2111,13 @@ function LinkOS:renderHacker(target, l)
     end)
     y = y + 2
 
-    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, w)
+    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:malcraftOpenHosts()
+        self:render()
+      end)
+    end
     y = y + 2
 
     if #self.malcraftHosts == 0 then
@@ -2047,11 +2126,15 @@ function LinkOS:renderHacker(target, l)
       for i = 1, math.min(#self.malcraftHosts, math.max(1, l.h - y - 2)) do
         local item = self.malcraftHosts[i]
         local lastSeen = tonumber(item.last_seen) or 0
-        local online = lastSeen > 0 and (epochSeconds() - lastSeen) <= 25
+        local online = item.online == true
+          or (item.online == nil and lastSeen > 0 and (epochSeconds() - lastSeen) <= 25)
+        local source = tostring(item.source or item.last_source or "")
+        if #source > 12 then source = string.sub(source,1,12) end
         local line = "PC #" .. tostring(item.computer_id)
           .. " " .. tostring(item.label or "")
           .. (online and " [ONLINE]" or " [OFFLINE]")
-          .. (item.spread and " [PROP ON]" or " [PROP OFF]")
+          .. (item.spread and " [PROP]" or "")
+          .. (source ~= "" and (" <" .. source .. ">") or "")
 
         draw.text(target, x, y, line,
           online and (item.spread and colors.red or t.good) or t.muted,
@@ -2062,6 +2145,49 @@ function LinkOS:renderHacker(target, l)
           self:render()
         end)
         y = y + 1
+      end
+    end
+    return
+  end
+
+  if self.linksecView == "malcraft_live_hosts" then
+    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
+    self:addButton("malcraft:live:back", x, y, math.min(14, w), 1, function()
+      self:malcraftOpenHub()
+      self:render()
+    end)
+    y = y + 2
+
+    draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:malcraftOpenLiveHosts()
+        self:render()
+      end)
+    end
+    y = y + 1
+    draw.text(target, x, y, "LinkOS ou modem non requis.", t.muted, t.bg, w)
+    y = y + 2
+
+    if #self.malcraftLiveHosts == 0 then
+      draw.text(target, x, y, "Aucun Computer cible actuellement charge.", t.muted, t.bg, w)
+    else
+      for i = 1, math.min(#self.malcraftLiveHosts, math.max(1, l.h - y - 2)) do
+        local item = self.malcraftLiveHosts[i]
+        local infected = item.infected == true
+        local pos = tostring(item.x or "?") .. "," .. tostring(item.y or "?") .. "," .. tostring(item.z or "?")
+        local line = "PC #" .. tostring(item.computer_id)
+          .. " " .. tostring(item.label or "")
+          .. (infected and " [INFECTE]" or " [SAIN]")
+          .. " " .. pos
+
+        draw.text(target,x,y,line,infected and colors.red or t.good,t.panel,w)
+        local id=item.computer_id
+        self:addButton("malcraft:live:"..tostring(id),x,y,w,1,function()
+          self:malcraftSelectHost(id)
+          self:render()
+        end)
+        y=y+1
       end
     end
     return
@@ -2236,14 +2362,51 @@ function LinkOS:renderHacker(target, l)
     local spread = state.spread == true
     local immune = self.ghostState and self.ghostState.immune == true
 
-    draw.text(target, x, y, "Malcraft", colors.red, t.bg, w)
+    draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:ghostRefresh()
+        self:render()
+      end)
+    end
     y = y + 1
     draw.text(target, x, y,
       immune and "IMMUNISE"
         or (infected and "ACTIF" or "ABSENT"),
       immune and t.good or (infected and colors.red or t.muted),
       t.bg, w)
-    y = y + 2
+    y = y + 1
+
+    if infected then
+      local agent = self.ghostState and self.ghostState.agent_status or nil
+      local online = state.online == true
+      local profile
+      if not online then
+        profile = "HORS LIGNE"
+      elseif not agent then
+        profile = "AGENT MUET"
+      elseif agent.linkos_installed == true then
+        profile = "LINKOS + ROM"
+      else
+        profile = "ROM SEUL"
+      end
+      draw.text(target,x,y,
+        "Etat: " .. (online and "ONLINE" or "OFFLINE") .. " | " .. profile,
+        (online and agent) and t.good or (online and t.warn or t.muted),t.bg,w)
+      y = y + 1
+
+      local source=tostring((agent and agent.source) or state.source or "-")
+      draw.text(target,x,y,"Source: "..source,t.muted,t.bg,w)
+      y = y + 1
+
+      if state.dimension and state.dimension ~= "" then
+        local pos=tostring(state.dimension).." "
+          ..tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
+        draw.text(target,x,y,"Pos: "..pos,t.muted,t.bg,w)
+        y = y + 1
+      end
+    end
+    y = y + 1
 
     if immune then
       draw.text(target, x, y, "Ce poste est protege par la politique operateur.", t.muted, t.bg, w)
@@ -2622,16 +2785,21 @@ function LinkOS:renderHacker(target, l)
       draw.text(target, x, y, "Aucun disque detecte.", t.muted, t.bg, w)
     else
       for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
-        local diskId = self.ghostDrives[i]
-        local active = self.ghostDiskStates[tonumber(diskId)] == true
-        local line = "Disk #" .. tostring(diskId)
-          .. (active and "  [MALCRAFT ACTIF - NETTOYER]"
-            or "  [CONTAMINER MALCRAFT]")
+        local drive = self.ghostDrives[i]
+        local diskId = tonumber(type(drive)=="table" and drive.id or drive)
+        local active = diskId and self.ghostDiskStates[diskId] == true
+        local label = type(drive)=="table" and tostring(drive.label or "") or ""
+        local line = "Disk #" .. tostring(diskId or "?")
+          .. (label ~= "" and (" " .. label) or "")
+          .. (active and "  [MALCRAFT - NETTOYER]"
+            or "  [CONTAMINER]")
         draw.text(target, x, y, line, active and colors.red or t.text, t.panel, w)
-        self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
-          self:ghostCarrier(diskId)
-          self:render()
-        end)
+        if diskId then
+          self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
+            self:ghostCarrier(diskId)
+            self:render()
+          end)
+        end
         y = y + 1
       end
     end
@@ -2643,7 +2811,21 @@ function LinkOS:renderHacker(target, l)
 
   local buttonW = math.min(18, math.max(10, math.floor((w - 2) / 2)))
 
-  draw.button(target, x, y, buttonW, "SCAN PC", colors.white, colors.red)
+  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
+  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
+    self:malcraftOpenHub()
+    self:render()
+  end)
+
+  if w >= buttonW * 2 + 2 then
+    draw.text(target, x + buttonW + 2, y,
+      "PC vierges + disques + ROM + controle persistant",
+      t.muted, t.bg, math.max(1, w - buttonW - 2))
+  end
+
+  y = y + 2
+
+  draw.button(target, x, y, buttonW, "SCAN LINKOS", colors.white, t.panel)
   self:addButton("linksec:scan", x, y, buttonW, 1, function()
     self:linksecScan()
     self:render()
@@ -2654,20 +2836,6 @@ function LinkOS:renderHacker(target, l)
     self:addButton("linksec:terminal", x + buttonW + 2, y, buttonW, 1, function()
       self:openHackerTerminal()
     end)
-  end
-
-  y = y + 2
-
-  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
-  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
-    self:malcraftOpenHub()
-    self:render()
-  end)
-
-  if w >= buttonW * 2 + 2 then
-    draw.text(target, x + buttonW + 2, y,
-      "Propagation auto + disques + controle persistant",
-      t.muted, t.bg, math.max(1, w - buttonW - 2))
   end
 
   y = y + 2
@@ -2779,7 +2947,7 @@ function LinkOS:renderSecurity(target, l)
       y = y + 2
       if y < l.h then
         self:button(target,"sec:linksec",x,y,math.min(18,w),"OUVRIR LINKSEC",function()
-          self:openHackerTerminal()
+          self:openApp("hacker")
         end)
       end
     end

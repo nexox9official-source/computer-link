@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 8,
+  version = 9,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
@@ -23,7 +23,8 @@ return {
   },
 
   -- Propagation physique Minecraft : un poste compromis peut contaminer un
-  -- autre Computer GhostLink visible a tres courte distance via modem.
+  -- autre Computer charge a tres courte distance. Malcraft Bridge est le
+  -- transport principal ; le beacon modem reste un fallback de compatibilite.
   ghostlink_proximity_spread = true,
   ghostlink_proximity_distance = 2.5,
   ghostlink_beacon_seconds = 5,
@@ -31,6 +32,7 @@ return {
 
   -- Malcraft: les postes infectes marquent automatiquement les disques inseres.
   -- Le poste operateur reste immunise mais peut agir comme emetteur de proximite.
+  -- La persistance principale est assuree par Malcraft Bridge cote monde serveur.
   malcraft_auto_infect_disks = true,
   malcraft_operator_proximity_emitter = true,
 

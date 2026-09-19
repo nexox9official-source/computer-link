@@ -38,6 +38,7 @@ function service.new()
   self.online = false
   self.serverId = nil
   self.modemName = nil
+  self.bridgeAvailable = malcraftBusAvailable()
   self.unread = 0
   self.hackSessions = {}
   self.lastError = nil
@@ -87,24 +88,35 @@ function service:startUpdateMonitor()
 end
 
 function service:start()
-  local ok, modemOrError = network.open()
-  if not ok then
-    self.lastError = modemOrError
-    return false, modemOrError
-  end
-
-  self.modemName = modemOrError
-  hack.openChannel(self.modemName)
   storage.load()
+  self.bridgeAvailable = malcraftBusAvailable()
 
   if not os.getComputerLabel() then
     os.setComputerLabel("ASTRAL-PC-" .. os.getComputerID())
   end
 
+  local ok, modemOrError = network.open()
+  if not ok then
+    self.modemName = nil
+    self.serverId = nil
+    self.online = false
+    self.lastError = tostring(modemOrError or "Aucun Wireless Modem detecte.")
+    if self.bridgeAvailable then
+      self.lastError = self.lastError .. " | Malcraft Bridge disponible."
+    end
+    return false, self.lastError
+  end
+
+  self.modemName = modemOrError
+  hack.openChannel(self.modemName)
+
   self.serverId = network.findServer()
   if not self.serverId then
     self.lastError = "MER introuvable."
     self.online = false
+    if self.bridgeAvailable then
+      self.lastError = self.lastError .. " Malcraft Bridge reste disponible."
+    end
     return false, self.lastError
   end
 
@@ -179,6 +191,22 @@ function service:request(kind, payload, timeout)
 end
 
 function service:reconnect()
+  self.bridgeAvailable = malcraftBusAvailable()
+
+  -- A modem may have been attached after LinkOS booted. Re-discover and open
+  -- it on every reconnect attempt instead of assuming startup succeeded.
+  local ok, modemOrError = network.open()
+  if not ok then
+    self.modemName = nil
+    self.serverId = nil
+    self.online = false
+    self.lastError = tostring(modemOrError or "Aucun Wireless Modem detecte.")
+    return false, self.lastError
+  end
+
+  self.modemName = modemOrError
+  hack.openChannel(self.modemName)
+
   self.serverId = network.findServer()
   if not self.serverId then
     self.online = false
@@ -247,6 +275,7 @@ function service:identity()
     server_id = self.serverId,
     modem = self.modemName,
     online = self.online,
+    malcraft_bridge = self.bridgeAvailable == true,
     version = config.VERSION
   }
 end
@@ -342,7 +371,12 @@ function service:ghostStatus(targetId)
         spread = found and found.spread == true or false,
         online = found and found.online == true or false,
         source = found and found.source or nil,
-        label = found and found.label or nil
+        label = found and found.label or nil,
+        last_seen = found and found.last_seen or nil,
+        dimension = found and found.dimension or nil,
+        x = found and found.x or nil,
+        y = found and found.y or nil,
+        z = found and found.z or nil
       },
       immune = targetId == 0,
       transport = "malcraft_bridge"
@@ -433,6 +467,18 @@ function service:ghostSetSpread(targetId, enabled)
   return packet.payload
 end
 
+function service:ghostLiveComputers()
+  if malcraftBusAvailable() and type(malcraft_bus.listComputers) == "function" then
+    local data = jsonDecode(malcraft_bus.listComputers())
+    if data and type(data.computers) == "table" then
+      return data.computers
+    end
+    return {}, nil
+  end
+
+  return nil, "Malcraft Bridge 0.11.0 requis pour lister les Computers charges sans LinkOS."
+end
+
 function service:ghostList()
   if malcraftBusAvailable() then
     local data = jsonDecode(malcraft_bus.listInfected())
@@ -497,35 +543,37 @@ function service:ghostRemote(targetId, action, argument)
       jsonEncode(argument)
     )
 
-    if sent then
-      local timer = os.startTimer(4)
+    if not sent then
+      return nil, "Malcraft Bridge: cible hors ligne ou agent ROM indisponible."
+    end
 
-      while true do
-        local event, a, b, d, e, f = os.pullEvent()
+    local timer = os.startTimer(4)
 
-        if event == "timer" and a == timer then
-          return nil, "Malcraft Bridge: cible hors ligne ou sans agent actif."
+    while true do
+      local event, a, b, d, e, f = os.pullEvent()
+
+      if event == "timer" and a == timer then
+        return nil, "Malcraft Bridge: cible hors ligne ou sans agent actif."
+      end
+
+      if event == "malcraft_bus_response"
+        and tonumber(a) == targetId
+        and tostring(b) == tostring(requestId) then
+
+        local ok = d == true
+        local payload = jsonDecode(e) or {}
+
+        if ok then return payload end
+        return nil, tostring(f or "Commande Malcraft refusee.")
+      end
+
+      if event == "rednet_message" then
+        local sender, message, protocol = a, b, d
+        if protocol == config.HACK_PROTOCOL then
+          hack.handleRednet(sender, message, protocol, storage)
         end
-
-        if event == "malcraft_bus_response"
-          and tonumber(a) == targetId
-          and tostring(b) == tostring(requestId) then
-
-          local ok = d == true
-          local payload = jsonDecode(e) or {}
-
-          if ok then return payload end
-          return nil, tostring(f or "Commande Malcraft refusee.")
-        end
-
-        if event == "rednet_message" then
-          local sender, message, protocol = a, b, d
-          if protocol == config.HACK_PROTOCOL then
-            hack.handleRednet(sender, message, protocol, storage)
-          end
-        elseif event == "modem_message" then
-          hack.handleModem(self.modemName, b, d, e, f)
-        end
+      elseif event == "modem_message" then
+        hack.handleModem(self.modemName, b, d, e, f)
       end
     end
   end

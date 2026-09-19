@@ -140,6 +140,20 @@ local function remoteInput(targetId, eventName, ...)
   })
 end
 
+local function mapRemoteMouse(frame, x, y)
+  if type(frame)~="table" then return nil end
+  local width=tonumber(frame.width) or 0
+  local height=tonumber(frame.height) or 0
+  local rx=tonumber(x)
+  local ry=tonumber(y)
+  if not rx or not ry or width<1 or height<1 then return nil end
+
+  -- Row 1 is LinkSec's own header and the last row is its footer.
+  ry=ry-1
+  if ry<1 or ry>height or rx<1 or rx>width then return nil end
+  return rx,ry
+end
+
 function RemoteDesktop.run(service, targetId)
   targetId = tonumber(targetId)
   if not targetId then return false, "ID cible invalide." end
@@ -253,24 +267,20 @@ function RemoteDesktop.run(service, targetId)
       remoteInput(targetId, "paste", a)
 
     elseif event == "mouse_click" and control then
-      if c and c >= 2 then
-        remoteInput(targetId, "mouse_click", a, b, c - 1)
-      end
+      local rx,ry=mapRemoteMouse(frame,b,c)
+      if rx then remoteInput(targetId,"mouse_click",a,rx,ry) end
 
     elseif event == "mouse_up" and control then
-      if c and c >= 2 then
-        remoteInput(targetId, "mouse_up", a, b, c - 1)
-      end
+      local rx,ry=mapRemoteMouse(frame,b,c)
+      if rx then remoteInput(targetId,"mouse_up",a,rx,ry) end
 
     elseif event == "mouse_drag" and control then
-      if c and c >= 2 then
-        remoteInput(targetId, "mouse_drag", a, b, c - 1)
-      end
+      local rx,ry=mapRemoteMouse(frame,b,c)
+      if rx then remoteInput(targetId,"mouse_drag",a,rx,ry) end
 
     elseif event == "mouse_scroll" and control then
-      if c and c >= 2 then
-        remoteInput(targetId, "mouse_scroll", a, b, c - 1)
-      end
+      local rx,ry=mapRemoteMouse(frame,b,c)
+      if rx then remoteInput(targetId,"mouse_scroll",a,rx,ry) end
 
     elseif event == "term_resize" then
       renderFrame(targetId, frame, control)

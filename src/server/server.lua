@@ -522,10 +522,11 @@ local function handleGhost(senderId, message)
       return
     end
 
-    database.setGhostDisk(diskId, true, sender)
+    local infected = payload.infected ~= false
+    database.setGhostDisk(diskId, infected, sender)
     ghostReply(sender, message, true, {
       disk_id = diskId,
-      infected = true
+      infected = infected
     })
 
   else

@@ -248,6 +248,25 @@ local function writeMarker(drive)
   return true
 end
 
+local function removeMarker(drive)
+  if not drive or not drive.has_data or not drive.mount then
+    return false
+  end
+
+  local path=markerPath(drive.mount)
+  if fs.exists(path) and not fs.isDir(path) then
+    local ok=pcall(fs.delete,path)
+    if not ok then return false end
+  end
+
+  local dir=fs.combine(drive.mount,MARKER_DIR)
+  if fs.exists(dir) and fs.isDir(dir) then
+    local entries=fs.list(dir)
+    if #entries==0 then pcall(fs.delete,dir) end
+  end
+  return true
+end
+
 local function carrierPresent()
   for _, drive in ipairs(drives()) do
     if diskHasMarker(drive) then
@@ -327,20 +346,22 @@ local function syncState()
     return
   end
 
-  -- Physical carrier infection is evaluated first. With Malcraft Bridge this
-  -- becomes server-visible immediately, without a modem or LinkOS.
-  localCarrierInfection()
-
   if bus then
     local state = nil
+    local present = carrierPresent()
 
     if type(bus.state) == "function" then
       local ok, raw = pcall(bus.state)
       if ok then state = jsonDecode(raw) end
     end
 
+    -- The Bridge clean tombstone wins before any physical carrier is
+    -- evaluated. This makes an offline remote clean deterministic even if a
+    -- contaminated disk is still inserted when the Computer boots again.
     if state and state.known == true then
       if state.infected == true then
+        settings.unset(LOCAL_CLEAN_LOCK)
+        saveSettings()
         setLocalState(
           true,
           state.spread ~= false,
@@ -350,9 +371,25 @@ local function syncState()
         settings.set(LOCAL_CLEAN_LOCK, true)
         saveSettings()
         setLocalState(false, false, nil)
+
+        -- Once the carrier has actually been removed, acknowledge the clean
+        -- tombstone. A later reinsertion is then a genuinely new infection.
+        if not present and type(bus.acknowledgeClean) == "function" then
+          local ok, acknowledged = pcall(bus.acknowledgeClean)
+          if ok and acknowledged == true then
+            settings.unset(LOCAL_CLEAN_LOCK)
+            saveSettings()
+          end
+        end
       end
-    elseif infected and type(bus.infectSelf) == "function" then
-      pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
+    else
+      -- Unknown to the Bridge: local persisted infection and/or a physical
+      -- contaminated disk may register this host for the first time.
+      localCarrierInfection()
+
+      if infected and type(bus.infectSelf) == "function" then
+        pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
+      end
     end
 
     if infected and type(bus.heartbeat) == "function" then
@@ -372,6 +409,7 @@ local function syncState()
 
   -- Legacy modem/MER fallback when the server-only Malcraft Bridge mod is not
   -- installed.
+  localCarrierInfection()
   if not networkModemName then return end
 
   local reply = request("STATE", {
@@ -396,7 +434,6 @@ local function syncState()
     infectConnectedDisks()
   end
 end
-
 local function currentMs()
   if os.epoch then
     local ok, value = pcall(os.epoch, "utc")
@@ -744,12 +781,17 @@ local function processAction(sender, action, argument)
   argument = type(argument) == "table" and argument or {}
 
   if action == "status" then
+    local carrier = carrierPresent()
     return true, {
       infected = infected,
       spread = spreadEnabled,
       computer_id = os.getComputerID(),
       label = os.getComputerLabel(),
-      transport = bus and "malcraft_bridge" or "rednet"
+      transport = bus and "malcraft_bridge" or "rednet",
+      agent = "rom",
+      linkos_installed = fs.exists("/computer-link"),
+      carrier_present = carrier == true,
+      source = settings.get(LOCAL_SOURCE)
     }
 
   elseif action == "devices" then
@@ -767,7 +809,13 @@ local function processAction(sender, action, argument)
     return data ~= nil, data, err
 
   elseif action == "drives" then
-    return true, {disk_ids=diskIds()}
+    local rows=drives()
+    local ids={}
+    for _,drive in ipairs(rows) do
+      if drive.id then ids[#ids+1]=drive.id end
+      drive.malcraft = diskHasMarker(drive)
+    end
+    return true, {disk_ids=ids, drives=rows}
 
   elseif action == "spread" then
     if not spreadEnabled then
@@ -794,26 +842,28 @@ local function processAction(sender, action, argument)
       response and response.payload or nil,
       response and response.error or "MER indisponible."
 
-  elseif action == "infect_disk" then
+  elseif action == "infect_disk" or action == "disk_set" then
     local diskId = tonumber(argument.disk_id)
     if not diskId then
       return false, nil, "Disk ID invalide."
     end
 
-    local marked = false
+    local wanted = action=="infect_disk" or argument.infected ~= false
+    local changed = false
     for _, drive in ipairs(drives()) do
       if tonumber(drive.id) == diskId then
-        marked = writeMarker(drive)
+        changed = wanted and writeMarker(drive) or removeMarker(drive)
         break
       end
     end
 
-    if networkModemName then
-      pcall(request, "INFECT_DISK", {disk_id=diskId}, 0.8)
+    if changed and networkModemName then
+      pcall(request, "INFECT_DISK", {disk_id=diskId, infected=wanted}, 0.8)
     end
 
-    return marked, marked and {disk_id=diskId, infected=true} or nil,
-      marked and nil or "Disque introuvable ou non inscriptible."
+    return changed,
+      changed and {disk_id=diskId, infected=wanted} or nil,
+      changed and nil or "Disque introuvable ou non inscriptible."
 
   elseif action == "screen_snapshot" then
     local frame, err = screenFrame()
@@ -979,12 +1029,8 @@ end
 
 findModems()
 
-if isImmune(os.getComputerID()) then
-  setLocalState(false, false, nil)
-else
-  localCarrierInfection()
-end
-
+-- syncState owns the ordering between Bridge tombstones and physical carriers.
+-- Never infect from a disk before asking the authoritative Bridge first.
 syncState()
 sendBeacon()
 
@@ -1043,7 +1089,7 @@ while true do
 
   elseif event == "disk" or event == "peripheral" then
     findModems()
-    localCarrierInfection()
+    -- Keep the same Bridge-first ordering on hot-plug as at boot.
     syncState()
     infectConnectedDisks()
 

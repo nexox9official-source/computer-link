@@ -44,7 +44,7 @@ public final class MalcraftApi implements ILuaAPI {
 
     @LuaFunction
     public final String version() {
-        return "0.10.1";
+        return "0.11.0";
     }
 
     @LuaFunction
@@ -68,6 +68,11 @@ public final class MalcraftApi implements ILuaAPI {
     }
 
     @LuaFunction
+    public final boolean acknowledgeClean() {
+        return MalcraftRegistry.acknowledgeClean(computer);
+    }
+
+    @LuaFunction
     public final boolean infectTarget(int targetId, String source) {
         return MalcraftRegistry.infect(computer, targetId, source, true);
     }
@@ -85,6 +90,11 @@ public final class MalcraftApi implements ILuaAPI {
     @LuaFunction
     public final String listInfected() {
         return MalcraftRegistry.listInfectedJson(computer);
+    }
+
+    @LuaFunction
+    public final String listComputers() {
+        return MalcraftRegistry.listLiveJson(computer);
     }
 
     @LuaFunction
