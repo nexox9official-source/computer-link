@@ -114,8 +114,18 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:closeWindow(win)
   end
   if size[1]==51 then
+    o.notice=nil;o.noticeExpires=nil
     o:openApp('home');o:render();native.dump('/tmp/linkos-desktop.frame')
+
+    o.startMenuOpen=true;o:render();native.dump('/tmp/linkos-launcher.frame')
+    o.startMenuOpen=false;o.quickPanelOpen=true;o:render();native.dump('/tmp/linkos-system-panel.frame')
+    o.quickPanelOpen=false
+
     o:openApp('store');o:render();native.dump('/tmp/linkos-store.frame')
+    o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
+    o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+
+    o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
   end
   total=total+1
   disk['/user/notes.txt']=nil
