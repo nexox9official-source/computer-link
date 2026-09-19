@@ -1,14 +1,31 @@
 # Computer Link — LinkOS / AstralNet
 
-## Preview 0.21 — interface simplifiee
+## LinkOS 0.22 — interface reconstruite a partir d'OS ComputerCraft
 
-La branche `ui/linkos-v0.21-simple-windows` teste une navigation plus simple apres
-les retours sur la 0.20 : apps plein ecran sur Computer standard, START explicite,
-vue Epinglees -> TOUTES, taskbar lisible et moins de controles techniques visibles.
+LinkOS 0.22 remplace une grande partie de l'ancienne UI dessinee au cas par cas
+par une couche de composants commune inspiree de projets ComputerCraft eprouves.
 
-Voir [le guide preview 0.21](docs/DESKTOP-0.21.md).
+- **OneOS (MIT)** : fiches d'applications, modele d'icones compact et adaptation
+  aux petites resolutions ;
+- **Opus OS (MIT)** : boutons avec etats, tabs, listes scrollables et focus ;
+- **Basalt (MIT)** : reference d'architecture composants/themes/evenements.
 
-La version stable reste 0.20 tant que cette preview n'a pas ete validee en jeu.
+Demarrer, Store, Fichiers, Parametres, Messages, Contacts, Reseau, Securite,
+Calculatrice, Terminal, Notes, A propos et l'accueil LinkSec utilisent maintenant
+une grammaire UI commune.
+
+La CI genere des frames 51x19 et refuse une release si un texte principal est
+tronque par LinkOS. Le manifeste verifie aussi que tous les fichiers UI requis
+sont reellement installables.
+
+Voir [Desktop 0.22](docs/DESKTOP-0.22.md) et [les attributions UI](THIRD_PARTY_UI.md).
+
+## LinkOS 0.21 — navigation simplifiee
+
+LinkOS 0.21 a etabli la base plein-ecran sur Computer standard : START explicite,
+barre des taches lisible, apps plein ecran et reduction du bruit visuel. La 0.22
+conserve cette philosophie mais remplace la couche visuelle interne par des
+composants plus robustes.
 
 ## LinkOS 0.20 — Windows polish
 

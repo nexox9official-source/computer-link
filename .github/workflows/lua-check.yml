@@ -25,6 +25,20 @@ jobs:
             echo "Checking $file"
             luac5.3 -p "$file"
           done < <(find . -type f -name '*.lua' -print0)
+      - name: Validate manifest files
+        run: |
+          lua5.3 - <<'LUA'
+          local manifest = dofile("manifest.lua")
+          local groups = {"common_files", "client_files", "server_files", "files", "protected_client_files"}
+          for _, group in ipairs(groups) do
+            for _, path in ipairs(manifest[group] or {}) do
+              local f = assert(io.open(path, "rb"), group .. " missing file: " .. path)
+              f:close()
+            end
+          end
+          print("PASS: manifest files exist")
+          LUA
+
       - name: Test shell layouts and workspace interactions
         run: |
           lua5.3 tests/shell_layout.lua
@@ -37,6 +51,26 @@ jobs:
         run: |
           mkdir -p test-output
           cp /tmp/linkos-*.frame test-output/ 2>/dev/null || true
+
+      - name: Reject truncated primary UI labels
+        run: |
+          set -euo pipefail
+          for frame in \
+            linkos-launcher.frame \
+            linkos-store.frame \
+            linkos-settings.frame \
+            linkos-files.frame \
+            linkos-messages.frame \
+            linkos-calculator.frame \
+            linkos-linksec.frame \
+            linkos-task-switcher.frame; do
+            path="test-output/$frame"
+            [ -f "$path" ] || continue
+            if grep -n '~' "$path"; then
+              echo "Truncated UI text found in $frame"
+              exit 1
+            fi
+          done
 
       - name: Upload UI frame previews
         if: always()

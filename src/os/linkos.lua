@@ -1,6 +1,7 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local fluent = dofile("/computer-link/src/ui/fluent.lua")
+local ccui = dofile("/computer-link/src/ui/ccui.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local shellui = dofile("/computer-link/src/ui/shell.lua")
@@ -850,34 +851,31 @@ function LinkOS:peerName(id)
   return prefs.alias(id) or ("PC #" .. tostring(id))
 end
 
-function LinkOS:renderMessages(target, l)
+function LinkOS:renderMessages(target,l)
   local t=self:theme()
   local x,y,w,h=l.contentX,l.contentY,l.contentW,l.contentH
 
-  fluent.sectionTitle(target,x,y,w,"Messages","Conversations AstralNet",t.accent)
-  self:button(target,"msg:new",math.max(x,x+w-10),y,10,"+ NOUVEAU",function()
-    local targetId=tonumber(self:prompt("Nouveau message","Computer ID du destinataire"))
+  draw.text(target,x,y,"Messages",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Conversations AstralNet",t.muted,t.bg,w)
+  ccui.button(target,x+w-10,y,10,"NOUVEAU",t,{primary=true})
+  self:addButton("msg:new",x+w-10,y,10,1,function()
+    local targetId=tonumber(self:prompt("Nouveau message","Computer ID"))
     if not targetId then self:setNotice("Computer ID invalide.",t.danger);return end
-    local body=self:prompt("PC #"..targetId,"Ecris ton message")
+    local body=self:prompt("PC #"..targetId,"Message")
     if body and body~="" then
       local message,err=self.service:sendMessage(targetId,body)
-      if message then
-        self.selectedPeer=targetId
-        self:setNotice("Message envoye.",t.good)
-      else
-        self:setNotice(tostring(err),t.danger)
-      end
+      if message then self.selectedPeer=targetId;self:setNotice("Message envoye.",t.good)
+      else self:setNotice(tostring(err),t.danger) end
     end
   end)
-  y=y+4
+  y=y+3
 
   local peers=self.service:peers()
-  local sideW=w>=40 and math.min(18,math.floor(w*0.38)) or (w>=34 and math.min(15,math.floor(w*0.38)) or w)
+  local sideW=w>=38 and 16 or 13
   local chatX=x+sideW+1
   local chatW=math.max(1,w-sideW-1)
 
-  draw.fill(target,x,y,sideW,math.max(5,h-5),t.surface)
-  draw.text(target,x+1,y,"CONVERSATIONS",t.muted,t.surface,math.max(1,sideW-2))
+  ccui.panel(target,x,y,sideW,math.max(5,h-4),t,{title="Conversations"})
   local row=y+2
   if #peers==0 then
     draw.text(target,x+1,row,"Aucun echange",t.muted,t.surface,math.max(1,sideW-2))
@@ -888,10 +886,9 @@ function LinkOS:renderMessages(target, l)
       local selected=tonumber(self.selectedPeer)==tonumber(pid)
       local bg=selected and t.selection or t.surface
       local name=self:peerName(pid)
-      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
       draw.fill(target,x,row,sideW,2,bg)
-      fluent.drawMiniIcon(target,"messages",x+1,row,selected,bg)
-      draw.text(target,x+5,row,name,selected and t.text or t.muted,bg,math.max(1,sideW-6))
+      draw.text(target,x+1,row,name,selected and t.text or t.muted,bg,math.max(1,sideW-2))
+      local last=peer.last and tostring(peer.last.body or "") or ""
       draw.text(target,x+1,row+1,last,t.muted,bg,math.max(1,sideW-2))
       self:addButton("peer:"..pid,x,row,sideW,2,function()
         self.selectedPeer=pid
@@ -901,49 +898,47 @@ function LinkOS:renderMessages(target, l)
     end
   end
 
-  if w<34 then return end
+  if w<30 then return end
 
-  draw.fill(target,chatX,y,chatW,math.max(5,h-5),t.bg)
   if not self.selectedPeer then
-    fluent.card(target,chatX+1,y+2,math.max(8,chatW-2),5,{
-      bg=t.surface,accent=t.accent,title="Choisis une conversation",
-      subtitle="+ NOUVEAU pour ecrire a un Computer.",muted=t.muted
-    })
+    ccui.panel(target,chatX,y,chatW,6,t,{accent=t.accent,
+      title="Aucun message",
+      subtitle="Clique NOUVEAU."})
     return
   end
 
   local peerId=self.selectedPeer
   local name=self:peerName(peerId)
-  draw.text(target,chatX+1,y,name,t.text,t.bg,math.max(1,chatW-2))
-  draw.text(target,chatX+1,y+1,"Computer #"..tostring(peerId),t.muted,t.bg,math.max(1,chatW-2))
-
+  ccui.panel(target,chatX,y,chatW,3,t,{title=name,subtitle="Computer #"..tostring(peerId)})
   local history=self.service:history(peerId,math.max(8,h-9))
-  local maxLines=math.max(1,math.min(#history,l.h-(y+7)))
+  local maxLines=math.max(1,l.h-(y+7))
   local first=math.max(1,#history-maxLines+1)
-  local cy=y+3
+  local cy=y+4
+
   for i=first,#history do
-    if cy>=l.h-3 then break end
+    if cy>=l.h-2 then break end
     local m=history[i]
     local mine=tonumber(m.from_id)==os.getComputerID()
     local bubbleBg=mine and t.selection or t.surface
-    local prefix=mine and "MOI" or string.upper(string.sub(name,1,3))
-    draw.fill(target,chatX+1,cy,chatW-2,1,bubbleBg)
-    draw.text(target,chatX+2,cy,prefix,mine and t.accent or t.muted,bubbleBg,4)
-    draw.text(target,chatX+7,cy,tostring(m.body),t.text,bubbleBg,math.max(1,chatW-9))
+    draw.fill(target,chatX,cy,chatW,1,bubbleBg)
+    draw.text(target,chatX+1,cy,mine and "Moi" or name,mine and t.accent or t.muted,bubbleBg,5)
+    draw.text(target,chatX+7,cy,tostring(m.body),t.text,bubbleBg,math.max(1,chatW-8))
     cy=cy+1
   end
 
-  local actionY=math.max(y+4,l.h-2)
-  self:button(target,"msg:reply",chatX+1,actionY,10,"REPONDRE",function()
-    local body=self:prompt(name,"Ecris ton message")
+  local actionY=l.h-2
+  ccui.button(target,chatX,actionY,10,"REPONDRE",t,{primary=true})
+  self:addButton("msg:reply",chatX,actionY,10,1,function()
+    local body=self:prompt(name,"Message")
     if body and body~="" then
       local _,err=self.service:sendMessage(peerId,body)
       self:setNotice(err or "Message envoye.",err and t.danger or t.good)
     end
   end)
-  if chatW>=22 then
-    self:button(target,"msg:alias",chatX+12,actionY,8,"ALIAS",function()
-      local alias=self:prompt("Alias de PC #"..peerId,"Vide = supprimer")
+  if chatW>=20 then
+    ccui.button(target,chatX+11,actionY,8,"ALIAS",t,{})
+    self:addButton("msg:alias",chatX+11,actionY,8,1,function()
+      local alias=self:prompt("Alias","Nom local du contact")
       prefs.setAlias(peerId,alias)
       self:setNotice("Alias mis a jour.",t.good)
     end)
@@ -954,44 +949,56 @@ function LinkOS:renderContacts(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  fluent.sectionTitle(target,x,y,w,"Contacts","Carnet d'adresses local",t.accent)
-  self:button(target,"contact:add",math.max(x,x+w-10),y,10,"+ AJOUTER",function()
+  draw.text(target,x,y,"Contacts",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Carnet d'adresses local",t.muted,t.bg,w)
+  ccui.button(target,x+w-9,y,9,"AJOUTER",t,{primary=true})
+  self:addButton("contact:add",x+w-9,y,9,1,function()
     local id=tonumber(self:prompt("Nouveau contact","Computer ID"))
     if not id then self:setNotice("Computer ID invalide.",t.danger);return end
-    local name=self:prompt("PC #"..id,"Nom local du contact")
-    if name and name~="" then prefs.setAlias(id,name);self:setNotice("Contact ajoute.",t.good) end
+    local name=self:prompt("PC #"..id,"Nom du contact")
+    if name and name~="" then
+      prefs.setAlias(id,name)
+      self:setNotice("Contact ajoute.",t.good)
+    end
   end)
-  y=y+4
+  y=y+3
 
   local contacts={}
-  for id,name in pairs(prefs.all().aliases or {}) do contacts[#contacts+1]={id=tonumber(id) or id,name=name} end
-  table.sort(contacts,function(a,b) return string.lower(tostring(a.name))<string.lower(tostring(b.name)) end)
+  for id,name in pairs(prefs.all().aliases or {}) do
+    contacts[#contacts+1]={id=tonumber(id) or id,name=name}
+  end
+  table.sort(contacts,function(a,b)
+    return string.lower(tostring(a.name))<string.lower(tostring(b.name))
+  end)
 
   if #contacts==0 then
-    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.muted,title="Aucun contact",
-      subtitle="Ajoute un Computer ID pour le retrouver ici.",muted=t.muted})
+    ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun contact",
+      subtitle="Clique AJOUTER pour enregistrer un Computer."})
     return
   end
 
-  local cols=w>=38 and 2 or 1
-  local gap=1
-  local cw=math.max(14,math.floor((w-(cols-1)*gap)/cols))
-  for i,contact in ipairs(contacts) do
-    local col=(i-1)%cols
-    local row=math.floor((i-1)/cols)
-    local bx=x+col*(cw+gap)
-    local by=y+row*4
-    if by+2>=l.h-1 then break end
+  local pageSize=math.max(1,math.floor((l.h-y-1)/3))
+  self.contactsOffset=self.contactsOffset or 0
+  local page=ccui.page(#contacts,pageSize,self.contactsOffset)
+  self.contactsOffset=page.offset
+
+  for i=page.first,page.last do
+    local contact=contacts[i]
+    local by=y+(i-page.first)*3
     local cid=tonumber(contact.id)
-    draw.fill(target,bx,by,cw,3,t.surface)
-    fluent.drawMiniIcon(target,"contacts",bx+1,by,false,t.surface)
-    draw.text(target,bx+5,by,tostring(contact.name),t.text,t.surface,math.max(1,cw-6))
-    draw.text(target,bx+5,by+1,"Computer #"..tostring(contact.id),t.muted,t.surface,math.max(1,cw-6))
-    draw.text(target,bx+1,by+2,cid and "Ouvrir Messages" or "Alias local",t.accent,t.surface,cw-2)
-    self:addButton("contact:"..tostring(contact.id),bx,by,cw,3,function()
-      if cid then self.selectedPeer=cid;self:openApp("messages") end
-    end)
+    local bg=t.surface
+    draw.fill(target,x,by,w,2,bg)
+    fluent.drawMiniIcon(target,"contacts",x+1,by,false,bg)
+    draw.text(target,x+5,by,tostring(contact.name),t.text,bg,math.max(1,w-6))
+    draw.text(target,x+5,by+1,"Computer #"..tostring(contact.id),t.muted,bg,math.max(1,w-6))
+    if cid then
+      self:addButton("contact:"..tostring(contact.id),x,by,w,2,function()
+        self.selectedPeer=cid
+        self:openApp("messages")
+      end)
+    end
   end
+  ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
 end
 
 function LinkOS:renderNetwork(target,l)
@@ -999,62 +1006,56 @@ function LinkOS:renderNetwork(target,l)
   local x,y,w=l.contentX,l.contentY,l.contentW
   local info=self.service:identity()
 
-  fluent.sectionTitle(target,x,y,w,"Reseau","AstralNet et connectivite du poste",t.accent)
-  y=y+4
+  draw.text(target,x,y,"Reseau",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Etat du Computer et AstralNet",t.muted,t.bg,w)
+  y=y+3
 
-  local status=info.online and "Connecte" or "Hors-ligne"
-  fluent.card(target,x,y,w,6,{
-    bg=t.surface,accent=info.online and t.good or t.danger,
+  local online=info.online
+  ccui.panel(target,x,y,w,5,t,{accent=online and t.good or t.danger,
     title=tostring(info.label or ("PC-"..tostring(info.computer_id))),
-    subtitle=status.." / Computer #"..tostring(info.computer_id),muted=t.muted
-  })
-  draw.text(target,x+2,y+2,"MER",t.muted,t.surface,9)
-  draw.text(target,x+12,y+2,info.server_id and ("#"..tostring(info.server_id)) or "Non detecte",
-    info.server_id and t.text or t.warn,t.surface,math.max(1,w-14))
-  draw.text(target,x+2,y+3,"Modem",t.muted,t.surface,9)
-  draw.text(target,x+12,y+3,tostring(info.modem or "Absent"),
-    info.modem and t.text or t.warn,t.surface,math.max(1,w-14))
-  draw.text(target,x+2,y+4,"Malcraft",t.muted,t.surface,9)
-  draw.text(target,x+12,y+4,info.malcraft_bridge and "Bridge online" or "Bridge absent",
-    info.malcraft_bridge and t.good or t.muted,t.surface,math.max(1,w-14))
-  y=y+7
+    subtitle=(online and "Connecte" or "Hors-ligne").." / Computer #"..tostring(info.computer_id)})
+  draw.text(target,x+2,y+2,"MER",t.muted,t.surface,10)
+  draw.text(target,x+13,y+2,info.server_id and ("#"..tostring(info.server_id)) or "Absent",
+    info.server_id and t.text or t.warn,t.surface,math.max(1,w-15))
+  draw.text(target,x+2,y+3,"Modem",t.muted,t.surface,10)
+  draw.text(target,x+13,y+3,tostring(info.modem or "Absent"),
+    info.modem and t.text or t.warn,t.surface,math.max(1,w-15))
+  y=y+6
 
-  local bw=math.max(7,math.floor((w-2)/3))
-  self:button(target,"net:ping",x,y,bw,"PING",function()
+  local bw=math.max(8,math.floor((w-2)/3))
+  ccui.button(target,x,y,bw,"TESTER",t,{})
+  self:addButton("net:ping",x,y,bw,1,function()
     local result,err=self.service:ping()
     self:setNotice(result and ("MER ~"..tostring(result.latency).." ms") or tostring(err),
       result and t.good or t.danger)
   end)
-  if x+bw+1<=x+w-1 then
-    self:button(target,"net:sync",x+bw+1,y,math.min(bw,w-bw-1),"SYNC",function()
-      local count,err=self.service:syncInbox(true)
-      self:setNotice(count and (tostring(count).." message(s) synchronise(s).") or tostring(err),
-        count and t.good or t.danger)
-    end)
-  end
+  ccui.button(target,x+bw+1,y,math.min(bw,w-bw-1),"SYNC",t,{})
+  self:addButton("net:sync",x+bw+1,y,math.min(bw,w-bw-1),1,function()
+    local count,err=self.service:syncInbox(true)
+    self:setNotice(count and (tostring(count).." message(s) synchronise(s).") or tostring(err),
+      count and t.good or t.danger)
+  end)
   if x+(bw+1)*2<=x+w-1 then
-    self:button(target,"net:reconnect",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"RECONN.",function()
+    ccui.button(target,x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"RECONNECTER",t,{})
+    self:addButton("net:reconnect",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),1,function()
       local ok,err=self.service:reconnect()
       self:setNotice(ok and "Connexion MER retablie." or tostring(err),ok and t.good or t.danger)
     end)
   end
   y=y+2
 
-  self:button(target,"net:rename",x,y,math.min(12,w),"RENOMMER",function()
-    local value=self:prompt("Nouveau nom du PC","Maximum 32 caracteres.")
+  ccui.button(target,x,y,12,"RENOMMER",t,{})
+  self:addButton("net:rename",x,y,12,1,function()
+    local value=self:prompt("Nom du PC","Maximum 32 caracteres")
     local ok,err=self.service:setLabel(value)
     self:setNotice(ok and "Nom du PC mis a jour." or tostring(err),ok and t.good or t.danger)
   end)
-  if w>=24 then
-    self:button(target,"net:details",x+14,y,math.min(10,w-14),self.networkDetails and "MASQUER" or "DETAILS",function()
-      self.networkDetails=not self.networkDetails
-    end)
-  end
+  ccui.button(target,x+13,y,10,self.networkDetails and "MASQUER" or "DETAILS",t,{selected=self.networkDetails})
+  self:addButton("net:details",x+13,y,10,1,function() self.networkDetails=not self.networkDetails end)
 
   if self.networkDetails then
     y=y+3
-    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Details techniques",
-      subtitle="Informations de protocole LinkOS",muted=t.muted})
+    ccui.panel(target,x,y,w,5,t,{title="Details techniques",subtitle="Informations LinkOS"})
     draw.text(target,x+2,y+2,"Protocole",t.muted,t.surface,10)
     draw.text(target,x+13,y+2,tostring(config.PROTOCOL),t.text,t.surface,math.max(1,w-15))
     draw.text(target,x+2,y+3,"Version",t.muted,t.surface,10)
@@ -1894,7 +1895,7 @@ function LinkOS:renderHacker(target, l)
   local targetText=shownTarget and ("Cible PC #"..tostring(shownTarget)) or "Aucune cible"
 
   if w>=26 then
-    draw.text(target,math.max(x,x+w-#targetText),y+1,targetText,
+    draw.text(target,math.max(x+10,x+w-#targetText),y,targetText,
       shownTarget and t.good or t.warn,t.bg,#targetText)
   end
 
@@ -2092,7 +2093,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:malcraftOpenHosts()
         self:render()
       end)
@@ -2139,7 +2140,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:malcraftOpenLiveHosts()
         self:render()
       end)
@@ -2343,7 +2344,7 @@ function LinkOS:renderHacker(target, l)
 
     draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
     if w>=24 then
-      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
         self:ghostRefresh()
         self:render()
       end)
@@ -2785,55 +2786,73 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.danger,
-    title="Poste operateur PC #"..tostring(os.getComputerID()),
-    subtitle="Malcraft gere les cibles ROM-only; le scan LinkOS reste disponible.",muted=t.muted})
-  y=y+5
+  draw.text(target,x,y,"Poste operateur PC #"..tostring(os.getComputerID()),t.text,t.bg,w)
+  draw.text(target,x,y+1,"Choisis le mode de controle.",t.muted,t.bg,w)
+  y=y+3
 
-  local buttonW=math.min(18,math.max(10,math.floor((w-2)/2)))
-  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="Malcraft",
-    subtitle="PC vierges, disques, ROM et controle persistant.",muted=t.muted})
-  fluent.button(target,x+2,y+3,buttonW,"OUVRIR MALCRAFT",{primary=true,accent=t.danger})
-  self:addButton("linksec:malcraft",x+2,y+3,buttonW,1,function()
-    self:malcraftOpenHub();self:render()
-  end)
-  y=y+6
-
-  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Outils LinkOS",
-    subtitle="Scan clients LinkOS et terminal operateur avance.",muted=t.muted})
-  self:button(target,"linksec:scan",x+2,y+3,buttonW,"SCAN LINKOS",function()
-    self:linksecScan();self:render()
-  end)
-  if w>=buttonW*2+5 then
-    self:button(target,"linksec:terminal",x+3+buttonW,y+3,buttonW,"TERMINAL",function()
-      self:openHackerTerminal()
+  self.linksecHomeTab=self.linksecHomeTab or "malcraft"
+  local tabs=ccui.tabs(target,x,y,w,{
+    {id="malcraft",label="Malcraft"},
+    {id="linkos",label="Outils LinkOS"}
+  },self.linksecHomeTab,t)
+  for _,r in ipairs(tabs) do
+    self:addButton("linksec:home:"..r.id,r.x,r.y,r.w,r.h,function()
+      self.linksecHomeTab=r.id
     end)
   end
-  y=y+6
+  y=y+3
 
-  if self.hackerConsole.target then
-    fluent.card(target,x,y,w,7,{bg=t.surface,accent=t.good,
-      title="Session active / PC #"..tostring(self.hackerConsole.target),
-      subtitle="Outils disponibles pour la cible LinkOS selectionnee.",muted=t.muted})
-    local actionW=math.min(16,math.max(10,math.floor((w-2)/2)))
-    self:button(target,"linksec:conversations",x+2,y+3,actionW,"MESSAGES",function()
-      self:linksecLoadConversationIndex();self:render()
+  if self.linksecHomeTab=="malcraft" then
+    ccui.panel(target,x,y,w,5,t,{accent=t.danger,title="Malcraft",
+      subtitle="Controle les PC infectes."})
+    ccui.button(target,x+2,y+3,18,"OUVRIR MALCRAFT",t,{danger=true})
+    self:addButton("linksec:malcraft",x+2,y+3,18,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    if w>=actionW*2+5 then
-      self:button(target,"linksec:devices",x+3+actionW,y+3,actionW,"PERIPHERIQUES",function()
+    y=y+6
+
+    local infected=#(self.malcraftHosts or {})
+    local loaded=#(self.malcraftLiveHosts or {})
+    ccui.panel(target,x,y,w,4,t,{title="Etat du reseau",
+      subtitle=tostring(infected).." infecte(s) / "..tostring(loaded).." charge(s)"})
+  else
+    ccui.panel(target,x,y,w,5,t,{accent=t.accent,title="Clients LinkOS",
+      subtitle="Scan et outils avances pour les clients LinkOS."})
+    ccui.button(target,x+2,y+3,14,"SCAN",t,{primary=true})
+    self:addButton("linksec:scan",x+2,y+3,14,1,function()
+      self:linksecScan();self:render()
+    end)
+    ccui.button(target,x+17,y+3,14,"TERMINAL",t,{})
+    self:addButton("linksec:terminal",x+17,y+3,14,1,function()
+      self:openHackerTerminal()
+    end)
+    y=y+6
+
+    if self.hackerConsole.target then
+      ccui.panel(target,x,y,w,7,t,{accent=t.good,
+        title="Session PC #"..tostring(self.hackerConsole.target),
+        subtitle="Outils disponibles pour la cible selectionnee."})
+      local bw=math.max(10,math.floor((w-5)/2))
+      ccui.button(target,x+2,y+3,bw,"MESSAGES",t,{})
+      self:addButton("linksec:conversations",x+2,y+3,bw,1,function()
+        self:linksecLoadConversationIndex();self:render()
+      end)
+      ccui.button(target,x+3+bw,y+3,math.min(bw,w-bw-4),"PERIPHERIQUES",t,{})
+      self:addButton("linksec:devices",x+3+bw,y+3,math.min(bw,w-bw-4),1,function()
         self:linksecLoadDevices();self:render()
       end)
-    end
-    self:button(target,"linksec:redstone",x+2,y+5,actionW,"REDSTONE",function()
-      self:linksecLoadRedstone();self:render()
-    end)
-    if w>=actionW*2+5 then
-      self:button(target,"linksec:drives",x+3+actionW,y+5,actionW,"DISQUES",function()
+      ccui.button(target,x+2,y+5,bw,"REDSTONE",t,{})
+      self:addButton("linksec:redstone",x+2,y+5,bw,1,function()
+        self:linksecLoadRedstone();self:render()
+      end)
+      ccui.button(target,x+3+bw,y+5,math.min(bw,w-bw-4),"DISQUES",t,{})
+      self:addButton("linksec:drives",x+3+bw,y+5,math.min(bw,w-bw-4),1,function()
         self:linksecLoadDrives();self:render()
       end)
+    else
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune session",
+        subtitle="Lance un scan puis selectionne un Computer."})
     end
-  else
-    draw.text(target,x,y,"Aucune session LinkOS active. Malcraft fonctionne sans LinkOS.",t.muted,t.bg,w)
   end
 end
 
@@ -2843,41 +2862,38 @@ function LinkOS:renderSecurity(target,l)
   local passwordOn=security.enabled()
   local operator=self:isOperatorUI()
 
-  fluent.sectionTitle(target,x,y,w,"Securite","Protection de la session et acces LinkSec",t.accent)
-  y=y+4
+  draw.text(target,x,y,"Securite",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Protection de la session LinkOS",t.muted,t.bg,w)
+  y=y+3
 
-  fluent.card(target,x,y,w,6,{
-    bg=t.surface,accent=passwordOn and t.good or t.warn,
-    title=passwordOn and "Session protegee" or "Protection standard",
-    subtitle=passwordOn and ("Verrouillage automatique apres "..tostring(security.autoLockSeconds()).."s")
-      or "Ajoute un mot de passe local pour proteger ce poste.",muted=t.muted
-  })
-  draw.text(target,x+2,y+3,"Privileges",t.muted,t.surface,10)
-  draw.text(target,x+13,y+3,operator and "LinkSec autorise" or "Utilisateur standard",
-    operator and t.danger or t.text,t.surface,math.max(1,w-15))
-  y=y+7
+  ccui.panel(target,x,y,w,5,t,{accent=passwordOn and t.good or t.warn,
+    title=passwordOn and "Session protegee" or "Mot de passe desactive",
+    subtitle=passwordOn and ("Verrouillage apres "..tostring(security.autoLockSeconds()).."s")
+      or "Active un mot de passe pour proteger ce Computer."})
+  y=y+6
 
   if not passwordOn then
-    self:button(target,"sec:password-on",x,y,18,"ACTIVER MDP",function() self:configurePassword() end)
+    ccui.button(target,x,y,18,"ACTIVER MOT DE PASSE",t,{primary=true})
+    self:addButton("sec:password-on",x,y,18,1,function() self:configurePassword() end)
   else
-    local bw=math.max(8,math.floor((w-2)/3))
-    self:button(target,"sec:lock-now",x,y,bw,"VERROUILLER",function() self:lockSession() end)
-    self:button(target,"sec:password-change",x+bw+1,y,math.min(bw,w-bw-1),"MODIFIER",function()
-      self:configurePassword()
-    end)
-    if x+(bw+1)*2<=x+w-1 then
-      fluent.button(target,x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"DESACTIVER",{danger=true})
-      self:addButton("sec:password-off",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),1,function()
-        self:disablePassword()
-      end)
+    ccui.button(target,x,y,12,"VERROUILLER",t,{primary=true})
+    self:addButton("sec:lock-now",x,y,12,1,function() self:lockSession() end)
+    ccui.button(target,x+13,y,11,"MODIFIER",t,{})
+    self:addButton("sec:password-change",x+13,y,11,1,function() self:configurePassword() end)
+    if w>=36 then
+      ccui.button(target,x+25,y,11,"DESACTIVER",t,{danger=true})
+      self:addButton("sec:password-off",x+25,y,11,1,function() self:disablePassword() end)
     end
   end
 
+  y=y+3
+  ccui.panel(target,x,y,w,5,t,{accent=operator and t.danger or t.muted,
+    title=operator and "Mode operateur" or "Utilisateur standard",
+    subtitle=operator and "LinkSec est autorise sur ce Computer."
+      or "Les outils operateur restent masques."})
   if operator then
-    y=y+3
-    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="LinkSec",
-      subtitle="Console operateur interne reservee a ce Computer ID.",muted=t.muted})
-    self:button(target,"sec:linksec",x+2,y+3,18,"OUVRIR LINKSEC",function() self:openApp("hacker") end)
+    ccui.button(target,x+2,y+3,16,"OUVRIR LINKSEC",t,{danger=true})
+    self:addButton("sec:linksec",x+2,y+3,16,1,function() self:openApp("hacker") end)
   end
 end
 
@@ -2968,10 +2984,15 @@ function LinkOS:renderFiles(target, l)
   fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
   y=y+3
 
-  -- Command bar.
-  draw.fill(target,x,y,w,1,t.surface)
+  -- Explorer command bar + breadcrumb, based on familiar file-manager patterns.
+  local parts={{label="Accueil"}}
   if self.filePath~="/user" then
-    self:button(target,"file:parent",x,y,5,"<",function()
+    local relative=self.filePath:sub(7)
+    for part in relative:gmatch("[^/]+") do parts[#parts+1]={label=part} end
+  end
+  ccui.breadcrumb(target,x,y,w-18,parts,t)
+  if self.filePath~="/user" then
+    self:button(target,"file:parent",x,y,3,"<",function()
       local parent="/"..fs.getDir(string.sub(self.filePath,2))
       if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
         parent="/user"
@@ -2980,7 +3001,7 @@ function LinkOS:renderFiles(target, l)
       self.filePreview=nil
     end)
   end
-  draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
+  draw.text(target,x+1,y+1,self.filePath,t.muted,t.bg,math.max(1,w-2))
 
   if not self.filePreview and w>=32 then
     self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
@@ -3002,7 +3023,7 @@ function LinkOS:renderFiles(target, l)
       self:runNativeProgram("edit",full)
     end)
   end
-  y=y+2
+  y=y+3
 
   if self.filePreview then
     local path=self.filePreview.path
@@ -3053,7 +3074,7 @@ function LinkOS:renderFiles(target, l)
   if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
   if #entries==0 then
     fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
-      subtitle="Cree un dossier ou un fichier depuis la barre d'outils.",muted=t.muted})
+      subtitle="Utilise DOSSIER ou TEXTE pour commencer.",muted=t.muted})
     return
   end
 
@@ -3156,12 +3177,12 @@ function LinkOS:renderCalculator(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  fluent.sectionTitle(target,x,y,w,"Calculatrice","Calcul rapide",t.accent)
-  y=y+4
-  draw.fill(target,x,y,w,4,t.surface)
-  draw.text(target,x+1,y+1,self.calculatorExpression~="" and self.calculatorExpression or "0",
-    self.calculatorExpression~="" and t.text or t.muted,t.surface,math.max(1,w-2))
-  draw.text(target,x+1,y+2,tostring(self.calculatorResult or "Pret"),t.accent,t.surface,math.max(1,w-2))
+  draw.text(target,x,y,"Calculatrice",t.text,t.bg,w)
+  y=y+2
+  ccui.panel(target,x,y,w,4,t,{accent=t.accent})
+  draw.text(target,x+2,y+1,self.calculatorExpression~="" and self.calculatorExpression or "0",
+    self.calculatorExpression~="" and t.text or t.muted,t.surface,math.max(1,w-4))
+  draw.text(target,x+2,y+2,tostring(self.calculatorResult or "Pret"),t.accent,t.surface,math.max(1,w-4))
   y=y+5
 
   local function append(value)
@@ -3174,30 +3195,35 @@ function LinkOS:renderCalculator(target,l)
     if not result then self:setNotice(tostring(err),t.danger) end
   end
 
-  local keysGrid={{"7","8","9","/"},{"4","5","6","*"},{"1","2","3","-"},{"0",".","(",")"},{"C","<","=","+"}}
+  local grid={{"7","8","9","/"},{"4","5","6","*"},{"1","2","3","-"},{"0",".","<","+"}}
   local gap=1
-  local bw=math.max(3,math.floor((w-3*gap)/4))
-  for row,items in ipairs(keysGrid) do
-    local by=y+(row-1)
+  local bw=math.max(4,math.floor((w-3*gap)/4))
+  for row,items in ipairs(grid) do
+    local by=y+row-1
     for col,label in ipairs(items) do
       local bx=x+(col-1)*(bw+gap)
-      local width=col==4 and math.max(3,x+w-bx) or bw
-      fluent.button(target,bx,by,width,label,{
-        primary=label=="=",danger=label=="C",accent=t.accent
-      })
+      local width=col==4 and math.max(4,x+w-bx) or bw
+      ccui.button(target,bx,by,width,label,t,{})
       self:addButton("calc:"..row..":"..col,bx,by,width,1,function()
-        if label=="C" then self.calculatorExpression="";self.calculatorResult="Pret"
-        elseif label=="<" then self.calculatorExpression=self.calculatorExpression:sub(1,-2)
-        elseif label=="=" then solve()
+        if label=="<" then self.calculatorExpression=self.calculatorExpression:sub(1,-2)
         else append(label) end
       end)
     end
   end
 
-  local by=y+#keysGrid+1
-  if by<l.h-1 then
-    self:button(target,"calc:keyboard",x,by,18,"SAISIE CLAVIER",function()
-      local expression=self:prompt("Calcul LinkOS","Operateurs: + - * / % ^ ( )")
+  local by=y+#grid+1
+  local half=math.max(7,math.floor((w-1)/2))
+  ccui.button(target,x,by,half,"EFFACER",t,{danger=true})
+  self:addButton("calc:clear",x,by,half,1,function()
+    self.calculatorExpression="";self.calculatorResult="Pret"
+  end)
+  ccui.button(target,x+half+1,by,math.max(7,w-half-1),"=",t,{primary=true})
+  self:addButton("calc:solve",x+half+1,by,math.max(7,w-half-1),1,solve)
+
+  if by+2<l.h-1 then
+    ccui.button(target,x,by+2,18,"SAISIE CLAVIER",t,{})
+    self:addButton("calc:keyboard",x,by+2,18,1,function()
+      local expression=self:prompt("Calcul","Operateurs: + - * / % ^ ( )")
       if expression and expression~="" then self.calculatorExpression=expression;solve() end
     end)
   end
@@ -3207,116 +3233,95 @@ function LinkOS:renderTerminal(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  fluent.sectionTitle(target,x,y,w,"Terminal","CraftOS dans une session isolee",t.accent)
-  y=y+4
+  draw.text(target,x,y,"Terminal",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Console CraftOS",t.muted,t.bg,w)
+  y=y+3
 
-  draw.fill(target,x,y,w,8,t.surface2)
-  draw.text(target,x+1,y+1,"LinkOS Terminal",t.accent,t.surface2,math.max(1,w-2))
-  draw.text(target,x+1,y+3,"> shell",t.text,t.surface2,math.max(1,w-2))
-  draw.text(target,x+1,y+4,"exit  -> retour au bureau",t.muted,t.surface2,math.max(1,w-2))
+  ccui.panel(target,x,y,w,7,t,{accent=t.accent,title="LinkOS Terminal",
+    subtitle="Lance une session shell isolee."})
+  draw.text(target,x+2,y+3,"> shell",t.text,t.surface,math.max(1,w-4))
+  draw.text(target,x+2,y+4,"Tape exit pour revenir a LinkOS.",t.muted,t.surface,math.max(1,w-4))
   if self.active and self.active.kind=="monitor" then
-    draw.text(target,x+1,y+6,"Clavier utilise sur le Computer.",t.warn,t.surface2,math.max(1,w-2))
+    draw.text(target,x+2,y+5,"Clavier: Computer principal",t.warn,t.surface,math.max(1,w-4))
   end
-  y=y+9
-  self:button(target,"terminal:open",x,y,20,"OUVRIR LE TERMINAL",function() self:runNativeProgram("shell") end)
+  y=y+8
+  ccui.button(target,x,y,18,"OUVRIR TERMINAL",t,{primary=true})
+  self:addButton("terminal:open",x,y,18,1,function() self:runNativeProgram("shell") end)
 end
 
-function LinkOS:renderSettings(target, l)
+function LinkOS:renderSettings(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
   self.settingsTab=self.settingsTab or "style"
 
-  fluent.sectionTitle(target,x,y,w,"Parametres","Personnalise ton experience LinkOS",t.accent)
-  y=y+4
+  draw.text(target,x,y,"Parametres",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Personnalise LinkOS sans menus techniques.",t.muted,t.bg,w)
+  y=y+3
 
-  local sideW=w>=34 and 12 or 9
-  local cx=x+sideW+1
-  local cw=math.max(10,w-sideW-1)
-  draw.fill(target,x,y,sideW,math.max(18,l.h-y-1),t.surface)
-
-  local tabs={
-    {"style","Style","*"},
-    {"display","Ecrans","D"},
-    {"system","Systeme","I"}
+  local tabItems={
+    {id="style",label="Apparence"},
+    {id="display",label="Ecrans"},
+    {id="system",label="Systeme"}
   }
-  local sy=y+1
-  for _,tab in ipairs(tabs) do
-    local selected=self.settingsTab==tab[1]
-    local bg=selected and t.selection or t.surface
-    draw.fill(target,x,sy,sideW,2,bg)
-    draw.text(target,x+1,sy,tab[3],selected and t.accent or t.muted,bg,1)
-    draw.text(target,x+3,sy,tab[2],selected and t.text or t.muted,bg,math.max(1,sideW-4))
-    local id=tab[1]
-    self:addButton("set:tab:"..id,x,sy,sideW,2,function() self.settingsTab=id end)
-    sy=sy+3
+  local rects=ccui.tabs(target,x,y,w,tabItems,self.settingsTab,t)
+  for _,r in ipairs(rects) do
+    self:addButton("set:tab:"..r.id,r.x,r.y,r.w,r.h,function() self.settingsTab=r.id end)
   end
+  y=y+3
 
   if self.settingsTab=="style" then
-    draw.text(target,cx,y,"Apparence",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Couleurs, bureau et barre des taches",t.muted,t.bg,cw)
-    local py=y+3
-
-    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Couleur",
-      subtitle="Couleur principale de LinkOS.",muted=t.muted})
     local accentOrder={"blue","cyan","lime","orange","purple","red"}
     local accentLabels={blue="BLEU",cyan="CYAN",lime="VERT",orange="ORANGE",purple="VIOLET",red="ROUGE"}
     local currentAccent=prefs.get("accent","blue")
-    self:button(target,"set:accent",cx+2,py+2,math.min(18,cw-4),
-      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),function()
-        local nextAccent=accentOrder[1]
-        for i,name in ipairs(accentOrder) do
-          if name==prefs.get("accent","blue") then
-            nextAccent=accentOrder[(i%#accentOrder)+1]
-            break
-          end
-        end
-        prefs.set("accent",nextAccent)
-        self:refreshDisplays()
-      end)
-    py=py+5
 
-    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
-      subtitle="Fond et densite de la barre des taches.",muted=t.muted})
+    ccui.panel(target,x,y,w,4,t,{accent=t.accent,title="Couleur",
+      subtitle="Couleur principale des boutons."})
+    ccui.button(target,x+2,y+2,math.min(20,w-4),
+      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),t,{primary=true})
+    self:addButton("set:accent",x+2,y+2,math.min(20,w-4),1,function()
+      local nextAccent=accentOrder[1]
+      for i,name in ipairs(accentOrder) do
+        if name==prefs.get("accent","blue") then
+          nextAccent=accentOrder[(i%#accentOrder)+1];break
+        end
+      end
+      prefs.set("accent",nextAccent)
+      self:refreshDisplays()
+    end)
+    y=y+5
+
+    ccui.panel(target,x,y,w,4,t,{title="Fond du bureau",
+      subtitle="Choisis un fond simple et lisible."})
     local wallpaper=tostring(prefs.get("wallpaper","fluent"))
-    self:button(target,"set:wallpaper",cx+2,py+2,math.min(15,cw-4),
-      "FOND: "..string.upper(wallpaper),function()
-        local order={"fluent","clean","dots","grid","lines"}
-        local current=prefs.get("wallpaper","fluent")
-        local nextValue=order[1]
-        for i,value in ipairs(order) do
-          if value==current then nextValue=order[(i%#order)+1];break end
-        end
-        prefs.set("wallpaper",nextValue)
-      end)
-    if cw>=30 then
-      local labels=prefs.get("taskbar_labels",false)
-      self:button(target,"set:taskbarlabels",cx+18,py+2,math.min(16,cw-19),
-        labels and "TACHES: TEXTE" or "TACHES: ICONES",function()
-          prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
-        end)
-    end
-    py=py+5
+    ccui.button(target,x+2,y+2,math.min(18,w-4),"FOND: "..string.upper(wallpaper),t,{})
+    self:addButton("set:wallpaper",x+2,y+2,math.min(18,w-4),1,function()
+      local order={"fluent","clean","dots","grid","lines"}
+      local current=prefs.get("wallpaper","fluent")
+      local nextValue=order[1]
+      for i,value in ipairs(order) do
+        if value==current then nextValue=order[(i%#order)+1];break end
+      end
+      prefs.set("wallpaper",nextValue)
+    end)
+    y=y+5
 
-    fluent.card(target,cx,py,cw,9,{bg=t.surface,accent=t.accent,title="Applications epinglees",
-      subtitle="Choisis les raccourcis visibles dans la barre des taches.",muted=t.muted})
+    ccui.panel(target,x,y,w,7,t,{title="Barre des taches",
+      subtitle="Clique une application pour l'epingler ou la retirer."})
     local pinCandidates={"messages","files","store","terminal","calculator"}
     local pins=prefs.get("taskbar_pins",{})
     local pinned={}
     for _,id in ipairs(pins) do pinned[id]=true end
-    local cell=math.max(8,math.floor((cw-3)/2))
+    local by=y+3
+    local bw=math.max(8,math.floor((w-2)/2))
     for i,id in ipairs(pinCandidates) do
       local app=shellui.find(id,self:isOperatorUI())
       if app then
         local col=(i-1)%2
         local row=math.floor((i-1)/2)
-        local bx=cx+2+col*(cell+1)
-        local by=py+3+row*2
-        local selected=pinned[id]
-        local bg=selected and t.selection or t.surface2
-        draw.fill(target,bx,by,cell,1,bg)
-        fluent.drawMiniIcon(target,id,bx,by,selected,bg)
-        draw.text(target,bx+4,by,app.title,selected and t.text or t.muted,bg,math.max(1,cell-4))
-        self:addButton("set:pin:"..id,bx,by,cell,1,function()
+        local bx=x+1+col*(bw+1)
+        local yy=by+row
+        ccui.button(target,bx,yy,math.min(bw,w-(bx-x)),app.title,t,{selected=pinned[id],compact=true})
+        self:addButton("set:pin:"..id,bx,yy,math.min(bw,w-(bx-x)),1,function()
           local current=prefs.get("taskbar_pins",{})
           local nextPins={}
           local found=false
@@ -3330,77 +3335,56 @@ function LinkOS:renderSettings(target, l)
     end
 
   elseif self.settingsTab=="display" then
-    draw.text(target,cx,y,"Affichage",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Computer et Advanced Monitors",t.muted,t.bg,cw)
-    local py=y+3
+    draw.text(target,x,y,"Choisir l'ecran principal",t.text,t.bg,w)
+    y=y+2
     for _,d in ipairs(self.displays or {}) do
-      if py+3>=l.h-1 then break end
+      if y+3>=l.h-1 then break end
       local selected=self.active and d.id==self.active.id
-      local size=tostring(d.width).."x"..tostring(d.height)
-      fluent.card(target,cx,py,cw,4,{
-        bg=selected and t.selection or t.surface,
+      local rect=ccui.panel(target,x,y,w,4,t,{
         accent=selected and t.accent or t.muted,
-        title=(selected and "Actif - " or "")..d.label,
-        subtitle=(d.kind=="monitor" and ("Advanced Monitor / scale "..tostring(d.scale or "-"))
-          or "Ecran du Computer"),
-        muted=t.muted
+        title=(selected and "ACTIF - " or "")..d.label,
+        subtitle=(d.kind=="monitor" and "Advanced Monitor" or "Ecran du Computer")
       })
-      draw.text(target,math.max(cx+2,cx+cw-#size-2),py+1,size,t.muted,
-        selected and t.selection or t.surface,#size)
+      local size=tostring(d.width).."x"..tostring(d.height)
+      draw.text(target,x+w-#size-2,y+1,size,t.muted,selected and t.selection or t.surface,#size)
       local displayId=d.id
-      self:addButton("display:"..displayId,cx,py,cw,4,function()
+      self:addButton("display:"..displayId,rect.x,rect.y,rect.w,rect.h,function()
         prefs.set("display_id",displayId)
         self:refreshDisplays()
         self:setNotice("Affichage principal change.",t.good)
       end)
-      py=py+5
+      y=y+5
     end
 
   else
-    draw.text(target,cx,y,"Systeme",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Version, session et alimentation",t.muted,t.bg,cw)
-    local py=y+3
-
-    local channel=tostring(config.SOURCE_REF or "main")
-    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=self.service.updateAvailable and t.warn or t.good,
+    ccui.panel(target,x,y,w,5,t,{accent=self.service.updateAvailable and t.warn or t.good,
       title="LinkOS "..tostring(config.VERSION),
-      subtitle=self.service.updateAvailable
-        and ("Mise a jour disponible: "..tostring(self.service.remoteVersion))
-        or ("A jour / canal "..channel),
-      muted=t.muted})
-    self:button(target,"set:update",cx+2,py+3,math.min(16,cw-4),
-      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",
-      function() self:runUpdateAction() end)
-    py=py+6
+      subtitle=self.service.updateAvailable and ("Mise a jour "..tostring(self.service.remoteVersion))
+        or "Le systeme est a jour."})
+    ccui.button(target,x+2,y+3,math.min(18,w-4),
+      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",t,
+      {primary=self.service.updateAvailable})
+    self:addButton("set:update",x+2,y+3,math.min(18,w-4),1,function() self:runUpdateAction() end)
+    y=y+6
 
     local restore=prefs.get("restore_session",true)
-    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=t.accent,title="Session",
-      subtitle="Rouvre les applications apres un redemarrage.",muted=t.muted})
-    self:button(target,"set:restore-session",cx+2,py+3,math.min(18,cw-4),
-      restore and "RESTAURATION: OUI" or "RESTAURATION: NON",function()
-        prefs.set("restore_session",not prefs.get("restore_session",true))
-        self:setNotice(prefs.get("restore_session",true)
-          and "Restauration de session activee."
-          or "Restauration de session desactivee.",t.good)
-      end)
-    if cw>=32 then
-      self:button(target,"set:forget-session",cx+21,py+3,math.min(13,cw-22),"OUBLIER",function()
-        prefs.set("workspace_session",{windows={},active="home"})
-        self:setNotice("Session sauvegardee effacee.",t.warn)
-      end)
-    end
-    py=py+6
-
-    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.warn,title="Alimentation et maintenance",
-      subtitle="Actions systeme. La desinstallation conserve tes documents /user.",muted=t.muted})
-    local half=math.max(8,math.floor((cw-5)/2))
-    self:button(target,"set:reboot",cx+2,py+3,half,"REDEMARRER",function() os.reboot() end)
-    self:button(target,"set:shutdown",cx+3+half,py+3,math.min(half,cw-half-4),"ARRETER",
-      function() os.shutdown() end)
-    fluent.button(target,cx+2,py+4,math.min(16,cw-4),"DESINSTALLER",{danger=true})
-    self:addButton("set:uninstall",cx+2,py+4,math.min(16,cw-4),1,function()
-      self:runUninstallAction()
+    ccui.panel(target,x,y,w,4,t,{title="Reouverture des apps",
+      subtitle="Rouvre les apps utilisees apres redemarrage."})
+    ccui.button(target,x+2,y+2,math.min(20,w-4),restore and "ACTIVE" or "DESACTIVE",t,
+      {selected=restore})
+    self:addButton("set:restore-session",x+2,y+2,math.min(20,w-4),1,function()
+      prefs.set("restore_session",not prefs.get("restore_session",true))
     end)
+    y=y+5
+
+    ccui.panel(target,x,y,w,5,t,{title="Alimentation",subtitle="Actions du Computer."})
+    local half=math.max(8,math.floor((w-5)/2))
+    ccui.button(target,x+2,y+2,half,"REDEMARRER",t,{})
+    self:addButton("set:reboot",x+2,y+2,half,1,function() os.reboot() end)
+    ccui.button(target,x+3+half,y+2,math.min(half,w-half-4),"ARRETER",t,{})
+    self:addButton("set:shutdown",x+3+half,y+2,math.min(half,w-half-4),1,function() os.shutdown() end)
+    ccui.button(target,x+2,y+3,math.min(16,w-4),"DESINSTALLER",t,{danger=true})
+    self:addButton("set:uninstall",x+2,y+3,math.min(16,w-4),1,function() self:runUninstallAction() end)
   end
 end
 
@@ -3408,32 +3392,34 @@ function LinkOS:renderAbout(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  fluent.sectionTitle(target,x,y,w,"A propos de LinkOS","Computer Link / Astralium",t.accent)
-  y=y+4
-  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="LinkOS "..tostring(config.VERSION),
-    subtitle="Canal "..tostring(config.SOURCE_REF or "main").." / OS reseau pour Astralium",muted=t.muted})
+  draw.text(target,x,y,"A propos",t.text,t.bg,w)
+  draw.text(target,x,y+1,"LinkOS / Computer Link",t.muted,t.bg,w)
+  y=y+3
+
+  ccui.panel(target,x,y,w,5,t,{accent=t.accent,
+    title="LinkOS "..tostring(config.VERSION),
+    subtitle="Canal "..tostring(config.SOURCE_REF or "main").." / Astralium"})
   y=y+6
 
-  fluent.card(target,x,y,w,8,{bg=t.surface,accent=t.accent,title="Navigation",
-    subtitle="Raccourcis principaux du bureau et des fenetres",muted=t.muted})
+  ccui.panel(target,x,y,w,7,t,{title="Navigation",
+    subtitle="Les raccourcis essentiels."})
   local shortcuts={
-    "F1 Bureau   F2 Messages   F3 Reseau",
-    "F4 Securite F5 Fichiers   F6 Parametres",
-    "F10 Start   F11 Systeme   F12 Fenetre suivante",
-    "Alt+Tab Fenetres   Ctrl+D Bureau",
-    "Ctrl+M Reduire   Ctrl+W Fermer"
+    "F1 Bureau      F2 Messages",
+    "F5 Fichiers    F6 Parametres",
+    "F10 Demarrer   F11 Systeme",
+    "Alt+Tab Changer d'application",
+    "Ctrl+D Afficher le bureau"
   }
   for i,line in ipairs(shortcuts) do
     if y+1+i>=l.h-1 then break end
-    draw.text(target,x+2,y+1+i,line,t.text,t.surface,w-4)
+    draw.text(target,x+2,y+1+i,line,t.text,t.surface,math.max(1,w-4))
   end
-  y=y+9
+  y=y+8
 
   if y+3<l.h then
-    fluent.card(target,x,y,w,4,{bg=t.surface,accent=self:isOperatorUI() and t.danger or t.muted,
-      title=self:isOperatorUI() and "LinkSec autorise" or "Poste utilisateur",
-      subtitle=self:isOperatorUI() and "Outils operateur disponibles sur ce Computer ID."
-        or "Les outils operateur restent masques.",muted=t.muted})
+    ccui.panel(target,x,y,w,4,t,{accent=self:isOperatorUI() and t.danger or t.muted,
+      title=self:isOperatorUI() and "Poste operateur" or "Poste utilisateur",
+      subtitle=self:isOperatorUI() and "LinkSec disponible." or "Mode standard."})
   end
 end
 

@@ -1,6 +1,6 @@
 return {
   name = "Computer Link",
-  version = "0.21.0",
+  version = "0.22.0",
   protocol_version = 2,
 
   common_files = {
@@ -20,6 +20,8 @@ return {
     "src/client/service.lua",
     "src/ui/draw.lua",
     "src/ui/fluent.lua",
+    "src/ui/ccui.lua",
+    "src/ui/icons.lua",
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
@@ -51,6 +53,8 @@ return {
     "src/client/service.lua",
     "src/ui/draw.lua",
     "src/ui/fluent.lua",
+    "src/ui/ccui.lua",
+    "src/ui/icons.lua",
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
@@ -72,6 +76,8 @@ return {
     "src/client/service.lua",
     "src/ui/draw.lua",
     "src/ui/fluent.lua",
+    "src/ui/ccui.lua",
+    "src/ui/icons.lua",
     "src/ui/display.lua",
     "src/ui/prefs.lua",
     "src/ui/shell.lua",
