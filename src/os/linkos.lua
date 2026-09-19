@@ -2967,6 +2967,23 @@ function LinkOS:renderSettings(target, l)
     end)
     y = y + 2
 
+    if y < l.h - 6 then
+      local wallpaper = tostring(prefs.get("wallpaper", "grid"))
+      self:button(target, "set:wallpaper", x, y, math.min(15, w), "FOND: " .. string.upper(wallpaper), function()
+        local order = {"grid", "dots", "lines", "clean"}
+        local nextValue = order[1]
+        for i, value in ipairs(order) do
+          if value == prefs.get("wallpaper", "grid") then
+            nextValue = order[(i % #order) + 1]
+            break
+          end
+        end
+        prefs.set("wallpaper", nextValue)
+        self:render()
+      end)
+      y = y + 2
+    end
+
     self:button(target, "set:reboot", x, y, math.min(10, w), "REBOOT", function()
       os.reboot()
     end)
@@ -3039,6 +3056,44 @@ function LinkOS:renderSettings(target, l)
     y = y + 2
   end
 
+  if y < l.h - 7 then
+    draw.text(target, x, y, "Bureau", t.accent, t.bg, w)
+    y = y + 1
+
+    local wallpaper = tostring(prefs.get("wallpaper", "grid"))
+    local wallpaperW = math.min(17, w)
+    draw.button(target, x, y, wallpaperW,
+      "FOND " .. string.upper(wallpaper), colors.white, t.button)
+    self:addButton("set:wallpaper", x, y, wallpaperW, 1, function()
+      local order = {"grid", "dots", "lines", "clean"}
+      local current = prefs.get("wallpaper", "grid")
+      local nextValue = order[1]
+      for i, value in ipairs(order) do
+        if value == current then
+          nextValue = order[(i % #order) + 1]
+          break
+        end
+      end
+      prefs.set("wallpaper", nextValue)
+      self:render()
+    end)
+
+    if w >= 36 then
+      local labels = prefs.get("taskbar_labels", false)
+      local taskX = x + 19
+      local taskW = math.min(17, w - 19)
+      draw.button(target, taskX, y, taskW,
+        labels and "BARRE: TEXTE" or "BARRE: ICONES",
+        colors.white, labels and t.accent or t.button)
+      self:addButton("set:taskbarlabels", taskX, y, taskW, 1, function()
+        prefs.set("taskbar_labels", not prefs.get("taskbar_labels", false))
+        self:render()
+      end)
+    end
+
+    y = y + 2
+  end
+
   if y < l.h - 5 then
     draw.text(target, x, y, "Systeme", t.accent, t.bg, w)
     y = y + 1
@@ -3094,13 +3149,15 @@ function LinkOS:renderAbout(target, l)
     "",
     "Un OS reseau construit pour Astralium.",
     "Identite native par Computer ID.",
-    "Messagerie privee, MER, fichiers, securite, moniteurs et interface adaptative.",
+    "Bureau graphique, menu Start, barre des taches, AstralNet et moniteurs.",
+    "LinkSec reste une application interne reservee aux Computer IDs autorises.",
     "",
     "Raccourcis :",
-    "F1 Accueil   F2 Messages   F3 Reseau",
+    "F1 Bureau    F2 Messages   F3 Reseau",
     "F4 Securite  F5 Fichiers   F6 Parametres",
-    "F7 Contacts   F8 LinkSec CMD (autorise)",
-    "ESC Accueil"
+    "F7 Contacts  F8 LinkSec CMD (autorise)",
+    "F9 App suiv.  F10 Start     F11 Systeme",
+    "ESC Fermer menu / Bureau"
   }
 
   for _, line in ipairs(text) do
