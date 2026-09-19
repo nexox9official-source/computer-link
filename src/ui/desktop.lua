@@ -323,11 +323,11 @@ function M.install(OS,shellui,prefs)
 
     -- One-row Windows-like taskbar. Status details live in the system panel.
     draw.fill(target,1,h,w,1,colors.gray)
-    self:button(target,'wm:start',1,h,3,'L',function() self:toggleStartMenu() end)
+    self:button(target,'wm:start',1,h,5,'LINK',function() self:toggleStartMenu() end)
 
     local statusW=10
-    local rightX=math.max(5,w-statusW+1)
-    local taskX=5
+    local rightX=math.max(7,w-statusW+1)
+    local taskX=7
     local available=math.max(0,rightX-taskX-1)
     local visible=0
     for _ in ipairs(list) do visible=visible+1 end
@@ -385,7 +385,28 @@ function M.install(OS,shellui,prefs)
         if not win.minimized and inside(x,y,win) then
           self:focusWindow(win)
           if y==win.y and x<win.x+win.w-9 then
-            self.windowDrag={win=win,dx=x-win.x,dy=y-win.y};return true
+            local now=os.clock()
+            if self.lastTitleWindow==win.id and now-(self.lastTitleClick or 0)<0.40 then
+              if win.maximized then
+                win.maximized=false
+                local r=win.restore
+                if r then win.x,win.y,win.w,win.h=table.unpack(r) end
+              else
+                win.restore={win.x,win.y,win.w,win.h}
+                win.maximized=true
+              end
+              self.lastTitleWindow=nil
+              self.lastTitleClick=0
+              self:render()
+              return true
+            end
+            self.lastTitleWindow=win.id
+            self.lastTitleClick=now
+            self.windowDrag={
+              win=win,dx=x-win.x,dy=y-win.y,
+              original={win.x,win.y,win.w,win.h}
+            }
+            return true
           elseif x==win.x+win.w-1 and y==win.y+win.h-1 then
             self.windowDrag={win=win,resize=true};return true
           end
@@ -467,7 +488,33 @@ function M.install(OS,shellui,prefs)
         for _,icon in ipairs(self.iconRects or {}) do if inside(b,c,icon) then self:moveIcon(self.iconDrag,icon.index);break end end
       end
       if self.windowDrag then
-        local win=self.windowDrag.win
+        local drag=self.windowDrag
+        local win=drag.win
+        local sw,sh=self.active.target.getSize()
+        local desktopH=math.max(1,sh-1)
+
+        if not drag.resize then
+          if c<=1 then
+            win.restore=drag.original or {win.x,win.y,win.w,win.h}
+            win.maximized=true
+            win.snapped=nil
+          elseif b<=1 then
+            win.maximized=false
+            win.restore=drag.original or win.restore
+            win.x,win.y=1,1
+            win.w,win.h=math.max(24,math.floor(sw/2)),desktopH
+            win.snapped='left'
+          elseif b>=sw then
+            win.maximized=false
+            win.restore=drag.original or win.restore
+            win.w,win.h=math.max(24,math.ceil(sw/2)),desktopH
+            win.x,win.y=sw-win.w+1,1
+            win.snapped='right'
+          else
+            win.snapped=nil
+          end
+        end
+
         local geometry=prefs.get('window_geometry',{})
         geometry[win.id]={x=win.x,y=win.y,w=win.w,h=win.h}
         prefs.set('window_geometry',geometry)
