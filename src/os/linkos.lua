@@ -260,7 +260,8 @@ function LinkOS:inputDialog(title,hint,secret)
   redraw()
 
   while true do
-    local event,a1=os.pullEvent()
+    local pullEvent=os.pullEvent or os.pullEventRaw
+    local event,a1=pullEvent()
     if event=="char" then
       if #value<maxLength then
         value=value..tostring(a1)
@@ -354,7 +355,8 @@ function LinkOS:choiceDialog(title,subtitle,choices,defaultIndex)
   redraw()
   local result=nil
   while true do
-    local event,a1,a2,a3=os.pullEvent()
+    local pullEvent=os.pullEvent or os.pullEventRaw
+    local event,a1,a2,a3=pullEvent()
     if event=="key" then
       if a1==keys.left or a1==keys.up then
         selected=((selected-2)%#choices)+1
