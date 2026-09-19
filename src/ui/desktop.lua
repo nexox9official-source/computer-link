@@ -28,6 +28,9 @@ function M.install(OS,shellui,prefs)
     return apps
   end
   local originalKey=OS.handleKey
+  local originalPrompt=OS.prompt
+  local originalPromptSecret=OS.promptSecret
+  local originalConfirm=OS.confirm
   local renderers={messages='renderMessages',contacts='renderContacts',network='renderNetwork',
     files='renderFiles',security='renderSecurity',settings='renderSettings',about='renderAbout',
     notes='renderNotes',calculator='renderCalculator',terminal='renderTerminal',hacker='renderHacker',store='renderStore'}
@@ -314,11 +317,13 @@ function M.install(OS,shellui,prefs)
 
   function OS:closeWindow(win)
     if win.id=='notes' and self.noteDocument and self.noteDocument.dirty then
-      local answer=self:prompt('Document modifie','OUI: sauver / NON: abandonner / Echap: annuler'):lower()
-      if answer=='oui' then
+      local answer=self:prompt('Document modifie','SAUVER / ABANDONNER / Echap')
+      if not answer then return end
+      answer=answer:lower()
+      if answer=='sauver' or answer=='oui' then
         self:saveNote()
         if self.noteDocument.dirty then return end
-      elseif answer~='non' then
+      elseif answer~='abandonner' and answer~='non' then
         return
       end
     end
@@ -1067,44 +1072,17 @@ function M.install(OS,shellui,prefs)
     return false
   end
 
-  function OS:prompt(title,hint,secret)
-    local value=''
-    self.dialogOpen=true
-    local target=self.active.target
-    local w,h=target.getSize()
-    local dw=math.min(w-2,46);local dh=math.min(h-2,8)
-    local x=math.max(1,math.floor((w-dw)/2));local y=math.max(1,math.floor((h-dh)/2))
-    local result
-    while result==nil do
-      draw.fill(target,x,y,dw,dh,colors.gray)
-      draw.fill(target,x,y,dw,1,colors.cyan)
-      draw.text(target,x+1,y,title,colors.white,colors.cyan,dw-2)
-      draw.text(target,x+1,y+2,hint or 'Saisir au clavier du Computer',colors.lightGray,colors.gray,dw-2)
-      local text=secret and string.rep('*',#value) or value
-      draw.fill(target,x+1,y+3,dw-2,1,colors.black)
-      draw.text(target,x+1,y+3,text:sub(-math.max(1,dw-3))..'_',colors.white,colors.black,dw-2)
-      local by=y+dh-2
-      draw.button(target,x+1,by,8,'VALIDER',colors.white,colors.cyan)
-      draw.button(target,x+dw-10,by,9,'ANNULER',colors.white,colors.black)
-      local event,a,b,c=os.pullEventRaw()
-      if event=='key_up' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=false
-      elseif event=='char' or event=='paste' then value=(value..tostring(a):gsub('[\r\n]',' ')):sub(1,500)
-      elseif event=='key' then
-        if a==keys.enter then result=value
-        elseif a==keys.escape then result=''
-        elseif a==keys.backspace then value=value:sub(1,-2) end
-      elseif (event=='mouse_click' and self.active.kind=='computer')
-        or (event=='monitor_touch' and a==self.active.name) then
-        if c==by and b>=x+1 and b<x+9 then result=value
-        elseif c==by and b>=x+dw-10 and b<x+dw-1 then result='' end
-      elseif event=='monitor_resize' or event=='term_resize' or event=='peripheral_detach'
-        or event=='terminate' or event=='linkos_hacked_state' then result='' end
-    end
-    self.dialogOpen=false
-    self:refreshDisplays();self:render()
-    return result
+  function OS:prompt(title,hint)
+    return originalPrompt(self,title,hint)
   end
-  function OS:promptSecret(title,hint) return self:prompt(title,hint,true) end
+
+  function OS:promptSecret(title,hint)
+    return originalPromptSecret(self,title,hint)
+  end
+
+  function OS:confirm(title)
+    return originalConfirm(self,title)
+  end
 
   function OS:loadNote(path)
     local text=''
