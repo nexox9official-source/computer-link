@@ -258,6 +258,24 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     local originalOperator=o.isOperatorUI
     o.isOperatorUI=function() return true end
     captureApp('hacker','/tmp/linkos-linksec.frame')
+
+    o.malcraftTarget=77
+    o.hackerConsole.target=77
+    o.ghostState={
+      state={
+        infected=true,online=true,spread=true,
+        source='bridge',dimension='minecraft:overworld',x=120,y=64,z=-42
+      },
+      agent_status={linkos_installed=false,source='bridge'}
+    }
+    o.linksecView='ghost'
+    o:render()
+    native.dump('/tmp/linkos-malcraft-target.frame')
+
+    o.linksecView='home'
+    o.malcraftTarget=nil
+    o.hackerConsole.target=nil
+    o.ghostState=nil
     o.isOperatorUI=originalOperator
 
     o.windows={};o.app='home'
