@@ -1002,12 +1002,8 @@ end
 
 findModems()
 
-if isImmune(os.getComputerID()) then
-  setLocalState(false, false, nil)
-else
-  localCarrierInfection()
-end
-
+-- syncState owns the ordering between Bridge tombstones and physical carriers.
+-- Never infect from a disk before asking the authoritative Bridge first.
 syncState()
 sendBeacon()
 
@@ -1066,7 +1062,7 @@ while true do
 
   elseif event == "disk" or event == "peripheral" then
     findModems()
-    localCarrierInfection()
+    -- Keep the same Bridge-first ordering on hot-plug as at boot.
     syncState()
     infectConnectedDisks()
 
