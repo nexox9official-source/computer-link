@@ -165,9 +165,21 @@ function M.install(OS,shellui,prefs)
 
   function OS:openDesktopContext(x,y)
     local targetId=nil
-    for _,icon in ipairs(self.iconRects or {}) do
-      if inside(x,y,icon) then targetId=icon.id;break end
+
+    for _,button in ipairs(self.buttons or {}) do
+      if inside(x,y,button) and type(button.id)=='string'
+        and button.id:sub(1,8)=='wm:task:' then
+        targetId=button.id:sub(9)
+        break
+      end
     end
+
+    if not targetId then
+      for _,icon in ipairs(self.iconRects or {}) do
+        if inside(x,y,icon) then targetId=icon.id;break end
+      end
+    end
+
     self.startMenuOpen=false
     self.quickPanelOpen=false
     self.contextMenu={x=x,y=y,targetId=targetId}
