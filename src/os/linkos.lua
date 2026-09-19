@@ -3394,6 +3394,8 @@ function LinkOS:renderAbout(target, l)
     "F4 Securite  F5 Fichiers   F6 Parametres",
     "F7 Contacts  F8 LinkSec CMD (autorise)",
     "F9 App suiv.  F10 Start     F11 Systeme",
+    "F12 Fenetre suiv.  Alt+Tab Switcher",
+    "Ctrl+D Bureau  Ctrl+M Reduire  Ctrl+W Fermer",
     "ESC Fermer menu / Bureau"
   }
 
