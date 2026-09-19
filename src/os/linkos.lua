@@ -2,6 +2,7 @@ local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
+local shellui = dofile("/computer-link/src/ui/shell.lua")
 local hackedState = dofile("/computer-link/src/client/system_state.lua")
 local security = dofile("/computer-link/src/client/security.lua")
 local Service = dofile("/computer-link/src/client/service.lua")
@@ -20,17 +21,6 @@ local ACCENTS = {
   red = colors.red
 }
 
-local APPS = {
-  {id="home", title="Accueil", short="HOME"},
-  {id="messages", title="Messages", short="MSG"},
-  {id="contacts", title="Contacts", short="CONT"},
-  {id="network", title="Reseau", short="NET"},
-  {id="security", title="Securite", short="SEC"},
-  {id="hacker", title="LinkSec CMD", short="CMD"},
-  {id="files", title="Fichiers", short="FILES"},
-  {id="settings", title="Parametres", short="SET"},
-  {id="about", title="A propos", short="INFO"}
-}
 
 local function nowText()
   return textutils.formatTime(os.time(), true)
@@ -103,6 +93,10 @@ function LinkOS.new()
   self.malcraftHosts = {}
   self.malcraftLocalDisks = {}
   self.malcraftTarget = nil
+  self.startMenuOpen = false
+  self.quickPanelOpen = false
+  self.appSwitcherOpen = false
+  self.previousApp = "home"
   return self
 end
 
@@ -126,10 +120,9 @@ function LinkOS:theme()
 end
 
 function LinkOS:isOperatorUI()
-  -- PC #0 is the designated Astralium LinkSec workstation.
-  -- This only controls visibility of the UI. Actual intrusion commands remain
-  -- authorized inside remote_control.lua exclusively by the read-only server policy.
-  return os.getComputerID() == 0 or self.service:isHackOperator()
+  -- Visibility follows the same read-only ROM policy as the actual LinkSec
+  -- authorization. Only explicitly authorised Computer IDs receive the app.
+  return self.service:isHackOperator()
 end
 
 function LinkOS:refreshDisplays()
@@ -159,15 +152,47 @@ function LinkOS:setNotice(text, colour)
 end
 
 function LinkOS:openApp(id)
+  id = tostring(id or "home")
+
+  if not shellui.allowed(id, self:isOperatorUI()) then
+    id = "home"
+    self:setNotice("Application indisponible sur ce PC.", self:theme().warn)
+  else
+    self.notice = nil
+  end
+
+  if self.app ~= id then
+    self.previousApp = self.app
+  end
+
   self.app = id
+  self.startMenuOpen = false
+  self.quickPanelOpen = false
+  self.appSwitcherOpen = false
   prefs.set("last_app", id)
-  self.notice = nil
 
   if id == "messages" then
     self.service:markRead()
   end
 
   self:render()
+end
+
+function LinkOS:toggleStartMenu()
+  self.startMenuOpen = not self.startMenuOpen
+  self.quickPanelOpen = false
+  self.appSwitcherOpen = false
+end
+
+function LinkOS:toggleQuickPanel()
+  self.quickPanelOpen = not self.quickPanelOpen
+  self.startMenuOpen = false
+  self.appSwitcherOpen = false
+end
+
+function LinkOS:cycleApp(delta)
+  local nextId = shellui.nextApp(self.app, self:isOperatorUI(), delta or 1)
+  self:openApp(nextId)
 end
 
 function LinkOS:prompt(title, hint)
