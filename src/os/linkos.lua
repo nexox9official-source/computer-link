@@ -2947,7 +2947,7 @@ function LinkOS:listFiles(path)
   return entries
 end
 
-function LinkOS:renderFiles(target, l)
+function LinkOS:renderFiles(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
@@ -2962,10 +2962,62 @@ function LinkOS:renderFiles(target, l)
   fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
   y=y+3
 
+  local useSidebar=w>=38
+  local sideW=useSidebar and math.min(13,math.max(11,math.floor(w*0.27))) or 0
+  local mainX=useSidebar and (x+sideW+1) or x
+  local mainW=useSidebar and math.max(14,w-sideW-1) or w
+
+  if useSidebar then
+    local panelH=math.max(8,l.h-y-1)
+    draw.fill(target,x,y,sideW,panelH,t.surface)
+    draw.text(target,x+1,y,"ACCES RAPIDE",t.muted,t.surface,math.max(1,sideW-2))
+    local sy=y+2
+
+    local function sideItem(id,label,path,icon)
+      if sy>=l.h-2 then return end
+      local selected=self.filePath==path
+      local bg=selected and t.selection or t.surface
+      draw.fill(target,x,sy,sideW,2,bg)
+      fluent.drawMiniIcon(target,icon or "files",x+1,sy,selected,bg)
+      draw.text(target,x+5,sy,label,selected and t.text or t.muted,bg,math.max(1,sideW-6))
+      draw.text(target,x+5,sy+1,path=="/user" and "Accueil" or "Dossier",t.muted,bg,math.max(1,sideW-6))
+      self:addButton("file:side:"..id,x,sy,sideW,2,function()
+        self.filePath=path
+        self.filePreview=nil
+      end)
+      sy=sy+2
+    end
+
+    sideItem("home","Accueil","/user","home")
+
+    local topDirs={}
+    local ok,list=pcall(fs.list,"/user")
+    if ok and type(list)=="table" then
+      table.sort(list)
+      for _,name in ipairs(list) do
+        local full=fs.combine("/user",name)
+        if fs.isDir(full) and not self:isHiddenFilePath(full) then
+          topDirs[#topDirs+1]={name=name,path=full}
+          if #topDirs>=4 then break end
+        end
+      end
+    end
+    for i,item in ipairs(topDirs) do
+      sideItem("dir"..i,item.name,item.path,"files")
+    end
+
+    if sy+2<l.h-1 then
+      draw.text(target,x+1,sy+1,"STOCKAGE",t.muted,t.surface,math.max(1,sideW-2))
+      local free=humanBytes(fs.getFreeSpace("/"))
+      draw.text(target,x+1,sy+2,free.." libres",t.text,t.surface,math.max(1,sideW-2))
+    end
+  end
+
   -- Command bar.
-  draw.fill(target,x,y,w,1,t.surface)
+  draw.fill(target,mainX,y,mainW,1,t.surface)
+  local pathX=mainX
   if self.filePath~="/user" then
-    self:button(target,"file:parent",x,y,5,"<",function()
+    self:button(target,"file:parent",mainX,y,3,"<",function()
       local parent="/"..fs.getDir(string.sub(self.filePath,2))
       if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
         parent="/user"
@@ -2973,11 +3025,15 @@ function LinkOS:renderFiles(target, l)
       self.filePath=parent
       self.filePreview=nil
     end)
+    pathX=mainX+4
   end
-  draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
 
-  if not self.filePreview and w>=32 then
-    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
+  local actionsW=(not self.filePreview and mainW>=24) and 17 or 0
+  draw.text(target,pathX,y,self.filePath,t.muted,t.surface,
+    math.max(1,mainW-(pathX-mainX)-actionsW))
+
+  if not self.filePreview and mainW>=24 then
+    self:button(target,"file:new-folder",mainX+mainW-17,y,8,"DOSSIER",function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
       if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
       local full=childPath(name)
@@ -2985,7 +3041,7 @@ function LinkOS:renderFiles(target, l)
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
-    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"TEXTE",function()
+    self:button(target,"file:new-text",mainX+mainW-8,y,8,"TEXTE",function()
       local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
       if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
       local full=childPath(name)
@@ -3000,20 +3056,20 @@ function LinkOS:renderFiles(target, l)
 
   if self.filePreview then
     local path=self.filePreview.path
-    fluent.card(target,x,y,w,3,{
+    fluent.card(target,mainX,y,mainW,3,{
       bg=t.surface,accent=t.accent,title=fs.getName(path),subtitle=path,muted=t.muted
     })
     y=y+4
-    self:button(target,"file:back",x,y,8,"FERMER",function() self.filePreview=nil end)
-    if w>=21 then
-      self:button(target,"file:edit",x+9,y,8,"EDITER",function()
+    self:button(target,"file:back",mainX,y,7,"FERMER",function() self.filePreview=nil end)
+    if mainW>=18 then
+      self:button(target,"file:edit",mainX+8,y,7,"EDITER",function()
         self:runNativeProgram("edit",path)
         local handle=fs.open(path,"r")
         if handle then self.filePreview.content=handle.read(4096) or "";handle.close() end
       end)
     end
-    if w>=31 then
-      self:button(target,"file:rename",x+18,y,9,"RENOMMER",function()
+    if mainW>=27 then
+      self:button(target,"file:rename",mainX+16,y,8,"RENOMMER",function()
         local name=safeName(self:prompt("Renommer",fs.getName(path)))
         if not name then self:setNotice("Nouveau nom invalide.",t.danger);return end
         local dest=fs.combine(fs.getDir(path),name)
@@ -3023,9 +3079,9 @@ function LinkOS:renderFiles(target, l)
         else self:setNotice(tostring(err),t.danger) end
       end)
     end
-    if w>=40 then
-      fluent.button(target,x+28,y,10,"SUPPRIMER",{danger=true})
-      self:addButton("file:delete",x+28,y,10,1,function()
+    if mainW>=37 then
+      fluent.button(target,mainX+25,y,9,"SUPPRIMER",{danger=true})
+      self:addButton("file:delete",mainX+25,y,9,1,function()
         if self:confirm("Supprimer "..fs.getName(path).." ?") then
           local ok,err=pcall(fs.delete,path)
           if ok then self.filePreview=nil;self:setNotice("Fichier supprime.",t.warn)
@@ -3034,41 +3090,42 @@ function LinkOS:renderFiles(target, l)
       end)
     end
     y=y+2
-    draw.fill(target,x,y,w,math.max(3,l.h-y-1),t.surface2)
-    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w-2))
+    draw.fill(target,mainX,y,mainW,math.max(3,l.h-y-1),t.surface2)
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,mainW-2))
     for i,line in ipairs(lines) do
       if y+i>=l.h-1 then break end
-      draw.text(target,x+1,y+i-1,line,t.text,t.surface2,w-2)
+      draw.text(target,mainX+1,y+i-1,line,t.text,t.surface2,mainW-2)
     end
     return
   end
 
   local entries,err=self:listFiles(self.filePath)
-  if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
+  if err then draw.text(target,mainX,y,err,t.danger,t.bg,mainW);return end
   if #entries==0 then
-    fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
+    fluent.card(target,mainX,y,mainW,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
       subtitle="Cree un dossier ou un fichier depuis la barre d'outils.",muted=t.muted})
     return
   end
 
-  draw.text(target,x,y,"NOM",t.muted,t.bg,math.max(1,w-14))
-  draw.text(target,math.max(x+1,x+w-9),y,"TAILLE",t.muted,t.bg,8)
+  draw.text(target,mainX,y,"NOM",t.muted,t.bg,math.max(1,mainW-14))
+  draw.text(target,math.max(mainX+1,mainX+mainW-9),y,"TAILLE",t.muted,t.bg,8)
   y=y+1
+
   for _,name in ipairs(entries) do
     if y+1>=l.h-1 then break end
     local full=fs.combine(self.filePath,name)
     if self:isHiddenFilePath(full) then break end
     local isDir=fs.isDir(full)
     local bg=t.surface2
-    draw.fill(target,x,y,w,2,bg)
-    fluent.drawMiniIcon(target,isDir and "files" or "notes",x+1,y,false,bg)
-    draw.text(target,x+5,y,name,isDir and t.accent or t.text,bg,math.max(1,w-16))
-    draw.text(target,x+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,w-16))
+    draw.fill(target,mainX,y,mainW,2,bg)
+    fluent.drawMiniIcon(target,isDir and "files" or "notes",mainX+1,y,false,bg)
+    draw.text(target,mainX+5,y,name,isDir and t.accent or t.text,bg,math.max(1,mainW-16))
+    draw.text(target,mainX+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,mainW-16))
     if not isDir then
       local size=humanBytes(fs.getSize(full))
-      draw.text(target,math.max(x+5,x+w-#size-1),y,size,t.muted,bg,#size)
+      draw.text(target,math.max(mainX+5,mainX+mainW-#size-1),y,size,t.muted,bg,#size)
     end
-    self:addButton("file:"..full,x,y,w,2,function()
+    self:addButton("file:"..full,mainX,y,mainW,2,function()
       if fs.isDir(full) then
         self.filePath=full
       else
