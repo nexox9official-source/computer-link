@@ -38,6 +38,25 @@ jobs:
           mkdir -p test-output
           cp /tmp/linkos-*.frame test-output/ 2>/dev/null || true
 
+      - name: Reject truncated primary UI labels
+        run: |
+          set -euo pipefail
+          for frame in \
+            linkos-launcher.frame \
+            linkos-store.frame \
+            linkos-settings.frame \
+            linkos-files.frame \
+            linkos-messages.frame \
+            linkos-calculator.frame \
+            linkos-task-switcher.frame; do
+            path="test-output/$frame"
+            [ -f "$path" ] || continue
+            if grep -n '~' "$path"; then
+              echo "Truncated UI text found in $frame"
+              exit 1
+            fi
+          done
+
       - name: Upload UI frame previews
         if: always()
         uses: actions/upload-artifact@v4
