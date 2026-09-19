@@ -2855,19 +2855,111 @@ function LinkOS:listFiles(path)
 end
 
 function LinkOS:renderFiles(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-8))
+  local function safeName(name)
+    name=tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+    if name=="" or name=="." or name==".." or #name>64 then return nil end
+    if name:find("[/\\]") or name:find("..",1,true) then return nil end
+    return name
+  end
+
+  local function childPath(name)
+    return fs.combine(self.filePath,safeName(name) or "")
+  end
+
+  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-18))
+
+  if not self.filePreview and w>=32 then
+    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"+ DOSSIER",function()
+      local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
+      if not name then
+        self:setNotice("Nom de dossier invalide.",t.danger)
+        return
+      end
+      local full=childPath(name)
+      if fs.exists(full) then
+        self:setNotice("Un element porte deja ce nom.",t.warn)
+        return
+      end
+      local ok,err=pcall(fs.makeDir,full)
+      self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
+    end)
+    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"+ TEXTE",function()
+      local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
+      if not name then
+        self:setNotice("Nom de fichier invalide.",t.danger)
+        return
+      end
+      local full=childPath(name)
+      if fs.exists(full) then
+        self:setNotice("Un element porte deja ce nom.",t.warn)
+        return
+      end
+      local handle=fs.open(full,"w")
+      if not handle then
+        self:setNotice("Creation impossible.",t.danger)
+        return
+      end
+      handle.write("")
+      handle.close()
+      self:runNativeProgram("edit",full)
+    end)
+  end
   y=y+2
 
   if self.filePreview then
-    self:button(target,"file:back",x,y,10,"< RETOUR",function() self.filePreview=nil end)
-    if w>=20 then
-      draw.text(target,x+12,y,fs.getName(self.filePreview.path or ""),t.muted,t.bg,math.max(1,w-12))
+    local path=self.filePreview.path
+    self:button(target,"file:back",x,y,9,"< RETOUR",function() self.filePreview=nil end)
+    if w>=21 then
+      self:button(target,"file:edit",x+10,y,8,"EDITER",function()
+        self:runNativeProgram("edit",path)
+        local handle=fs.open(path,"r")
+        if handle then
+          self.filePreview.content=handle.read(4096) or ""
+          handle.close()
+        end
+      end)
     end
+    if w>=31 then
+      self:button(target,"file:rename",x+19,y,10,"RENOMMER",function()
+        local name=safeName(self:prompt("Renommer",fs.getName(path)))
+        if not name then
+          self:setNotice("Nouveau nom invalide.",t.danger)
+          return
+        end
+        local dest=fs.combine(fs.getDir(path),name)
+        if fs.exists(dest) then
+          self:setNotice("Ce nom existe deja.",t.warn)
+          return
+        end
+        local ok,err=pcall(fs.move,path,dest)
+        if ok then
+          self.filePreview.path=dest
+          self:setNotice("Fichier renomme.",t.good)
+        else
+          self:setNotice(tostring(err),t.danger)
+        end
+      end)
+    end
+    if w>=41 then
+      draw.button(target,x+30,y,9,"SUPPRIMER",colors.white,colors.red)
+      self:addButton("file:delete",x+30,y,9,1,function()
+        if self:confirm("Supprimer "..fs.getName(path).." ?") then
+          local ok,err=pcall(fs.delete,path)
+          if ok then
+            self.filePreview=nil
+            self:setNotice("Fichier supprime.",t.warn)
+          else
+            self:setNotice(tostring(err),t.danger)
+          end
+        end
+      end)
+    end
+
     y=y+2
-    draw.text(target,x,y,tostring(self.filePreview.path or ""),t.accent,t.bg,w)
+    draw.text(target,x,y,tostring(path),t.accent,t.bg,w)
     y=y+2
     local lines=draw.wrap(self.filePreview.content or "",math.max(1,w))
     for _,line in ipairs(lines) do
@@ -2941,7 +3033,6 @@ function LinkOS:renderFiles(target, l)
     y=y+3
   end
 end
-
 function LinkOS:runNativeProgram(program, ...)
   local previous = term.current()
   term.redirect(self.native)
