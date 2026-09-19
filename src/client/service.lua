@@ -38,6 +38,7 @@ function service.new()
   self.online = false
   self.serverId = nil
   self.modemName = nil
+  self.bridgeAvailable = malcraftBusAvailable()
   self.unread = 0
   self.hackSessions = {}
   self.lastError = nil
@@ -87,24 +88,35 @@ function service:startUpdateMonitor()
 end
 
 function service:start()
-  local ok, modemOrError = network.open()
-  if not ok then
-    self.lastError = modemOrError
-    return false, modemOrError
-  end
-
-  self.modemName = modemOrError
-  hack.openChannel(self.modemName)
   storage.load()
+  self.bridgeAvailable = malcraftBusAvailable()
 
   if not os.getComputerLabel() then
     os.setComputerLabel("ASTRAL-PC-" .. os.getComputerID())
   end
 
+  local ok, modemOrError = network.open()
+  if not ok then
+    self.modemName = nil
+    self.serverId = nil
+    self.online = false
+    self.lastError = tostring(modemOrError or "Aucun Wireless Modem detecte.")
+    if self.bridgeAvailable then
+      self.lastError = self.lastError .. " | Malcraft Bridge disponible."
+    end
+    return false, self.lastError
+  end
+
+  self.modemName = modemOrError
+  hack.openChannel(self.modemName)
+
   self.serverId = network.findServer()
   if not self.serverId then
     self.lastError = "MER introuvable."
     self.online = false
+    if self.bridgeAvailable then
+      self.lastError = self.lastError .. " Malcraft Bridge reste disponible."
+    end
     return false, self.lastError
   end
 
@@ -179,6 +191,22 @@ function service:request(kind, payload, timeout)
 end
 
 function service:reconnect()
+  self.bridgeAvailable = malcraftBusAvailable()
+
+  -- A modem may have been attached after LinkOS booted. Re-discover and open
+  -- it on every reconnect attempt instead of assuming startup succeeded.
+  local ok, modemOrError = network.open()
+  if not ok then
+    self.modemName = nil
+    self.serverId = nil
+    self.online = false
+    self.lastError = tostring(modemOrError or "Aucun Wireless Modem detecte.")
+    return false, self.lastError
+  end
+
+  self.modemName = modemOrError
+  hack.openChannel(self.modemName)
+
   self.serverId = network.findServer()
   if not self.serverId then
     self.online = false
@@ -247,6 +275,7 @@ function service:identity()
     server_id = self.serverId,
     modem = self.modemName,
     online = self.online,
+    malcraft_bridge = self.bridgeAvailable == true,
     version = config.VERSION
   }
 end
