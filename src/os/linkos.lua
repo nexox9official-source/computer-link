@@ -836,145 +836,90 @@ function LinkOS:renderMessages(target, l)
   local t = self:theme()
   local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
 
-  draw.text(target, x, y, "Messages", t.text, t.bg, w)
-  self:button(target, "msg:new", math.max(x, x + w - 11), y, math.min(11, w), "+ Nouveau", function()
-    local idText = self:prompt("ID du PC destinataire", "Exemple: 27")
-    local targetId = tonumber(idText)
+  draw.text(target, x, y, "Messages", t.text, t.bg, math.max(1,w-12))
+  self:button(target, "msg:new", math.max(x,x+w-10), y, math.min(10,w), "+ NOUVEAU", function()
+    local targetId = tonumber(self:prompt("Nouveau message", "Computer ID du destinataire"))
     if not targetId then
-      self:setNotice("ID invalide.", t.danger)
+      self:setNotice("Computer ID invalide.", t.danger)
       return
     end
-
-    local body = self:prompt("Message pour PC #" .. targetId, "Tape ton message puis Entree.")
+    local body = self:prompt("PC #" .. targetId, "Ecris ton message")
     if body and body ~= "" then
       local message, err = self.service:sendMessage(targetId, body)
-      if not message then
-        self:setNotice(tostring(err), t.danger)
-      else
+      if message then
         self.selectedPeer = targetId
-        self:setNotice("Message envoye au PC #" .. targetId .. ".", t.good)
+        self:setNotice("Message envoye.", t.good)
+      else
+        self:setNotice(tostring(err), t.danger)
       end
     end
   end)
-  y = y + 2
+  y=y+2
 
-  local peers = self.service:peers()
-
-  if l.mode == "compact" then
-    if self.selectedPeer then
-      draw.text(target, x, y, "< " .. self:peerName(self.selectedPeer), t.accent, t.bg, w)
-      self:addButton("msg:back", x, y, w, 1, function()
-        self.selectedPeer = nil
-        self:render()
-      end)
-      y = y + 1
-
-      local history = self.service:history(self.selectedPeer, math.max(3, h - 5))
-      local available = math.max(1, l.h - y - 2)
-      local start = math.max(1, #history - available + 1)
-
-      for i = start, #history do
-        local m = history[i]
-        local mine = tonumber(m.from_id) == os.getComputerID()
-        local prefix = mine and "Moi: " or (self:peerName(m.from_id) .. ": ")
-        draw.text(target, x, y, prefix .. tostring(m.body), mine and t.accent or t.text, t.bg, w)
-        y = y + 1
-        if y >= l.h - 1 then break end
-      end
-
-      if y < l.h - 1 then
-        self:button(target, "msg:reply", x, y, math.min(w, 14), "Repondre", function()
-          local body = self:prompt("Message pour " .. self:peerName(self.selectedPeer))
-          if body and body ~= "" then
-            local _, err = self.service:sendMessage(self.selectedPeer, body)
-            self:setNotice(err or "Message envoye.", err and t.danger or t.good)
-          end
-        end)
-      end
+  local peers=self.service:peers()
+  if not self.selectedPeer then
+    if #peers==0 then
+      draw.text(target,x,y+1,"Aucune conversation",t.text,t.bg,w)
+      draw.text(target,x,y+3,"Utilise + NOUVEAU pour contacter un Computer.",t.muted,t.bg,w)
       return
     end
 
-    if #peers == 0 then
-      draw.text(target, x, y, "Aucune conversation.", t.muted, t.bg, w)
-      y = y + 2
-      draw.text(target, x, y, "Utilise + Nouveau.", t.muted, t.bg, w)
-      return
-    end
-
-    for i = 1, math.min(#peers, h - 3) do
-      local peer = peers[i]
-      local last = peer.last and peer.last.body or ""
-      draw.text(target, x, y, self:peerName(peer.id), t.accent, t.bg, w)
-      self:addButton("peer:" .. peer.id, x, y, w, 2, function()
-        self.selectedPeer = peer.id
-        self:render()
+    draw.text(target,x,y,"CONVERSATIONS",t.muted,t.bg,w)
+    y=y+2
+    for _,peer in ipairs(peers) do
+      if y+1>=l.h-1 then break end
+      local name=self:peerName(peer.id)
+      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
+      draw.fill(target,x,y,w,2,colors.black)
+      draw.fill(target,x,y,1,2,t.accent)
+      draw.text(target,x+2,y,name,t.text,colors.black,math.max(1,w-3))
+      draw.text(target,x+2,y+1,last,t.muted,colors.black,math.max(1,w-3))
+      local pid=peer.id
+      self:addButton("peer:"..pid,x,y,w,2,function()
+        self.selectedPeer=pid
+        self.service:markRead()
       end)
-      y = y + 1
-      draw.text(target, x + 1, y, last, t.muted, t.bg, math.max(1, w - 1))
-      y = y + 1
+      y=y+3
     end
     return
   end
 
-  local listW = clamp(math.floor(w * 0.34), 16, 28)
-  local chatX = x + listW + 1
-  local chatW = w - listW - 1
+  local peerId=self.selectedPeer
+  local name=self:peerName(peerId)
+  draw.text(target,x,y,"< Conversations",t.accent,t.bg,math.min(16,w))
+  self:addButton("msg:back",x,y,math.min(16,w),1,function() self.selectedPeer=nil end)
+  if w>=26 then
+    draw.text(target,x+18,y,name,t.text,t.bg,math.max(1,w-18))
+  end
+  y=y+2
 
-  draw.box(target, x, y, listW, math.max(4, h - 2), t.panel, t.accent, "Conversations")
-
-  if #peers == 0 then
-    draw.text(target, x + 1, y + 2, "Aucune conversation", t.muted, t.panel, listW - 2)
-  else
-    local py = y + 2
-    for i = 1, math.min(#peers, h - 5) do
-      local peer = peers[i]
-      local selected = self.selectedPeer == peer.id
-      local bg = selected and t.accent or t.panel
-      local fg = selected and colors.black or t.text
-      draw.text(target, x + 1, py, self:peerName(peer.id), fg, bg, listW - 2)
-      self:addButton("peer:" .. peer.id, x + 1, py, listW - 2, 1, function()
-        self.selectedPeer = peer.id
-        self:render()
-      end)
-      py = py + 1
-    end
+  local history=self.service:history(peerId,math.max(8,h-7))
+  local maxLines=math.max(1,math.min(#history,l.h-y-5))
+  local first=math.max(1,#history-maxLines+1)
+  for i=first,#history do
+    if y>=l.h-4 then break end
+    local m=history[i]
+    local mine=tonumber(m.from_id)==os.getComputerID()
+    local prefix=mine and "MOI  " or "EUX  "
+    local fg=mine and t.accent or t.text
+    draw.text(target,x,y,prefix..tostring(m.body),fg,t.bg,w)
+    y=y+1
   end
 
-  draw.box(target, chatX, y, chatW, math.max(4, h - 2), colors.black, t.accent,
-    self.selectedPeer and self:peerName(self.selectedPeer) or "Selectionne une conversation")
-
-  if self.selectedPeer then
-    local history = self.service:history(self.selectedPeer, math.max(10, h - 5))
-    local cy = y + 2
-    local maxLines = math.max(1, h - 6)
-    local start = math.max(1, #history - maxLines + 1)
-
-    for i = start, #history do
-      local m = history[i]
-      local mine = tonumber(m.from_id) == os.getComputerID()
-      local prefix = mine and "Moi > " or ("#" .. tostring(m.from_id) .. " > ")
-      draw.text(target, chatX + 1, cy, prefix .. tostring(m.body),
-        mine and t.accent or t.text, colors.black, chatW - 2)
-      cy = cy + 1
-      if cy >= y + h - 3 then break end
+  local actionY=math.min(l.h-2,math.max(y+1,l.h-4))
+  self:button(target,"msg:reply",x,actionY,math.min(12,w),"REPONDRE",function()
+    local body=self:prompt(name,"Ecris ton message")
+    if body and body~="" then
+      local _,err=self.service:sendMessage(peerId,body)
+      self:setNotice(err or "Message envoye.",err and t.danger or t.good)
     end
-
-    self:button(target, "msg:reply", chatX + 1, y + h - 4, math.min(14, chatW - 2), "Repondre", function()
-      local body = self:prompt("Message pour " .. self:peerName(self.selectedPeer))
-      if body and body ~= "" then
-        local _, err = self.service:sendMessage(self.selectedPeer, body)
-        self:setNotice(err or "Message envoye.", err and t.danger or t.good)
-      end
+  end)
+  if w>=27 then
+    self:button(target,"msg:alias",x+14,actionY,math.min(10,w-14),"ALIAS",function()
+      local alias=self:prompt("Alias de PC #"..peerId,"Vide = supprimer")
+      prefs.setAlias(peerId,alias)
+      self:setNotice("Alias mis a jour.",t.good)
     end)
-
-    if chatW >= 28 then
-      self:button(target, "msg:alias", chatX + 16, y + h - 4, math.min(12, chatW - 17), "Alias", function()
-        local alias = self:prompt("Alias local pour PC #" .. self.selectedPeer,
-          "Laisse vide pour supprimer l'alias.")
-        prefs.setAlias(self.selectedPeer, alias)
-        self:setNotice("Alias enregistre.", t.good)
-      end)
-    end
   end
 end
 
@@ -2894,88 +2839,90 @@ end
 
 function LinkOS:renderFiles(target, l)
   local t = self:theme()
-  local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
+  local x, y, w = l.contentX, l.contentY, l.contentW
 
-  draw.text(target, x, y, "Fichiers", t.text, t.bg, w)
-  if w >= 24 then
-    draw.text(target, x + 10, y, self.filePath, t.muted, t.bg, math.max(1, w - 10))
-  end
-  y = y + 2
+  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-8))
+  y=y+2
 
   if self.filePreview then
-    draw.text(target, x, y, "< Retour", t.accent, t.bg, w)
-    self:addButton("file:back", x, y, w, 1, function()
-      self.filePreview = nil
-      self:render()
-    end)
-    y = y + 2
-
-    local lines = draw.wrap(self.filePreview.content or "", math.max(1, w))
-    for i = 1, math.min(#lines, h - 4) do
-      draw.text(target, x, y + i - 1, lines[i], t.text, t.bg, w)
+    self:button(target,"file:back",x,y,10,"< RETOUR",function() self.filePreview=nil end)
+    if w>=20 then
+      draw.text(target,x+12,y,fs.getName(self.filePreview.path or ""),t.muted,t.bg,math.max(1,w-12))
+    end
+    y=y+2
+    draw.text(target,x,y,tostring(self.filePreview.path or ""),t.accent,t.bg,w)
+    y=y+2
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w))
+    for _,line in ipairs(lines) do
+      if y>=l.h-1 then break end
+      draw.text(target,x,y,line,t.text,t.bg,w)
+      y=y+1
     end
     return
   end
 
-  if self.filePath ~= "/user" then
-    draw.text(target, x, y, "[..] Dossier parent", t.accent, t.bg, w)
-    self:addButton("file:parent", x, y, w, 1, function()
-      local parent = "/" .. fs.getDir(string.sub(self.filePath, 2))
-      if parent == "/" or parent == "//"
-        or (parent ~= "/user" and string.sub(parent, 1, 6) ~= "/user/") then
-        parent = "/user"
+  draw.fill(target,x,y,w,1,colors.black)
+  draw.text(target,x+1,y,self.filePath,t.muted,colors.black,math.max(1,w-2))
+  y=y+2
+
+  if self.filePath~="/user" then
+    draw.fill(target,x,y,w,1,colors.black)
+    draw.text(target,x+1,y,"^  DOSSIER PARENT",t.accent,colors.black,math.max(1,w-2))
+    self:addButton("file:parent",x,y,w,1,function()
+      local parent="/"..fs.getDir(string.sub(self.filePath,2))
+      if parent=="/" or parent=="//"
+        or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
+        parent="/user"
       end
-      self.filePath = parent
-      self:render()
+      self.filePath=parent
     end)
-    y = y + 1
+    y=y+2
   end
 
-  local entries, err = self:listFiles(self.filePath)
+  local entries,err=self:listFiles(self.filePath)
   if err then
-    draw.text(target, x, y, err, t.danger, t.bg, w)
+    draw.text(target,x,y,err,t.danger,t.bg,w)
+    return
+  end
+  if #entries==0 then
+    draw.text(target,x,y,"Ce dossier est vide.",t.muted,t.bg,w)
     return
   end
 
-  for i = 1, math.min(#entries, math.max(1, l.h - y - 2)) do
-    local name = entries[i]
-    local full = fs.combine(self.filePath, name)
-    if self:isHiddenFilePath(full) then
-      break
+  for _,name in ipairs(entries) do
+    if y>=l.h-1 then break end
+    local full=fs.combine(self.filePath,name)
+    if self:isHiddenFilePath(full) then break end
+    local isDir=fs.isDir(full)
+    local icon=isDir and "D" or "F"
+    local badge=isDir and t.accent or colors.gray
+    draw.fill(target,x,y,w,2,colors.black)
+    draw.fill(target,x,y,2,2,badge)
+    draw.text(target,x,y,icon,colors.white,badge,2)
+    draw.text(target,x+3,y,name,isDir and t.accent or t.text,colors.black,math.max(1,w-12))
+    if not isDir then
+      local size=humanBytes(fs.getSize(full))
+      draw.text(target,math.max(x+3,x+w-#size-1),y,size,t.muted,colors.black,#size)
+      draw.text(target,x+3,y+1,"Cliquer pour previsualiser",t.muted,colors.black,math.max(1,w-4))
+    else
+      draw.text(target,x+3,y+1,"Dossier",t.muted,colors.black,math.max(1,w-4))
     end
-    local isDir = fs.isDir(full)
-    local prefix = isDir and "[DIR] " or "      "
-    local suffix = isDir and "" or ("  " .. humanBytes(fs.getSize(full)))
-
-    draw.text(target, x, y, prefix .. name .. suffix, isDir and t.accent or t.text, t.bg, w)
-
-    self:addButton("file:" .. full, x, y, w, 1, function()
+    self:addButton("file:"..full,x,y,w,2,function()
       if fs.isDir(full) then
-        self.filePath = full
+        self.filePath=full
       else
-        local f = fs.open(full, "r")
-        if f then
-          local content = f.read(4096) or ""
-          f.close()
-          self.filePreview = {path=full, content=content}
+        local handle=fs.open(full,"r")
+        if handle then
+          local content=handle.read(4096) or ""
+          handle.close()
+          self.filePreview={path=full,content=content}
         else
-          self:setNotice("Fichier non lisible.", t.danger)
+          self:setNotice("Fichier non lisible.",t.danger)
         end
       end
-      self:render()
     end)
-
-    y = y + 1
+    y=y+3
   end
-end
-
-local function readTextFile(path, limit)
-  if not fs.exists(path) or fs.isDir(path) then return "" end
-  local handle = fs.open(path, "r")
-  if not handle then return "" end
-  local content = handle.read(limit or 8192) or ""
-  handle.close()
-  return content
 end
 
 function LinkOS:runNativeProgram(program, ...)
@@ -3039,44 +2986,93 @@ function LinkOS:evaluate(expression)
 end
 
 function LinkOS:renderCalculator(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target, x, y, "Calculatrice", t.text, t.bg, w)
-  y = y + 2
-  draw.box(target, x, y, w, 4, t.panel, t.accent, "Expression")
-  draw.text(target, x + 1, y + 1,
-    self.calculatorExpression ~= "" and self.calculatorExpression or "Ex: (12+8)*3",
-    self.calculatorExpression ~= "" and t.text or t.muted, t.panel, math.max(1, w - 2))
-  draw.text(target, x + 1, y + 2, "= " .. tostring(self.calculatorResult), t.accent, t.panel, math.max(1, w - 2))
-  y = y + 5
+  draw.text(target,x,y,"Calculatrice",t.text,t.bg,w)
+  y=y+2
 
-  self:button(target, "calc:input", x, y, math.min(16, w), "NOUVEAU CALCUL", function()
-    local expression = self:prompt("Calcul LinkOS", "Operateurs: + - * / % ^ et parentheses")
-    if not expression or expression == "" then return end
-    local result, err = self:evaluate(expression)
-    self.calculatorExpression = expression
-    self.calculatorResult = result and tostring(result) or tostring(err)
-    self:setNotice(result and "Calcul termine." or tostring(err), result and t.good or t.danger)
-  end)
+  draw.fill(target,x,y,w,4,colors.black)
+  draw.text(target,x+1,y+1,
+    self.calculatorExpression~="" and self.calculatorExpression or "0",
+    self.calculatorExpression~="" and t.text or t.muted,colors.black,math.max(1,w-2))
+  draw.text(target,x+1,y+2,tostring(self.calculatorResult or "Pret"),t.accent,colors.black,math.max(1,w-2))
+  y=y+5
+
+  local function append(value)
+    if #self.calculatorExpression<80 then
+      self.calculatorExpression=self.calculatorExpression..value
+    end
+  end
+  local function solve()
+    if self.calculatorExpression=="" then return end
+    local result,err=self:evaluate(self.calculatorExpression)
+    self.calculatorResult=result and tostring(result) or tostring(err)
+    if not result then self:setNotice(tostring(err),t.danger) end
+  end
+
+  local keysGrid={
+    {"7","8","9","/"},
+    {"4","5","6","*"},
+    {"1","2","3","-"},
+    {"0",".","(",")"},
+    {"C","<","=","+"}
+  }
+  local gap=1
+  local bw=math.max(3,math.floor((w-3*gap)/4))
+  for row,items in ipairs(keysGrid) do
+    local by=y+(row-1)*2
+    for col,label in ipairs(items) do
+      local bx=x+(col-1)*(bw+gap)
+      local width=col==4 and math.max(3,x+w-bx) or bw
+      local bg=(label=="=" and t.accent) or (label=="C" and colors.red) or colors.gray
+      draw.button(target,bx,by,width,label,colors.white,bg)
+      self:addButton("calc:"..row..":"..col,bx,by,width,1,function()
+        if label=="C" then
+          self.calculatorExpression=""
+          self.calculatorResult="Pret"
+        elseif label=="<" then
+          self.calculatorExpression=self.calculatorExpression:sub(1,-2)
+        elseif label=="=" then
+          solve()
+        else
+          append(label)
+        end
+      end)
+    end
+  end
+
+  local by=y+#keysGrid*2
+  if by<l.h-1 then
+    self:button(target,"calc:keyboard",x,by,math.min(18,w),"SAISIE CLAVIER",function()
+      local expression=self:prompt("Calcul LinkOS","Operateurs: + - * / % ^ ( )")
+      if expression and expression~="" then
+        self.calculatorExpression=expression
+        solve()
+      end
+    end)
+  end
 end
 
 function LinkOS:renderTerminal(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target, x, y, "Terminal", t.text, t.bg, w)
-  y = y + 2
-  draw.box(target, x, y, w, math.min(7, math.max(4, l.contentH - 3)), colors.black, t.accent, "LinkOS Shell")
-  draw.text(target, x + 1, y + 1, "Acces aux commandes CraftOS", t.text, colors.black, math.max(1, w - 2))
-  draw.text(target, x + 1, y + 2, "Tape exit pour revenir au bureau.", t.muted, colors.black, math.max(1, w - 2))
-  if self.active and self.active.kind == "monitor" then
-    draw.text(target, x + 1, y + 3, "La saisie se fera sur le Computer.", t.warn, colors.black, math.max(1, w - 2))
+  draw.text(target,x,y,"Terminal",t.text,t.bg,w)
+  y=y+2
+
+  draw.fill(target,x,y,w,6,colors.black)
+  draw.text(target,x+1,y+1,"> LinkOS Shell",t.accent,colors.black,math.max(1,w-2))
+  draw.text(target,x+1,y+2,"Terminal CraftOS isole",t.text,colors.black,math.max(1,w-2))
+  draw.text(target,x+1,y+3,"exit  -> retour au bureau",t.muted,colors.black,math.max(1,w-2))
+  if self.active and self.active.kind=="monitor" then
+    draw.text(target,x+1,y+4,"Clavier utilise sur le Computer.",t.warn,colors.black,math.max(1,w-2))
   end
-  self:button(target, "terminal:open", x, y + math.min(5, math.max(3, l.contentH - 5)),
-    math.min(18, w), "OUVRIR TERMINAL", function()
-      self:runNativeProgram("shell")
-    end)
+  y=y+7
+
+  self:button(target,"terminal:open",x,y,math.min(20,w),"OUVRIR LE TERMINAL",function()
+    self:runNativeProgram("shell")
+  end)
 end
 
 function LinkOS:renderSettings(target, l)
