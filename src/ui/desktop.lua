@@ -546,7 +546,7 @@ function M.install(OS,shellui,prefs)
       self.storeQuery=self:prompt("Rechercher","Nom de l'application") or ""
     end)
 
-    ccui.button(target,l.w-10,4,9,"ACTUALISER",t,{})
+    ccui.button(target,l.w-10,4,9,"MAJ LISTE",t,{})
     self:addButton("store:refresh",l.w-10,4,9,1,function()
       local ok,result=packages.refreshCatalog()
       self:setNotice(ok and (tostring(result).." apps chargees.") or tostring(result),
@@ -1140,14 +1140,16 @@ function M.install(OS,shellui,prefs)
     if not note then return end
     local t=self:theme()
 
-    fluent.sectionTitle(target,2,1,l.w-3,"Notes",
-      (note.dirty and "Modifications non enregistrees" or note.path),t.accent)
-    self:button(target,"note:edit",2,4,10,note.editing and "EDITION" or "EDITER",
-      function() note.editing=not note.editing end)
-    self:button(target,"note:save",13,4,11,"SAUVEGARDER",function() self:saveNote() end)
+    draw.text(target,2,1,"Notes",t.text,t.bg,l.w-3)
+    draw.text(target,2,2,note.dirty and "Non enregistre" or note.path,t.muted,t.bg,l.w-3)
+
+    ccui.button(target,2,4,8,note.editing and "LECTURE" or "EDITER",t,{selected=note.editing})
+    self:addButton("note:edit",2,4,8,1,function() note.editing=not note.editing end)
+    ccui.button(target,11,4,10,"SAUVER",t,{primary=note.dirty})
+    self:addButton("note:save",11,4,10,1,function() self:saveNote() end)
 
     draw.fill(target,2,6,l.w-3,1,t.surface)
-    draw.text(target,3,6,"Entree: ligne  |  Ctrl+S: sauver  |  Esc: quitter l'edition",
+    draw.text(target,3,6,note.editing and "Entree: nouvelle ligne / Ctrl+S: sauver" or "Clique une ligne pour modifier",
       t.muted,t.surface,l.w-5)
 
     draw.fill(target,2,8,l.w-3,math.max(5,l.h-9),t.surface2)
@@ -1159,16 +1161,17 @@ function M.install(OS,shellui,prefs)
         local start=math.max(1,note.col-(l.w-8))
         text=text:sub(start,note.col-1).."|"..text:sub(note.col)
       end
-      local y=8+row-page*18-1
+      local yy=8+row-page*18-1
       local bg=active and t.selection or t.surface2
-      if active then draw.fill(target,2,y,l.w-3,1,bg) end
-      draw.text(target,3,y,text,active and t.text or t.muted,bg,l.w-5)
-      self:addButton("note:line:"..row,2,y,l.w-3,1,function()
-        note.row=row;note.col=#note.lines[row]+1;note.editing=true
+      if active then draw.fill(target,2,yy,l.w-3,1,bg) end
+      draw.text(target,3,yy,text,active and t.text or t.muted,bg,l.w-5)
+      self:addButton("note:line:"..row,2,yy,l.w-3,1,function()
+        note.row=row
+        note.col=#note.lines[row]+1
+        note.editing=true
       end)
     end
   end
-
   function OS:handleKey(key)
     if self.startMenuOpen then return originalKey(self,key) end
     local list=self:workspace()
