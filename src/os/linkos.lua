@@ -223,48 +223,74 @@ function LinkOS:cycleApp(delta)
 end
 
 function LinkOS:inputDialog(title,hint,secret)
-  local active=self.active
   local t=self:theme()
+  local active=self.active
+  if not active or not active.target then return nil end
 
-  if active and active.kind=="monitor" then
-    local target=active.target
-    local w,h=target.getSize()
-    fluent.card(target,2,math.max(2,h-5),math.max(1,w-3),4,{
-      bg=t.surface,accent=t.accent,title=secret and "Saisie securisee" or "Saisie",
-      subtitle="Utilise le clavier du Computer.",muted=t.muted
-    })
+  self.dialogOpen=true
+  local value=""
+  local cancelled=false
+  local maxLength=128
+
+  local function drawOn(target,keyboardSource)
+    fluent.applyPalette(target)
+    local box=ccui.modal(target,
+      tostring(title or (secret and "Mot de passe" or "Saisie")),
+      tostring(hint or ""),
+      t,{w=math.max(26,math.floor(select(1,target.getSize())*0.72)),h=8,
+        accent=secret and t.warn or t.accent})
+
+    local shown=secret and string.rep("*",#value) or value
+    local field=ccui.inputField(target,box.x+2,box.y+3,box.w-4,shown,t,{prefix="> "})
+    draw.text(target,box.x+2,box.y+5,
+      keyboardSource and "Entree: valider  Echap: annuler" or "Saisie depuis le Computer",
+      t.muted,t.elevated,math.max(1,box.w-4))
+
+    if target.setCursorPos then pcall(target.setCursorPos,field.cursorX,field.y) end
+    if target.setCursorBlink then pcall(target.setCursorBlink,keyboardSource==true) end
   end
 
-  local previous=term.current()
-  term.redirect(self.native)
-  fluent.applyPalette(self.native)
+  local function redraw()
+    drawOn(active.target,active.kind=="computer")
+    if active.kind=="monitor" and self.native and self.native~=active.target then
+      drawOn(self.native,true)
+    end
+  end
 
-  local w,h=self.native.getSize()
-  draw.clear(self.native,t.desktop,t.text)
-  local cardW=math.min(math.max(24,math.floor(w*0.72)),math.max(20,w-4))
-  local cardH=math.min(9,math.max(6,h-4))
-  local x=math.max(1,math.floor((w-cardW)/2)+1)
-  local y=math.max(2,math.floor((h-cardH)/2)+1)
+  redraw()
 
-  fluent.card(self.native,x,y,cardW,cardH,{
-    bg=t.surface,accent=secret and t.warn or t.accent,
-    title=tostring(title or (secret and "Mot de passe" or "Saisie")),
-    subtitle=tostring(hint or ""),muted=t.muted
-  })
+  while true do
+    local event,a1=os.pullEvent()
+    if event=="char" then
+      if #value<maxLength then
+        value=value..tostring(a1)
+        redraw()
+      end
+    elseif event=="paste" then
+      local text=tostring(a1 or ""):gsub("[\r\n]"," ")
+      if #text>0 and #value<maxLength then
+        value=(value..text):sub(1,maxLength)
+        redraw()
+      end
+    elseif event=="key" then
+      if a1==keys.enter then
+        break
+      elseif a1==keys.escape then
+        cancelled=true
+        break
+      elseif a1==keys.backspace then
+        value=value:sub(1,-2)
+        redraw()
+      end
+    end
+  end
 
-  local inputY=math.min(y+cardH-2,h-1)
-  draw.fill(self.native,x+2,inputY,math.max(4,cardW-4),1,t.surface2)
-  draw.text(self.native,x+3,inputY,">",t.accent,t.surface2,1)
-
-  pcall(self.native.setCursorPos,x+5,inputY)
-  pcall(self.native.setBackgroundColor,t.surface2)
-  pcall(self.native.setTextColor,t.text)
-  pcall(self.native.setCursorBlink,true)
-  local value=secret and read("*") or read()
-  pcall(self.native.setCursorBlink,false)
-
-  term.redirect(previous)
+  if active.target.setCursorBlink then pcall(active.target.setCursorBlink,false) end
+  if self.native and self.native.setCursorBlink then pcall(self.native.setCursorBlink,false) end
+  self.dialogOpen=false
   self:render()
+
+  if cancelled then return nil end
   return value
 end
 
@@ -273,8 +299,74 @@ function LinkOS:prompt(title,hint)
 end
 
 function LinkOS:confirm(title)
-  local answer=string.lower(self:inputDialog(title,"Tape OUI pour confirmer.",false) or "")
-  return answer=="oui" or answer=="o" or answer=="yes" or answer=="y"
+  local t=self:theme()
+  local active=self.active
+  if not active or not active.target then return false end
+
+  self.dialogOpen=true
+  local selected=false
+  local regions={}
+
+  local function drawOn(target,keyboardSource)
+    fluent.applyPalette(target)
+    local box=ccui.modal(target,tostring(title or "Confirmer"),
+      "Cette action demande une confirmation.",t,{w=34,h=8,accent=t.warn})
+
+    local cancelX=box.x+2
+    local confirmX=box.x+box.w-13
+    ccui.button(target,cancelX,box.y+4,10,"ANNULER",t,{selected=not selected})
+    ccui.button(target,confirmX,box.y+4,11,"CONFIRMER",t,{primary=selected})
+    draw.text(target,box.x+2,box.y+6,
+      keyboardSource and "Gauche/Droite + Entree" or "Choisis sur le Computer",
+      t.muted,t.elevated,math.max(1,box.w-4))
+    return {
+      cancel={x=cancelX,y=box.y+4,w=10,h=1},
+      confirm={x=confirmX,y=box.y+4,w=11,h=1}
+    }
+  end
+
+  local function redraw()
+    regions=drawOn(active.target,active.kind=="computer")
+    if active.kind=="monitor" and self.native and self.native~=active.target then
+      drawOn(self.native,true)
+    end
+  end
+
+  local function insideRegion(px,py,r)
+    return r and px>=r.x and px<r.x+r.w and py>=r.y and py<r.y+r.h
+  end
+
+  redraw()
+  local result=false
+
+  while true do
+    local event,a1,a2,a3=os.pullEvent()
+    if event=="key" then
+      if a1==keys.left or a1==keys.right or a1==keys.tab then
+        selected=not selected
+        redraw()
+      elseif a1==keys.enter then
+        result=selected
+        break
+      elseif a1==keys.escape or a1==keys.n then
+        result=false
+        break
+      elseif a1==keys.y then
+        result=true
+        break
+      end
+    elseif event=="mouse_click" and active.kind=="computer" then
+      if insideRegion(a2,a3,regions.confirm) then result=true;break end
+      if insideRegion(a2,a3,regions.cancel) then result=false;break end
+    elseif event=="monitor_touch" and active.kind=="monitor" and tostring(a1)==tostring(active.name) then
+      if insideRegion(a2,a3,regions.confirm) then result=true;break end
+      if insideRegion(a2,a3,regions.cancel) then result=false;break end
+    end
+  end
+
+  self.dialogOpen=false
+  self:render()
+  return result
 end
 
 function LinkOS:promptSecret(title,hint)
