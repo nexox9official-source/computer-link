@@ -1,7 +1,8 @@
 -- Official LinkOS application catalogue. Installing never executes the download.
+local config = dofile('/computer-link/src/common/config.lua')
 local M = {}
 local ROOT = '/computer-link/apps/'
-local BASE = 'https://raw.githubusercontent.com/nexox9official-source/computer-link/main/packages/'
+local BASE = config.GITHUB_RAW .. 'packages/'
 M.catalog = {
   {id='tasks',title='Mes taches',version='1.0',description='Checklist personnelle sauvegardee.'},
   {id='stopwatch',title='Chronometre',version='1.0',description='Chrono avec pause et remise a zero.'},
