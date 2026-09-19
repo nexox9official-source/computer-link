@@ -64,22 +64,23 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{58,18},{82,26},{110,38}}) do
     o.buttons={}
     o:renderStartMenu(target,l)
     local allSeen={}
-    for _,button in ipairs(o.buttons) do allSeen[button.id]=true end
-    local pages=math.max(1,math.ceil(#(o.launcherApps or {})/math.max(1,(o.launcherCols or 1)*3)))
+    local firstIndex=o.launcherIndex
     local guard=0
-    while guard<pages+2 do
+    while guard<20 do
       for _,button in ipairs(o.buttons) do allSeen[button.id]=true end
       local nextButton=nil
       for _,button in ipairs(o.buttons) do
         if button.id=='launcher:next' then nextButton=button break end
       end
       if not nextButton then break end
-      local before=o.launcherIndex
       nextButton.callback()
-      if o.launcherIndex==before then break end
       o.buttons={}
       o:renderStartMenu(target,l)
       guard=guard+1
+      if o.launcherIndex==firstIndex then
+        for _,button in ipairs(o.buttons) do allSeen[button.id]=true end
+        break
+      end
     end
     for _,app in ipairs(shellui.apps(operator)) do
       assert(app.id=='home' or allSeen['launcher:'..app.id],'Unreachable All Apps entry '..app.id)
