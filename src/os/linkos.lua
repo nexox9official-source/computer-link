@@ -3180,6 +3180,10 @@ function LinkOS:renderSettings(target, l)
   else
     draw.text(target, x, y, "LinkOS " .. tostring(config.VERSION), t.accent, t.bg, w)
     y = y + 1
+    local channel=tostring(config.SOURCE_REF or "main")
+    draw.text(target, x, y, "Canal  " .. channel,
+      channel=="main" and t.muted or t.warn, t.bg, w)
+    y = y + 1
     draw.text(target, x, y,
       self.service.updateAvailable
         and ("Mise a jour disponible: " .. tostring(self.service.remoteVersion))
@@ -3218,6 +3222,7 @@ function LinkOS:renderAbout(target, l)
 
   local text = {
     "Version " .. config.VERSION,
+    "Canal " .. tostring(config.SOURCE_REF or "main"),
     "",
     "Un OS reseau construit pour Astralium.",
     "Identite native par Computer ID.",
@@ -3347,16 +3352,31 @@ end
 
 function LinkOS:renderUserLockDisplay(target)
   local w, h = target.getSize()
+  local t = self:theme()
   draw.clear(target, colors.black, colors.white)
 
   local label = os.getComputerLabel() or ("PC-" .. os.getComputerID())
-  draw.center(target, math.max(2, math.floor(h / 2) - 4), "LINK OS", colors.cyan, colors.black)
-  draw.center(target, math.max(3, math.floor(h / 2) - 2), label, colors.white, colors.black)
-  draw.center(target, math.max(4, math.floor(h / 2)), "PC VERROUILLE", colors.orange, colors.black)
-  draw.center(target, math.max(5, math.floor(h / 2) + 2), "Mot de passe requis", colors.lightGray, colors.black)
+  local clock = textutils.formatTime(os.time(), true)
+  local centerY = math.max(3, math.floor(h / 2))
 
-  if h >= 8 then
-    draw.center(target, h - 1, "Appuie sur une touche ou touche l'ecran", colors.lightGray, colors.black)
+  draw.fill(target, 1, 1, w, 1, t.accent)
+  draw.text(target, 2, 1, "LINKOS", colors.white, t.accent, math.max(1,w-8))
+  draw.text(target, math.max(1,w-#clock-1), 1, clock, colors.white, t.accent, #clock)
+
+  if h >= 12 then
+    draw.center(target, centerY-4, label, t.muted, colors.black)
+    draw.center(target, centerY-2, "[  LOCK  ]", colors.white, t.accent)
+    draw.center(target, centerY, "Session verrouillee", colors.white, colors.black)
+    draw.center(target, centerY+2, "Mot de passe LinkOS requis", t.muted, colors.black)
+  else
+    draw.center(target, centerY-2, label, t.muted, colors.black)
+    draw.center(target, centerY, "SESSION VERROUILLEE", colors.white, colors.black)
+    draw.center(target, centerY+1, "Mot de passe requis", t.muted, colors.black)
+  end
+
+  if h >= 7 then
+    draw.fill(target, 1, h, w, 1, colors.gray)
+    draw.center(target, h, "Touche ou clic pour deverrouiller", colors.white, colors.gray)
   end
 
   if target.setCursorBlink then pcall(target.setCursorBlink, false) end
