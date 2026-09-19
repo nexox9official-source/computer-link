@@ -248,6 +248,25 @@ local function writeMarker(drive)
   return true
 end
 
+local function removeMarker(drive)
+  if not drive or not drive.has_data or not drive.mount then
+    return false
+  end
+
+  local path=markerPath(drive.mount)
+  if fs.exists(path) and not fs.isDir(path) then
+    local ok=pcall(fs.delete,path)
+    if not ok then return false end
+  end
+
+  local dir=fs.combine(drive.mount,MARKER_DIR)
+  if fs.exists(dir) and fs.isDir(dir) then
+    local entries=fs.list(dir)
+    if #entries==0 then pcall(fs.delete,dir) end
+  end
+  return true
+end
+
 local function carrierPresent()
   for _, drive in ipairs(drives()) do
     if diskHasMarker(drive) then
@@ -790,7 +809,13 @@ local function processAction(sender, action, argument)
     return data ~= nil, data, err
 
   elseif action == "drives" then
-    return true, {disk_ids=diskIds()}
+    local rows=drives()
+    local ids={}
+    for _,drive in ipairs(rows) do
+      if drive.id then ids[#ids+1]=drive.id end
+      drive.malcraft = diskHasMarker(drive)
+    end
+    return true, {disk_ids=ids, drives=rows}
 
   elseif action == "spread" then
     if not spreadEnabled then
@@ -817,26 +842,28 @@ local function processAction(sender, action, argument)
       response and response.payload or nil,
       response and response.error or "MER indisponible."
 
-  elseif action == "infect_disk" then
+  elseif action == "infect_disk" or action == "disk_set" then
     local diskId = tonumber(argument.disk_id)
     if not diskId then
       return false, nil, "Disk ID invalide."
     end
 
-    local marked = false
+    local wanted = action=="infect_disk" or argument.infected ~= false
+    local changed = false
     for _, drive in ipairs(drives()) do
       if tonumber(drive.id) == diskId then
-        marked = writeMarker(drive)
+        changed = wanted and writeMarker(drive) or removeMarker(drive)
         break
       end
     end
 
-    if networkModemName then
-      pcall(request, "INFECT_DISK", {disk_id=diskId}, 0.8)
+    if changed and networkModemName then
+      pcall(request, "INFECT_DISK", {disk_id=diskId, infected=wanted}, 0.8)
     end
 
-    return marked, marked and {disk_id=diskId, infected=true} or nil,
-      marked and nil or "Disque introuvable ou non inscriptible."
+    return changed,
+      changed and {disk_id=diskId, infected=wanted} or nil,
+      changed and nil or "Disque introuvable ou non inscriptible."
 
   elseif action == "screen_snapshot" then
     local frame, err = screenFrame()
