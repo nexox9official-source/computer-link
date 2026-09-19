@@ -485,7 +485,7 @@ function M.install(OS,shellui,prefs)
     end
 
     local apps=self:desktopApps()
-    local tileW=w>=50 and 10 or (w>=38 and 9 or 8)
+    local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
     local tileH=5
     local gapX=1
     local gapY=1
