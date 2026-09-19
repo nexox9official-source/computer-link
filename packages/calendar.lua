@@ -1,7 +1,7 @@
 -- LinkOS package calendar 1.1
 local ui=dofile('/computer-link/src/ui/fluent.lua')
 return {draw=function(ctx)
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   local day=os.day and os.day() or nil
   local time=textutils.formatTime(os.time(),true)
   ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Calendrier','Temps du monde Minecraft',t.accent)
