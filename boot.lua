@@ -55,6 +55,16 @@ local function setColour(colour)
   end
 end
 
+local function applyFluentPalette()
+  local path = ROOT .. "/src/ui/fluent.lua"
+  if fs.exists(path) then
+    local ok, ui = pcall(dofile, path)
+    if ok and type(ui) == "table" and type(ui.applyPalette) == "function" then
+      pcall(ui.applyPalette, term.current())
+    end
+  end
+end
+
 local function setBackground(colour)
   if term.isColor and term.isColor() and term.setBackgroundColor then
     term.setBackgroundColor(colour)
@@ -71,27 +81,47 @@ local function center(row, text, foreground, background)
 end
 
 local function bootScreen(status, colour, detail)
+  applyFluentPalette()
   local w, h = term.getSize()
   setBackground(colors.black)
   setColour(colors.white)
   term.clear()
 
-  setBackground(colors.cyan)
-  term.setCursorPos(1, 1)
-  write(string.rep(" ", w))
-  term.setCursorPos(2, 1)
-  setColour(colors.white)
-  write("LINKOS")
-  setBackground(colors.black)
+  local mid = math.max(5, math.floor(h / 2))
+  local logoX = math.max(2, math.floor(w / 2) - 3)
 
-  local mid = math.max(3, math.floor(h / 2))
-  center(mid - 2, "COMPUTER LINK", colors.white, colors.black)
-  center(mid, status or "Demarrage", colour or colors.cyan, colors.black)
-  if detail and h >= 8 then
-    center(mid + 2, detail, colors.lightGray, colors.black)
+  -- Four tiles echo Windows without depending on external image assets.
+  if term.isColor and term.isColor() then
+    setBackground(colors.lightBlue)
+    for dy=0,1 do
+      term.setCursorPos(logoX, mid-4+dy)
+      write("  ")
+      term.setCursorPos(logoX+3, mid-4+dy)
+      write("  ")
+    end
+    for dy=0,1 do
+      term.setCursorPos(logoX, mid-1+dy)
+      write("  ")
+      term.setCursorPos(logoX+3, mid-1+dy)
+      write("  ")
+    end
+  else
+    center(mid-3, "[ ][ ]", colors.white, colors.black)
+    center(mid-2, "[ ][ ]", colors.white, colors.black)
   end
-  if h >= 5 then
-    center(h, "Canal " .. SOURCE_REF, colors.gray, colors.black)
+
+  setBackground(colors.black)
+  center(mid+2, "LinkOS", colors.white, colors.black)
+  center(mid+4, status or "Demarrage", colour or colors.lightBlue, colors.black)
+  if detail and h >= 12 then
+    center(mid+5, detail, colors.lightGray, colors.black)
+  end
+
+  if h >= 6 then
+    setBackground(colors.gray)
+    term.setCursorPos(1,h)
+    write(string.rep(" ",w))
+    center(h, "Canal " .. SOURCE_REF, colors.lightGray, colors.gray)
   end
 end
 
