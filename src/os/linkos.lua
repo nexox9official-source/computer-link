@@ -1,6 +1,7 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local fluent = dofile("/computer-link/src/ui/fluent.lua")
+local ccui = dofile("/computer-link/src/ui/ccui.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local shellui = dofile("/computer-link/src/ui/shell.lua")
@@ -2968,10 +2969,15 @@ function LinkOS:renderFiles(target, l)
   fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
   y=y+3
 
-  -- Command bar.
-  draw.fill(target,x,y,w,1,t.surface)
+  -- Explorer command bar + breadcrumb, based on familiar file-manager patterns.
+  local parts={{label="Accueil"}}
   if self.filePath~="/user" then
-    self:button(target,"file:parent",x,y,5,"<",function()
+    local relative=self.filePath:sub(7)
+    for part in relative:gmatch("[^/]+") do parts[#parts+1]={label=part} end
+  end
+  ccui.breadcrumb(target,x,y,w-18,parts,t)
+  if self.filePath~="/user" then
+    self:button(target,"file:parent",x,y,3,"<",function()
       local parent="/"..fs.getDir(string.sub(self.filePath,2))
       if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
         parent="/user"
@@ -2980,7 +2986,7 @@ function LinkOS:renderFiles(target, l)
       self.filePreview=nil
     end)
   end
-  draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
+  draw.text(target,x+1,y+1,self.filePath,t.muted,t.bg,math.max(1,w-2))
 
   if not self.filePreview and w>=32 then
     self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
@@ -3002,7 +3008,7 @@ function LinkOS:renderFiles(target, l)
       self:runNativeProgram("edit",full)
     end)
   end
-  y=y+2
+  y=y+3
 
   if self.filePreview then
     local path=self.filePreview.path
@@ -3221,102 +3227,79 @@ function LinkOS:renderTerminal(target,l)
   self:button(target,"terminal:open",x,y,20,"OUVRIR LE TERMINAL",function() self:runNativeProgram("shell") end)
 end
 
-function LinkOS:renderSettings(target, l)
+function LinkOS:renderSettings(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
   self.settingsTab=self.settingsTab or "style"
 
-  fluent.sectionTitle(target,x,y,w,"Parametres","Personnalise ton experience LinkOS",t.accent)
-  y=y+4
+  draw.text(target,x,y,"Parametres",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Personnalise LinkOS sans menus techniques.",t.muted,t.bg,w)
+  y=y+3
 
-  local sideW=w>=34 and 12 or 9
-  local cx=x+sideW+1
-  local cw=math.max(10,w-sideW-1)
-  draw.fill(target,x,y,sideW,math.max(18,l.h-y-1),t.surface)
-
-  local tabs={
-    {"style","Style","*"},
-    {"display","Ecrans","D"},
-    {"system","Systeme","I"}
+  local tabItems={
+    {id="style",label="Apparence"},
+    {id="display",label="Ecrans"},
+    {id="system",label="Systeme"}
   }
-  local sy=y+1
-  for _,tab in ipairs(tabs) do
-    local selected=self.settingsTab==tab[1]
-    local bg=selected and t.selection or t.surface
-    draw.fill(target,x,sy,sideW,2,bg)
-    draw.text(target,x+1,sy,tab[3],selected and t.accent or t.muted,bg,1)
-    draw.text(target,x+3,sy,tab[2],selected and t.text or t.muted,bg,math.max(1,sideW-4))
-    local id=tab[1]
-    self:addButton("set:tab:"..id,x,sy,sideW,2,function() self.settingsTab=id end)
-    sy=sy+3
+  local rects=ccui.tabs(target,x,y,w,tabItems,self.settingsTab,t)
+  for _,r in ipairs(rects) do
+    self:addButton("set:tab:"..r.id,r.x,r.y,r.w,r.h,function() self.settingsTab=r.id end)
   end
+  y=y+3
 
   if self.settingsTab=="style" then
-    draw.text(target,cx,y,"Apparence",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Couleurs, bureau et barre des taches",t.muted,t.bg,cw)
-    local py=y+3
-
-    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Couleur",
-      subtitle="Couleur principale de LinkOS.",muted=t.muted})
     local accentOrder={"blue","cyan","lime","orange","purple","red"}
     local accentLabels={blue="BLEU",cyan="CYAN",lime="VERT",orange="ORANGE",purple="VIOLET",red="ROUGE"}
     local currentAccent=prefs.get("accent","blue")
-    self:button(target,"set:accent",cx+2,py+2,math.min(18,cw-4),
-      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),function()
-        local nextAccent=accentOrder[1]
-        for i,name in ipairs(accentOrder) do
-          if name==prefs.get("accent","blue") then
-            nextAccent=accentOrder[(i%#accentOrder)+1]
-            break
-          end
-        end
-        prefs.set("accent",nextAccent)
-        self:refreshDisplays()
-      end)
-    py=py+5
 
-    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
-      subtitle="Fond et densite de la barre des taches.",muted=t.muted})
+    ccui.panel(target,x,y,w,4,t,{accent=t.accent,title="Couleur",
+      subtitle="Couleur principale des boutons et selections."})
+    ccui.button(target,x+2,y+2,math.min(20,w-4),
+      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),t,{primary=true})
+    self:addButton("set:accent",x+2,y+2,math.min(20,w-4),1,function()
+      local nextAccent=accentOrder[1]
+      for i,name in ipairs(accentOrder) do
+        if name==prefs.get("accent","blue") then
+          nextAccent=accentOrder[(i%#accentOrder)+1];break
+        end
+      end
+      prefs.set("accent",nextAccent)
+      self:refreshDisplays()
+    end)
+    y=y+5
+
+    ccui.panel(target,x,y,w,4,t,{title="Fond du bureau",
+      subtitle="Choisis un fond simple et lisible."})
     local wallpaper=tostring(prefs.get("wallpaper","fluent"))
-    self:button(target,"set:wallpaper",cx+2,py+2,math.min(15,cw-4),
-      "FOND: "..string.upper(wallpaper),function()
-        local order={"fluent","clean","dots","grid","lines"}
-        local current=prefs.get("wallpaper","fluent")
-        local nextValue=order[1]
-        for i,value in ipairs(order) do
-          if value==current then nextValue=order[(i%#order)+1];break end
-        end
-        prefs.set("wallpaper",nextValue)
-      end)
-    if cw>=30 then
-      local labels=prefs.get("taskbar_labels",false)
-      self:button(target,"set:taskbarlabels",cx+18,py+2,math.min(16,cw-19),
-        labels and "TACHES: TEXTE" or "TACHES: ICONES",function()
-          prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
-        end)
-    end
-    py=py+5
+    ccui.button(target,x+2,y+2,math.min(18,w-4),"FOND: "..string.upper(wallpaper),t,{})
+    self:addButton("set:wallpaper",x+2,y+2,math.min(18,w-4),1,function()
+      local order={"fluent","clean","dots","grid","lines"}
+      local current=prefs.get("wallpaper","fluent")
+      local nextValue=order[1]
+      for i,value in ipairs(order) do
+        if value==current then nextValue=order[(i%#order)+1];break end
+      end
+      prefs.set("wallpaper",nextValue)
+    end)
+    y=y+5
 
-    fluent.card(target,cx,py,cw,9,{bg=t.surface,accent=t.accent,title="Applications epinglees",
-      subtitle="Choisis les raccourcis visibles dans la barre des taches.",muted=t.muted})
+    ccui.panel(target,x,y,w,7,t,{title="Barre des taches",
+      subtitle="Clique une application pour l'epingler ou la retirer."})
     local pinCandidates={"messages","files","store","terminal","calculator"}
     local pins=prefs.get("taskbar_pins",{})
     local pinned={}
     for _,id in ipairs(pins) do pinned[id]=true end
-    local cell=math.max(8,math.floor((cw-3)/2))
+    local by=y+3
+    local bw=math.max(8,math.floor((w-2)/2))
     for i,id in ipairs(pinCandidates) do
       local app=shellui.find(id,self:isOperatorUI())
       if app then
         local col=(i-1)%2
         local row=math.floor((i-1)/2)
-        local bx=cx+2+col*(cell+1)
-        local by=py+3+row*2
-        local selected=pinned[id]
-        local bg=selected and t.selection or t.surface2
-        draw.fill(target,bx,by,cell,1,bg)
-        fluent.drawMiniIcon(target,id,bx,by,selected,bg)
-        draw.text(target,bx+4,by,app.title,selected and t.text or t.muted,bg,math.max(1,cell-4))
-        self:addButton("set:pin:"..id,bx,by,cell,1,function()
+        local bx=x+1+col*(bw+1)
+        local yy=by+row
+        ccui.button(target,bx,yy,math.min(bw,w-(bx-x)),app.title,t,{selected=pinned[id],compact=true})
+        self:addButton("set:pin:"..id,bx,yy,math.min(bw,w-(bx-x)),1,function()
           local current=prefs.get("taskbar_pins",{})
           local nextPins={}
           local found=false
@@ -3330,77 +3313,56 @@ function LinkOS:renderSettings(target, l)
     end
 
   elseif self.settingsTab=="display" then
-    draw.text(target,cx,y,"Affichage",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Computer et Advanced Monitors",t.muted,t.bg,cw)
-    local py=y+3
+    draw.text(target,x,y,"Choisir l'ecran principal",t.text,t.bg,w)
+    y=y+2
     for _,d in ipairs(self.displays or {}) do
-      if py+3>=l.h-1 then break end
+      if y+3>=l.h-1 then break end
       local selected=self.active and d.id==self.active.id
-      local size=tostring(d.width).."x"..tostring(d.height)
-      fluent.card(target,cx,py,cw,4,{
-        bg=selected and t.selection or t.surface,
+      local rect=ccui.panel(target,x,y,w,4,t,{
         accent=selected and t.accent or t.muted,
-        title=(selected and "Actif - " or "")..d.label,
-        subtitle=(d.kind=="monitor" and ("Advanced Monitor / scale "..tostring(d.scale or "-"))
-          or "Ecran du Computer"),
-        muted=t.muted
+        title=(selected and "ACTIF - " or "")..d.label,
+        subtitle=(d.kind=="monitor" and "Advanced Monitor" or "Ecran du Computer")
       })
-      draw.text(target,math.max(cx+2,cx+cw-#size-2),py+1,size,t.muted,
-        selected and t.selection or t.surface,#size)
+      local size=tostring(d.width).."x"..tostring(d.height)
+      draw.text(target,x+w-#size-2,y+1,size,t.muted,selected and t.selection or t.surface,#size)
       local displayId=d.id
-      self:addButton("display:"..displayId,cx,py,cw,4,function()
+      self:addButton("display:"..displayId,rect.x,rect.y,rect.w,rect.h,function()
         prefs.set("display_id",displayId)
         self:refreshDisplays()
         self:setNotice("Affichage principal change.",t.good)
       end)
-      py=py+5
+      y=y+5
     end
 
   else
-    draw.text(target,cx,y,"Systeme",t.text,t.bg,cw)
-    draw.text(target,cx,y+1,"Version, session et alimentation",t.muted,t.bg,cw)
-    local py=y+3
-
-    local channel=tostring(config.SOURCE_REF or "main")
-    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=self.service.updateAvailable and t.warn or t.good,
+    ccui.panel(target,x,y,w,5,t,{accent=self.service.updateAvailable and t.warn or t.good,
       title="LinkOS "..tostring(config.VERSION),
-      subtitle=self.service.updateAvailable
-        and ("Mise a jour disponible: "..tostring(self.service.remoteVersion))
-        or ("A jour / canal "..channel),
-      muted=t.muted})
-    self:button(target,"set:update",cx+2,py+3,math.min(16,cw-4),
-      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",
-      function() self:runUpdateAction() end)
-    py=py+6
+      subtitle=self.service.updateAvailable and ("Mise a jour "..tostring(self.service.remoteVersion))
+        or "Le systeme est a jour."})
+    ccui.button(target,x+2,y+3,math.min(18,w-4),
+      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",t,
+      {primary=self.service.updateAvailable})
+    self:addButton("set:update",x+2,y+3,math.min(18,w-4),1,function() self:runUpdateAction() end)
+    y=y+6
 
     local restore=prefs.get("restore_session",true)
-    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=t.accent,title="Session",
-      subtitle="Rouvre les applications apres un redemarrage.",muted=t.muted})
-    self:button(target,"set:restore-session",cx+2,py+3,math.min(18,cw-4),
-      restore and "RESTAURATION: OUI" or "RESTAURATION: NON",function()
-        prefs.set("restore_session",not prefs.get("restore_session",true))
-        self:setNotice(prefs.get("restore_session",true)
-          and "Restauration de session activee."
-          or "Restauration de session desactivee.",t.good)
-      end)
-    if cw>=32 then
-      self:button(target,"set:forget-session",cx+21,py+3,math.min(13,cw-22),"OUBLIER",function()
-        prefs.set("workspace_session",{windows={},active="home"})
-        self:setNotice("Session sauvegardee effacee.",t.warn)
-      end)
-    end
-    py=py+6
-
-    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.warn,title="Alimentation et maintenance",
-      subtitle="Actions systeme. La desinstallation conserve tes documents /user.",muted=t.muted})
-    local half=math.max(8,math.floor((cw-5)/2))
-    self:button(target,"set:reboot",cx+2,py+3,half,"REDEMARRER",function() os.reboot() end)
-    self:button(target,"set:shutdown",cx+3+half,py+3,math.min(half,cw-half-4),"ARRETER",
-      function() os.shutdown() end)
-    fluent.button(target,cx+2,py+4,math.min(16,cw-4),"DESINSTALLER",{danger=true})
-    self:addButton("set:uninstall",cx+2,py+4,math.min(16,cw-4),1,function()
-      self:runUninstallAction()
+    ccui.panel(target,x,y,w,4,t,{title="Reouverture des apps",
+      subtitle="Rouvre les apps utilisees apres redemarrage."})
+    ccui.button(target,x+2,y+2,math.min(20,w-4),restore and "ACTIVE" or "DESACTIVE",t,
+      {selected=restore})
+    self:addButton("set:restore-session",x+2,y+2,math.min(20,w-4),1,function()
+      prefs.set("restore_session",not prefs.get("restore_session",true))
     end)
+    y=y+5
+
+    ccui.panel(target,x,y,w,5,t,{title="Alimentation",subtitle="Actions du Computer."})
+    local half=math.max(8,math.floor((w-5)/2))
+    ccui.button(target,x+2,y+2,half,"REDEMARRER",t,{})
+    self:addButton("set:reboot",x+2,y+2,half,1,function() os.reboot() end)
+    ccui.button(target,x+3+half,y+2,math.min(half,w-half-4),"ARRETER",t,{})
+    self:addButton("set:shutdown",x+3+half,y+2,math.min(half,w-half-4),1,function() os.shutdown() end)
+    ccui.button(target,x+2,y+3,math.min(16,w-4),"DESINSTALLER",t,{danger=true})
+    self:addButton("set:uninstall",x+2,y+3,math.min(16,w-4),1,function() self:runUninstallAction() end)
   end
 end
 
