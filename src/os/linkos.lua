@@ -1349,8 +1349,10 @@ end
 
 function LinkOS:malcraftOpenHub()
   local registry, err = self.service:ghostList()
+  local live = self.service:ghostLiveComputers()
 
   self.malcraftHosts = registry and (registry.hosts or {}) or {}
+  self.malcraftLiveHosts = type(live)=="table" and live or {}
   self.malcraftLocalDisks = self:malcraftLocalDiskList()
   self.ghostDiskStates = {}
 
@@ -2016,8 +2018,9 @@ function LinkOS:renderHacker(target, l)
     draw.text(target, x, y, "MALCRAFT CONTROL CENTER", colors.red, t.bg, w)
     y = y + 1
     draw.text(target, x, y,
-      tostring(#self.malcraftHosts) .. " PC infecte(s)  |  "
-        .. tostring(#self.malcraftLocalDisks) .. " disque(s) local(aux)",
+      tostring(#self.malcraftHosts) .. " infecte(s) | "
+        .. tostring(#(self.malcraftLiveHosts or {})) .. " charge(s) | "
+        .. tostring(#self.malcraftLocalDisks) .. " disque(s)",
       t.muted, t.bg, w)
     y = y + 2
 
@@ -2092,7 +2095,13 @@ function LinkOS:renderHacker(target, l)
     end)
     y = y + 2
 
-    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, w)
+    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:malcraftOpenHosts()
+        self:render()
+      end)
+    end
     y = y + 2
 
     if #self.malcraftHosts == 0 then
@@ -2133,7 +2142,13 @@ function LinkOS:renderHacker(target, l)
     end)
     y = y + 2
 
-    draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, w)
+    draw.text(target, x, y, "Computers charges par le serveur", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"malcraft:live:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:malcraftOpenLiveHosts()
+        self:render()
+      end)
+    end
     y = y + 1
     draw.text(target, x, y, "LinkOS ou modem non requis.", t.muted, t.bg, w)
     y = y + 2
@@ -2331,7 +2346,13 @@ function LinkOS:renderHacker(target, l)
     local spread = state.spread == true
     local immune = self.ghostState and self.ghostState.immune == true
 
-    draw.text(target, x, y, "Malcraft", colors.red, t.bg, w)
+    draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
+    if w>=24 then
+      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"ACTUALISER",function()
+        self:ghostRefresh()
+        self:render()
+      end)
+    end
     y = y + 1
     draw.text(target, x, y,
       immune and "IMMUNISE"
