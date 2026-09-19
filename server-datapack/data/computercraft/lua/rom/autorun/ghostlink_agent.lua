@@ -49,27 +49,10 @@ end
 -- a Computer before the normal CraftOS prompt appears.
 runDaemon("--oneshot")
 
--- Advanced Computers: proper hidden multishell tab.
-if multishell and multishell.launch then
-  local previousTab = multishell.getCurrent and multishell.getCurrent() or nil
-  local ok, tabId = pcall(multishell.launch, daemonEnvironment(), program)
-
-  if ok and tabId then
-    if multishell.setTitle then
-      pcall(multishell.setTitle, tabId, "MAL")
-    end
-    if previousTab and multishell.setFocus then
-      pcall(multishell.setFocus, previousTab)
-    end
-  end
-
-  return
-end
-
--- Basic Computers do not expose multishell, but parallel coroutines still
--- work. Keep Malcraft alive beside a nested CraftOS shell so disk hot-plug,
--- the internal bridge, remote control and propagation also work immediately
--- on normal Computers.
+-- Keep Malcraft inside the existing CraftOS tab instead of creating a visible
+-- multishell tab. This works on both Basic and Advanced Computers: the daemon
+-- runs as a parallel coroutine while the player uses a nested CraftOS shell.
+-- The CHILD_SHELL flag prevents the nested shell from starting a second agent.
 settings.set(CHILD_SHELL, true)
 
 local ok = pcall(function()
@@ -85,8 +68,8 @@ end)
 
 settings.unset(CHILD_SHELL)
 
--- If the nested shell exits, return to the original CraftOS shell. The player
--- still gets a usable prompt even if the parallel launcher failed.
+-- If the nested shell exits, return to the original CraftOS shell. No extra
+-- tab is ever created, so there is no MAL/Malcraft indicator in multishell.
 if not ok then
   return
 end
