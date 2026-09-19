@@ -897,51 +897,6 @@ function M.install(OS,shellui,prefs)
     end
   end
 
-  function OS:renderFiles(target,l)
-    local path=self.filePath or '/user'
-    local entries,err=self:listFiles(path)
-    draw.text(target,2,1,'FICHIERS / '..path,colors.cyan,colors.black,l.w-3)
-    local function newName(title)
-      local name=self:prompt(title,'Nom simple, sans /, ni \\')
-      if name=='' then return nil end
-      if name=='.' or name=='..' or name:find('[/\\]') or name:find('[%c]') or #name>60 then
-        self:setNotice('Nom invalide.',colors.red);return nil
-      end
-      local full=fs.combine(path,name)
-      if fs.exists(full) then self:setNotice('Ce nom existe deja.',colors.red);return nil end
-      return full
-    end
-    self:button(target,'explorer:parent',2,3,7,'PARENT',function()
-      if path~='/user' then self.filePath=fs.getDir(path);self.explorerPage=1 end
-    end)
-    self:button(target,'explorer:new',10,3,7,'TEXTE',function()
-      if self.noteDocument and self.noteDocument.dirty then
-        self:setNotice('Sauvegarde le document ouvert avant de creer un autre texte.',colors.orange);return
-      end
-      local full=newName('Nouveau fichier texte')
-      if full and self:loadNote(full) then self.noteDocument.editing=true;self:openApp('notes') end
-    end)
-    self:button(target,'explorer:folder',18,3,math.min(8,l.w-18),'DOSSIER',function()
-      local full=newName('Nouveau dossier');if full then
-        local ok,failure=pcall(fs.makeDir,full);if not ok then self:setNotice(tostring(failure),colors.red) end
-      end
-    end)
-    if err then draw.text(target,2,5,err,colors.red,colors.black,l.w-3);return end
-    local page=clamp(self.explorerPage or 1,1,math.max(1,math.ceil(#entries/16)))
-    self.explorerPage=page
-    for i=(page-1)*16+1,math.min(#entries,page*16) do
-      local name=entries[i];local full=fs.combine(path,name);local dir=fs.isDir(full)
-      local y=5+(i-1)%16
-      self:button(target,'explorer:file:'..i,2,y,l.w-3,(dir and '[+] ' or '    ')..name,function()
-        if dir then self.filePath=full;self.explorerPage=1
-        elseif self.noteDocument and self.noteDocument.dirty then self:setNotice('Sauvegarde le document ouvert avant de changer.',colors.orange)
-        elseif self:loadNote(full) then self:openApp('notes') end
-      end)
-    end
-    self:button(target,'explorer:prev',2,23,7,'<',function() self.explorerPage=math.max(1,page-1) end)
-    draw.text(target,11,23,'Page '..page,colors.lightGray,colors.black,10)
-    self:button(target,'explorer:next',l.w-7,23,7,'>',function() self.explorerPage=math.min(math.max(1,math.ceil(#entries/16)),page+1) end)
-  end
   function OS:handleKey(key)
     if self.startMenuOpen then return originalKey(self,key) end
     local list=self:workspace()
