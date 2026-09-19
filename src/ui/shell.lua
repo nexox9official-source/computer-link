@@ -270,10 +270,10 @@ function shellui.install(OS, prefs)
 
     -- Windows-like account/power footer.
     draw.fill(target,x,footer,w,2,t.surface)
-    local label=os.getComputerLabel() or ("PC #"..tostring(os.getComputerID()))
+    local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC #"..tostring(os.getComputerID and os.getComputerID() or "?"))
     draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
     draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,w-25))
-    draw.text(target,x+4,footer+1,"Computer #"..tostring(os.getComputerID()),t.muted,t.surface,
+    draw.text(target,x+4,footer+1,"Computer #"..tostring(os.getComputerID and os.getComputerID() or "?"),t.muted,t.surface,
       math.max(1,w-25))
 
     local px=x+w-8
