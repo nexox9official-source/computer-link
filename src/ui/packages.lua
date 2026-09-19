@@ -79,6 +79,18 @@ function M.path(id)
   return ROOT..id..'.lua'
 end
 function M.installed(id) return fs.exists(M.path(id)) end
+
+function M.installedVersion(id)
+  local path=M.path(id)
+  if not fs.exists(path) then return nil end
+  local f=fs.open(path,'r')
+  if not f then return nil end
+  local source=f.read(256) or ''
+  f.close()
+  local version=source:match('%-%- LinkOS package '..id..' ([%w%._%-]+)')
+  return version
+end
+
 function M.install(id)
   local p=M.find(id)
   if not p then return false,'Application inconnue' end
@@ -106,6 +118,11 @@ function M.install(id)
     if not moved then
       if fs.exists(path..'.backup') and not fs.exists(path) then fs.move(path..'.backup',path) end
       error(moveErr)
+    end
+
+    local removed=path..'.removed'
+    if fs.exists(removed) then
+      pcall(fs.delete,removed)
     end
   end)
   return success,success and 'Application installee' or tostring(failure)

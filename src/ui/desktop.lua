@@ -34,6 +34,28 @@ function M.install(OS,shellui,prefs)
     if not self.windows then self.windows={}; self.app='home'; self.selectedIcon=1 end
     return self.windows
   end
+
+  function OS:recordRecentApp(id)
+    if not id or id=='home' then return end
+    local recent=prefs.get('recent_apps',{})
+    local nextRecent={id}
+    for _,value in ipairs(recent) do
+      if value~=id and #nextRecent<6 then nextRecent[#nextRecent+1]=value end
+    end
+    prefs.set('recent_apps',nextRecent)
+  end
+
+  function OS:taskbarPins()
+    local out,seen={},{}
+    for _,id in ipairs(prefs.get('taskbar_pins',{})) do
+      local app=shellui.find(id,self:isOperatorUI())
+      if app and id~='home' and not seen[id] then
+        out[#out+1]=app
+        seen[id]=true
+      end
+    end
+    return out
+  end
   function OS:focusWindow(win)
     local list=self:workspace()
     for i,v in ipairs(list) do if v==win then table.remove(list,i);break end end
@@ -42,11 +64,19 @@ function M.install(OS,shellui,prefs)
   function OS:openApp(id)
     local list=self:workspace()
     self.startMenuOpen,self.quickPanelOpen=false,false
+    self.contextMenu=nil
     if id=='home' then
       for _,v in ipairs(list) do v.minimized=true end
       self.app='home'; self:render(); return
     end
     if not shellui.allowed(id,self:isOperatorUI()) then return end
+
+    if id=='store' and not self.storeCatalogTried then
+      self.storeCatalogTried=true
+      pcall(packages.refreshCatalog)
+    end
+
+    self:recordRecentApp(id)
     for _,v in ipairs(list) do if v.id==id then self:focusWindow(v); self:render(); return end end
     local w,h=self.active.target.getSize()
     local offset=#list%4
@@ -95,13 +125,48 @@ function M.install(OS,shellui,prefs)
     local available=shellui.apps(self:isOperatorUI())
     local map={}
     for _,app in ipairs(available) do if app.id~='home' then map[app.id]=app end end
-    for _,id in ipairs(prefs.get('desktop_order',{})) do
-      if map[id] and not seen[id] then items[#items+1]=map[id];seen[id]=true end
+
+    local shortcuts={}
+    for _,id in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if map[id] then shortcuts[id]=true end
     end
-    for _,app in ipairs(available) do
-      if app.id~='home' and not seen[app.id] then items[#items+1]=app;seen[app.id]=true end
+
+    for _,id in ipairs(prefs.get('desktop_order',{})) do
+      if shortcuts[id] and map[id] and not seen[id] then
+        items[#items+1]=map[id]
+        seen[id]=true
+      end
+    end
+
+    for _,id in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if map[id] and not seen[id] then
+        items[#items+1]=map[id]
+        seen[id]=true
+      end
     end
     return items
+  end
+
+  function OS:isDesktopShortcut(id)
+    for _,value in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if value==id then return true end
+    end
+    return false
+  end
+
+  function OS:toggleDesktopShortcut(id)
+    if not shellui.allowed(id,self:isOperatorUI()) or id=='home' then return false end
+    local current=prefs.get('desktop_shortcuts',{})
+    local nextShortcuts={}
+    local found=false
+    for _,value in ipairs(current) do
+      if value==id then found=true else nextShortcuts[#nextShortcuts+1]=value end
+    end
+    if not found and #nextShortcuts<20 then nextShortcuts[#nextShortcuts+1]=id end
+    prefs.set('desktop_shortcuts',nextShortcuts)
+    self:setNotice(found and 'Raccourci retire du bureau.' or 'Raccourci ajoute au bureau.',
+      self:theme().good)
+    return true
   end
   function OS:moveIcon(from,to)
     local apps=self:desktopApps()
@@ -109,6 +174,104 @@ function M.install(OS,shellui,prefs)
     local item=table.remove(apps,from);table.insert(apps,to,item)
     local order={};for _,app in ipairs(apps) do order[#order+1]=app.id end
     prefs.set('desktop_order',order);self.selectedIcon=to
+  end
+
+  function OS:isTaskbarPinned(id)
+    for _,value in ipairs(prefs.get('taskbar_pins',{})) do
+      if value==id then return true end
+    end
+    return false
+  end
+
+  function OS:toggleTaskbarPin(id)
+    if not shellui.allowed(id,self:isOperatorUI()) or id=='home' then return false end
+    local current=prefs.get('taskbar_pins',{})
+    local nextPins={}
+    local found=false
+    for _,value in ipairs(current) do
+      if value==id then found=true else nextPins[#nextPins+1]=value end
+    end
+    if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+    prefs.set('taskbar_pins',nextPins)
+    self:setNotice(found and 'Application desepinglee.' or 'Application epinglee.',
+      self:theme().good)
+    return true
+  end
+
+  function OS:openDesktopContext(x,y)
+    local targetId=nil
+
+    for _,button in ipairs(self.buttons or {}) do
+      if inside(x,y,button) and type(button.id)=='string' then
+        if button.id:sub(1,8)=='wm:task:' then
+          targetId=button.id:sub(9)
+          break
+        elseif button.id:sub(1,9)=='launcher:' then
+          targetId=button.id:sub(10)
+          break
+        end
+      end
+    end
+
+    if not targetId then
+      for _,icon in ipairs(self.iconRects or {}) do
+        if inside(x,y,icon) then targetId=icon.id;break end
+      end
+    end
+
+    self.startMenuOpen=false
+    self.quickPanelOpen=false
+    self.contextMenu={x=x,y=y,targetId=targetId}
+  end
+
+  function OS:renderContextMenu(target,w,h)
+    local menu=self.contextMenu
+    if not menu then return end
+    local t=self:theme()
+    local mw=18
+    local options={}
+
+    local function add(label,action)
+      options[#options+1]={label=label,action=action}
+    end
+
+    if menu.targetId then
+      local app=shellui.find(menu.targetId,self:isOperatorUI())
+      add('OUVRIR',function() self:openApp(menu.targetId) end)
+      add(self:isTaskbarPinned(menu.targetId) and 'DESEPINGLER' or 'EPINGLER',function()
+        self:toggleTaskbarPin(menu.targetId)
+      end)
+      add(self:isDesktopShortcut(menu.targetId) and 'RETIRER BUREAU' or 'AJOUTER BUREAU',function()
+        self:toggleDesktopShortcut(menu.targetId)
+      end)
+      if app and app.id~='store' then
+        add('APPLICATIONS',function() self:openApp('store') end)
+      end
+      add('PARAMETRES',function() self:openApp('settings') end)
+    else
+      add('ACTUALISER',function() self:render() end)
+      add('FICHIERS',function() self:openApp('files') end)
+      add('APPLICATIONS',function() self:openApp('store') end)
+      add('PARAMETRES',function() self:openApp('settings') end)
+    end
+
+    local mh=#options+2
+    local mx=clamp(menu.x,1,math.max(1,w-mw+1))
+    local my=clamp(menu.y,1,math.max(1,h-mh))
+    self.shellOverlay={x=mx,y=my,w=mw,h=mh}
+
+    draw.fill(target,mx,my,mw,mh,colors.gray)
+    draw.fill(target,mx,my,mw,1,t.accent)
+    draw.text(target,mx+1,my,menu.targetId and 'APP' or 'BUREAU',colors.white,t.accent,mw-2)
+
+    for i,item in ipairs(options) do
+      local by=my+i
+      draw.button(target,mx+1,by,mw-2,item.label,colors.white,colors.black)
+      self:addButton('context:'..i,mx+1,by,mw-2,1,function()
+        self.contextMenu=nil
+        item.action()
+      end)
+    end
   end
   function OS:renderDesktop(target,w,h)
     local t=self:theme()
@@ -164,55 +327,94 @@ function M.install(OS,shellui,prefs)
   end
   function OS:renderStore(target,l)
     local t=self:theme()
-    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-16))
-    self:button(target,'store:refresh',math.max(2,l.w-12),1,11,'ACTUALISER',function()
+    local query=tostring(self.storeQuery or "")
+    local q=query:lower()
+
+    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-25))
+    self:button(target,'store:search',math.max(2,l.w-21),1,9,'CHERCHER',function()
+      self.storeQuery=self:prompt('Rechercher une app','Nom, ID ou description')
+    end)
+    self:button(target,'store:refresh',math.max(2,l.w-11),1,10,'ACTUALISER',function()
       local ok,result=packages.refreshCatalog()
       self:setNotice(ok and (tostring(result)..' apps chargees.') or tostring(result),
         ok and colors.lime or colors.orange)
     end)
-    draw.text(target,2,2,
-      packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
-      packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+
+    if query~='' then
+      draw.text(target,2,2,'Recherche: '..query,t.accent,t.bg,math.max(1,l.w-10))
+      self:button(target,'store:clear',math.max(2,l.w-7),2,6,'TOUS',function()
+        self.storeQuery=''
+      end)
+    else
+      draw.text(target,2,2,
+        packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
+        packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+    end
 
     local row=4
+    local shown=0
     for _,p in ipairs(packages.catalog) do
-      if row+3>l.h then break end
-      local installed=packages.installed(p.id)
-      draw.fill(target,2,row,l.w-3,3,colors.black)
-      draw.fill(target,2,row,2,3,installed and colors.lime or t.accent)
-      draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
-      draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
-      draw.text(target,math.max(5,l.w-10),row,installed and 'INSTALLE' or p.version,
-        installed and colors.lime or t.muted,colors.black,9)
+      local hay=(p.title..' '..p.id..' '..p.description):lower()
+      if q=='' or hay:find(q,1,true) then
+        shown=shown+1
+        local installed=packages.installed(p.id)
+        local installedVersion=installed and packages.installedVersion(p.id) or nil
+        local outdated=installed and installedVersion and installedVersion~=p.version
+        local stateColour=outdated and t.warn or (installed and colors.lime or t.accent)
+        local stateText
+        if outdated then
+          stateText='MAJ '..p.version
+        elseif installed then
+          stateText='v'..tostring(installedVersion or '?')
+        else
+          stateText='v'..p.version
+        end
 
-      self:button(target,'store:install:'..p.id,5,row+2,installed and 10 or 9,
-        installed and 'REINSTALL' or 'INSTALLER',function()
-          if self:confirm('Installer '..p.title..' depuis le depot officiel ?') then
+        draw.fill(target,2,row,l.w-3,3,colors.black)
+        draw.fill(target,2,row,2,3,stateColour)
+        draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
+        draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
+        draw.text(target,math.max(5,l.w-10),row,stateText,stateColour,colors.black,9)
+
+        local installLabel=outdated and 'METTRE A JOUR' or (installed and 'REINSTALL' or 'INSTALLER')
+        local installW=outdated and 12 or (installed and 10 or 9)
+        self:button(target,'store:install:'..p.id,5,row+2,installW,installLabel,function()
+          local verb=outdated and 'Mettre a jour ' or 'Installer '
+          if self:confirm(verb..p.title..' depuis le depot officiel ?') then
             local ok,msg=packages.install(p.id)
             self:setNotice(msg,ok and colors.lime or colors.red)
           end
         end)
 
-      if installed then
-        self:button(target,'store:open:'..p.id,16,row+2,7,'OUVRIR',function() self:openApp('pkg:'..p.id) end)
-        if l.w>=35 then
-          self:button(target,'store:remove:'..p.id,24,row+2,8,'RETIRER',function()
-            if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
-              local ok,err=packages.remove(p.id)
-              if ok then
-                for j=#self.windows,1,-1 do
-                  if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
-                end
-              end
-              self:setNotice(ok and 'Application retiree.' or tostring(err),ok and colors.orange or colors.red)
-            end
+        if installed then
+          local openX=6+installW
+          self:button(target,'store:open:'..p.id,openX,row+2,7,'OUVRIR',function()
+            self:openApp('pkg:'..p.id)
           end)
+          local removeX=openX+8
+          if removeX+7<=l.w then
+            self:button(target,'store:remove:'..p.id,removeX,row+2,8,'RETIRER',function()
+              if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
+                local ok,err=packages.remove(p.id)
+                if ok then
+                  for j=#self.windows,1,-1 do
+                    if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
+                  end
+                end
+                self:setNotice(ok and 'Application retiree.' or tostring(err),
+                  ok and colors.orange or colors.red)
+              end
+            end)
+          end
         end
+        row=row+4
       end
-      row=row+4
+    end
+
+    if shown==0 then
+      draw.text(target,3,5,'Aucune application correspondante.',t.muted,t.bg,math.max(1,l.w-5))
     end
   end
-
   function OS:renderWindow(target,win,w,h)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
@@ -256,6 +458,11 @@ function M.install(OS,shellui,prefs)
     control(3,'X',colors.red,function() self:closeWindow(win) end)
 
     local virtualH=math.max(30,bodyH)
+    if win.id=='store' then
+      virtualH=math.max(virtualH,#packages.catalog*4+5)
+    elseif win.id=='settings' then
+      virtualH=math.max(virtualH,34)
+    end
     local maxScroll=math.max(0,virtualH-bodyH)
     win.scroll=clamp(win.scroll or 0,0,maxScroll)
 
@@ -356,25 +563,48 @@ function M.install(OS,shellui,prefs)
     local rightX=math.max(7,w-statusW+1)
     local taskX=7
     local available=math.max(0,rightX-taskX-1)
-    local total=#list
     local labels=prefs.get('taskbar_labels',false)
+
+    local openById={}
+    for _,win in ipairs(list) do openById[win.id]=win end
+
+    local taskItems={}
+    local seen={}
+    for _,app in ipairs(self:taskbarPins()) do
+      taskItems[#taskItems+1]={id=app.id,app=app,win=openById[app.id],pinned=true}
+      seen[app.id]=true
+    end
+    for _,win in ipairs(list) do
+      if not seen[win.id] then
+        taskItems[#taskItems+1]={id=win.id,app=shellui.find(win.id,self:isOperatorUI()),win=win}
+        seen[win.id]=true
+      end
+    end
+
+    local total=#taskItems
     local preferred=labels and 9 or 5
     local taskW=total>0 and math.max(4,math.min(preferred,math.floor(available/math.max(1,total)))) or 0
     local shown=0
 
-    for _,win in ipairs(list) do
+    for _,item in ipairs(taskItems) do
       if taskW<=0 or taskX+taskW-1>=rightX then break end
-      local app=shellui.find(win.id,self:isOperatorUI())
-      local label=(app and (app.icon or app.short) or win.id)
+      local app=item.app
+      local label=(app and (app.icon or app.short) or item.id)
       if labels and taskW>=7 and app then label=label..' '..app.short end
-      local active=(win.id==self.app and not win.minimized)
-      draw.button(target,taskX,h,taskW,label,colors.white,active and t.accent or colors.black)
-      self:addButton('wm:task:'..win.id,taskX,h,taskW,1,function()
-        if win.id==self.app and not win.minimized then
-          win.minimized=true
-          self.app='home'
+      local active=item.win and item.win.id==self.app and not item.win.minimized
+      local bg=active and t.accent or (item.pinned and colors.gray or colors.black)
+      draw.button(target,taskX,h,taskW,label,colors.white,bg)
+      self:addButton('wm:task:'..item.id,taskX,h,taskW,1,function()
+        local win=openById[item.id]
+        if win then
+          if win.id==self.app and not win.minimized then
+            win.minimized=true
+            self.app='home'
+          else
+            self:focusWindow(win)
+          end
         else
-          self:focusWindow(win)
+          self:openApp(item.id)
         end
       end)
       taskX=taskX+taskW
@@ -403,6 +633,9 @@ function M.install(OS,shellui,prefs)
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
+    if self.contextMenu and not self.startMenuOpen and not self.quickPanelOpen then
+      self:renderContextMenu(target,w,h)
+    end
 
     for row=1,h do
       physical.setCursorPos(1,row)
@@ -415,7 +648,11 @@ function M.install(OS,shellui,prefs)
   function OS:hit(x,y)
     local modal=self.shellOverlay
     if modal then
-      if not inside(x,y,modal) then self.startMenuOpen,self.quickPanelOpen=false,false;return true end
+      if not inside(x,y,modal) then
+        self.startMenuOpen,self.quickPanelOpen=false,false
+        self.contextMenu=nil
+        return true
+      end
     else
       for i=#self:workspace(),1,-1 do
         local win=self.windows[i]

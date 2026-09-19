@@ -5,11 +5,14 @@ local prefs = {}
 local PATH = config.DATA_DIR .. "/ui.db"
 
 local defaults = {
-  schema = 3,
+  schema = 4,
   display_id = nil,
   accent = "cyan",
   wallpaper = "clean",
   taskbar_labels = false,
+  taskbar_pins = {"messages", "files", "store"},
+  desktop_shortcuts = {"messages", "files", "store", "notes"},
+  recent_apps = {},
   start_compact = false,
   quick_panel = true,
   aliases = {},
@@ -18,15 +21,23 @@ local defaults = {
 
 local state = nil
 
+local function copyTable(source)
+  local out={}
+  for key,value in pairs(source or {}) do
+    if type(value)=="table" then
+      out[key]=copyTable(value)
+    else
+      out[key]=value
+    end
+  end
+  return out
+end
+
 local function normalise(value)
   value = type(value) == "table" and value or {}
   for key, default in pairs(defaults) do
     if value[key] == nil then
-      if type(default) == "table" then
-        value[key] = {}
-      else
-        value[key] = default
-      end
+      value[key] = type(default) == "table" and copyTable(default) or default
     end
   end
   value.aliases = value.aliases or {}

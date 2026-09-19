@@ -152,6 +152,18 @@ function LinkOS:setNotice(text, colour)
   self.notice = tostring(text or "")
   self.noticeColour = colour or colors.lightGray
   self.noticeExpires = os.clock() + 3.5
+
+  self.notificationHistory = self.notificationHistory or {}
+  if self.notice ~= "" then
+    table.insert(self.notificationHistory, 1, {
+      text = self.notice,
+      colour = self.noticeColour,
+      time = textutils.formatTime(os.time(), true)
+    })
+    while #self.notificationHistory > 6 do
+      table.remove(self.notificationHistory)
+    end
+  end
 end
 
 function LinkOS:openApp(id)
@@ -316,6 +328,10 @@ function LinkOS:disablePassword()
   end
 
   self:render()
+end
+
+function LinkOS:securityEnabled()
+  return security.enabled()
 end
 
 function LinkOS:lockSession()
@@ -2843,19 +2859,111 @@ function LinkOS:listFiles(path)
 end
 
 function LinkOS:renderFiles(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-8))
+  local function safeName(name)
+    name=tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+    if name=="" or name=="." or name==".." or #name>64 then return nil end
+    if name:find("[/\\]") or name:find("..",1,true) then return nil end
+    return name
+  end
+
+  local function childPath(name)
+    return fs.combine(self.filePath,safeName(name) or "")
+  end
+
+  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-18))
+
+  if not self.filePreview and w>=32 then
+    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"+ DOSSIER",function()
+      local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
+      if not name then
+        self:setNotice("Nom de dossier invalide.",t.danger)
+        return
+      end
+      local full=childPath(name)
+      if fs.exists(full) then
+        self:setNotice("Un element porte deja ce nom.",t.warn)
+        return
+      end
+      local ok,err=pcall(fs.makeDir,full)
+      self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
+    end)
+    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"+ TEXTE",function()
+      local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
+      if not name then
+        self:setNotice("Nom de fichier invalide.",t.danger)
+        return
+      end
+      local full=childPath(name)
+      if fs.exists(full) then
+        self:setNotice("Un element porte deja ce nom.",t.warn)
+        return
+      end
+      local handle=fs.open(full,"w")
+      if not handle then
+        self:setNotice("Creation impossible.",t.danger)
+        return
+      end
+      handle.write("")
+      handle.close()
+      self:runNativeProgram("edit",full)
+    end)
+  end
   y=y+2
 
   if self.filePreview then
-    self:button(target,"file:back",x,y,10,"< RETOUR",function() self.filePreview=nil end)
-    if w>=20 then
-      draw.text(target,x+12,y,fs.getName(self.filePreview.path or ""),t.muted,t.bg,math.max(1,w-12))
+    local path=self.filePreview.path
+    self:button(target,"file:back",x,y,9,"< RETOUR",function() self.filePreview=nil end)
+    if w>=21 then
+      self:button(target,"file:edit",x+10,y,8,"EDITER",function()
+        self:runNativeProgram("edit",path)
+        local handle=fs.open(path,"r")
+        if handle then
+          self.filePreview.content=handle.read(4096) or ""
+          handle.close()
+        end
+      end)
     end
+    if w>=31 then
+      self:button(target,"file:rename",x+19,y,10,"RENOMMER",function()
+        local name=safeName(self:prompt("Renommer",fs.getName(path)))
+        if not name then
+          self:setNotice("Nouveau nom invalide.",t.danger)
+          return
+        end
+        local dest=fs.combine(fs.getDir(path),name)
+        if fs.exists(dest) then
+          self:setNotice("Ce nom existe deja.",t.warn)
+          return
+        end
+        local ok,err=pcall(fs.move,path,dest)
+        if ok then
+          self.filePreview.path=dest
+          self:setNotice("Fichier renomme.",t.good)
+        else
+          self:setNotice(tostring(err),t.danger)
+        end
+      end)
+    end
+    if w>=41 then
+      draw.button(target,x+30,y,9,"SUPPRIMER",colors.white,colors.red)
+      self:addButton("file:delete",x+30,y,9,1,function()
+        if self:confirm("Supprimer "..fs.getName(path).." ?") then
+          local ok,err=pcall(fs.delete,path)
+          if ok then
+            self.filePreview=nil
+            self:setNotice("Fichier supprime.",t.warn)
+          else
+            self:setNotice(tostring(err),t.danger)
+          end
+        end
+      end)
+    end
+
     y=y+2
-    draw.text(target,x,y,tostring(self.filePreview.path or ""),t.accent,t.bg,w)
+    draw.text(target,x,y,tostring(path),t.accent,t.bg,w)
     y=y+2
     local lines=draw.wrap(self.filePreview.content or "",math.max(1,w))
     for _,line in ipairs(lines) do
@@ -2929,7 +3037,6 @@ function LinkOS:renderFiles(target, l)
     y=y+3
   end
 end
-
 function LinkOS:runNativeProgram(program, ...)
   local previous = term.current()
   term.redirect(self.native)
@@ -3148,6 +3255,39 @@ function LinkOS:renderSettings(target, l)
         labels and "TACHES: TEXTE" or "TACHES: COMPACT",function()
           prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
         end)
+      y=y+2
+    end
+
+    if y < l.h-4 then
+      draw.text(target,x,y,"Apps epinglees",t.muted,t.bg,w)
+      y=y+1
+      local pinCandidates={"messages","files","store","terminal","calculator"}
+      local pins=prefs.get("taskbar_pins",{})
+      local pinned={}
+      for _,id in ipairs(pins) do pinned[id]=true end
+      local cell=math.max(8,math.floor((w-1)/2))
+      for i,id in ipairs(pinCandidates) do
+        local app=shellui.find(id,self:isOperatorUI())
+        if app then
+          local col=(i-1)%2
+          local row=math.floor((i-1)/2)
+          local bx=x+col*(cell+1)
+          local by=y+row*2
+          local label=(pinned[id] and "- " or "+ ")..app.short
+          draw.button(target,bx,by,math.min(cell,w-(bx-x)),label,
+            colors.white,pinned[id] and t.accent or colors.black)
+          self:addButton("set:pin:"..id,bx,by,math.min(cell,w-(bx-x)),1,function()
+            local current=prefs.get("taskbar_pins",{})
+            local nextPins={}
+            local found=false
+            for _,value in ipairs(current) do
+              if value==id then found=true else nextPins[#nextPins+1]=value end
+            end
+            if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+            prefs.set("taskbar_pins",nextPins)
+          end)
+        end
+      end
     end
 
   elseif self.settingsTab == "display" then
@@ -3688,10 +3828,10 @@ function LinkOS:uiLoop()
     elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
       self.lastActivity = os.clock()
 
-      if a == 2 and not self.startMenuOpen then
-        self:toggleQuickPanel()
+      if a == 2 and self.openDesktopContext then
+        self:openDesktopContext(b,c)
       else
-        self:hit(b, c)
+        self:hit(b,c)
       end
 
       self:render()

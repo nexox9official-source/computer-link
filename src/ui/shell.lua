@@ -98,8 +98,8 @@ function shellui.startMenuRect(layout)
 end
 
 function shellui.quickPanelRect(layout)
-  local w = math.min(math.max(22, math.floor(layout.w * 0.42)), math.max(20, layout.w - 2))
-  local h = math.min(10, math.max(7, layout.h - 3))
+  local w = math.min(math.max(24, math.floor(layout.w * 0.46)), math.max(20, layout.w - 2))
+  local h = math.min(14, math.max(8, layout.h - 3))
   return math.max(1, layout.w - w), math.max(1, layout.h - h), w, h
 end
 
@@ -194,12 +194,41 @@ function shellui.install(OS, prefs)
       query=="" and t.muted or t.text,colors.black,math.max(1,w-6))
 
     local apps={}
+    local kinds={}
     local q=query:lower()
-    for _,app in ipairs(shellui.apps(self:isOperatorUI())) do
-      if q=="" or app.title:lower():find(q,1,true) or app.id:lower():find(q,1,true) then
-        apps[#apps+1]=app
+    local available=shellui.apps(self:isOperatorUI())
+
+    if q=="" then
+      local map={}
+      for _,app in ipairs(available) do map[app.id]=app end
+      local seen={}
+
+      for _,id in ipairs(prefs.get("taskbar_pins",{})) do
+        if map[id] and not seen[id] then
+          apps[#apps+1]=map[id]; kinds[id]="PIN"
+          seen[id]=true
+        end
+      end
+
+      for _,id in ipairs(prefs.get("recent_apps",{})) do
+        if map[id] and not seen[id] then
+          apps[#apps+1]=map[id]; kinds[id]="RECENT"
+          seen[id]=true
+        end
+      end
+
+      for _,app in ipairs(available) do
+        if not seen[app.id] then apps[#apps+1]=app;seen[app.id]=true end
+      end
+    else
+      for _,app in ipairs(available) do
+        if app.title:lower():find(q,1,true) or app.id:lower():find(q,1,true) then
+          apps[#apps+1]=app
+        end
       end
     end
+
+    self.launcherKinds=kinds
     self.launcherApps=apps
     self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
 
@@ -219,7 +248,10 @@ function shellui.install(OS, prefs)
       draw.fill(target,x+2,by,w-4,1,bg)
       draw.text(target,x+2,by," "..(app.icon or "+").." ",colors.white,badge,3)
       draw.text(target,x+6,by,app.title,selected and colors.white or t.text,bg,math.max(1,w-11))
-      if w>=38 then draw.text(target,x+w-10,by,app.short or "",t.muted,bg,7) end
+      if w>=38 then
+        local kind=self.launcherKinds and self.launcherKinds[app.id]
+        draw.text(target,x+w-10,by,kind or app.short or "",kind and t.accent or t.muted,bg,7)
+      end
       self:addButton("launcher:"..app.id,x+2,by,w-4,1,function() self:openApp(app.id) end)
     end
 
@@ -230,6 +262,14 @@ function shellui.install(OS, prefs)
     self:button(target,"launcher:settings",x+7,footer,10,"PARAMETRES",function()
       self:openApp("settings")
     end)
+
+    if w>=36 and self.securityEnabled and self:securityEnabled() then
+      self:button(target,"launcher:lock",x+18,footer,7,"LOCK",function()
+        self.startMenuOpen=false
+        self:lockSession()
+      end)
+    end
+
     self:button(target,"launcher:power",x+w-9,footer,8,"REBOOT",function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
@@ -261,8 +301,33 @@ function shellui.install(OS, prefs)
     line("Ecran",self.active and self.active.label or "-",t.text)
     line("Heure",textutils.formatTime(os.time(),true),t.accent)
 
-    local by=y+h-2
+    local footer=y+h-2
+    local history=self.notificationHistory or {}
+    if #history>0 and row<footer-1 then
+      row=row+1
+      if row<footer then
+        draw.text(target,x+2,row,"RECENT",t.muted,colors.gray,math.max(1,w-4))
+        row=row+1
+      end
+      for i=1,math.min(3,#history) do
+        if row>=footer then break end
+        local item=history[i]
+        local prefix=tostring(item.time or "").." "
+        draw.text(target,x+2,row,prefix,t.muted,colors.gray,math.min(#prefix,math.max(1,w-4)))
+        draw.text(target,x+2+#prefix,row,tostring(item.text or ""),item.colour or t.text,
+          colors.gray,math.max(1,w-4-#prefix))
+        row=row+1
+      end
+    end
+
+    local by=footer
     self:button(target,"quick:settings",x+2,by,10,"SETTINGS",function() self:openApp("settings") end)
+    if w>=34 and self.securityEnabled and self:securityEnabled() then
+      self:button(target,"quick:lock",x+13,by,7,"LOCK",function()
+        self.quickPanelOpen=false
+        self:lockSession()
+      end)
+    end
     self:button(target,"quick:desktop",x+w-11,by,9,"BUREAU",function() self:openApp("home") end)
   end
 
