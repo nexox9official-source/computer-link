@@ -751,7 +751,8 @@ function M.install(OS,shellui,prefs)
     local t=self:theme()
     self:restoreWorkspaceSession()
     local list=self:workspace()
-    if self:renderHijackState() or self:renderUserLock() then return end
+    if self.renderHijackState and self:renderHijackState() then return end
+    if self.renderUserLock and self:renderUserLock() then return end
 
     local physical=self.active.target
     local w,h=physical.getSize()
