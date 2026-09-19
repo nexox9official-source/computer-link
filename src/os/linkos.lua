@@ -1034,61 +1034,79 @@ function LinkOS:renderNetwork(target, l)
   local x, y, w = l.contentX, l.contentY, l.contentW
   local info = self.service:identity()
 
-  draw.text(target, x, y, "Reseau AstralNet", t.text, t.bg, w)
+  draw.text(target, x, y, "AstralNet", t.text, t.bg, math.max(1,w-12))
+  local status = info.online and "ONLINE" or "OFFLINE"
+  draw.text(target, math.max(x,x+w-#status), y, status,
+    info.online and t.good or t.danger, t.bg, #status)
   y = y + 2
 
-  local lines = {
-    "Computer ID : #" .. tostring(info.computer_id),
-    "Nom du PC   : " .. tostring(info.label or "-"),
-    "MER         : " .. (info.server_id and ("#" .. info.server_id) or "non detecte"),
-    "Etat        : " .. (info.online and "connecte" or "hors-ligne"),
-    "Modem       : " .. tostring(info.modem or "absent"),
-    "Protocole   : " .. config.PROTOCOL,
-    "Version     : " .. config.VERSION
-  }
+  draw.fill(target, x, y, w, 5, colors.black)
+  draw.fill(target, x, y, 1, 5, info.online and t.good or t.danger)
 
-  for _, line in ipairs(lines) do
-    draw.text(target, x, y, line, t.text, t.bg, w)
-    y = y + 1
-    if y >= l.h - 3 then break end
-  end
+  local label = tostring(info.label or ("PC-" .. tostring(info.computer_id)))
+  draw.text(target, x+2, y, label, t.text, colors.black, math.max(1,w-3))
+  draw.text(target, x+2, y+1, "Computer #" .. tostring(info.computer_id), t.muted, colors.black, math.max(1,w-3))
+  draw.text(target, x+2, y+2,
+    "MER  " .. (info.server_id and ("#" .. tostring(info.server_id)) or "non detecte"),
+    info.server_id and t.accent or t.warn, colors.black, math.max(1,w-3))
+  draw.text(target, x+2, y+3,
+    "Modem  " .. tostring(info.modem or "absent"),
+    info.modem and t.text or t.warn, colors.black, math.max(1,w-3))
+  y = y + 6
 
-  y = y + 1
-  if y < l.h - 2 then
-    self:button(target, "net:ping", x, y, math.min(12, w), "PING MER", function()
-      local result, err = self.service:ping()
-      if result then
-        self:setNotice("MER repond en ~" .. tostring(result.latency) .. " ms.", t.good)
+  local bw = math.max(7, math.floor((w-2)/3))
+  self:button(target, "net:ping", x, y, bw, "PING", function()
+    local result, err = self.service:ping()
+    if result then
+      self:setNotice("MER ~" .. tostring(result.latency) .. " ms", t.good)
+    else
+      self:setNotice(tostring(err), t.danger)
+    end
+  end)
+
+  if x+bw+1 <= x+w-1 then
+    self:button(target, "net:sync", x+bw+1, y, math.min(bw,w-bw-1), "SYNC", function()
+      local count, err = self.service:syncInbox(true)
+      if count then
+        self:setNotice(tostring(count) .. " message(s) synchronise(s).", t.good)
       else
         self:setNotice(tostring(err), t.danger)
       end
     end)
+  end
 
-    if w >= 28 then
-      self:button(target, "net:sync", x + 14, y, math.min(12, w - 14), "SYNC", function()
-        local count, err = self.service:syncInbox(true)
-        if count then
-          self:setNotice(tostring(count) .. " message(s) synchronise(s).", t.good)
-        else
-          self:setNotice(tostring(err), t.danger)
-        end
-      end)
-    end
-
-    if w >= 42 then
-      self:button(target, "net:rename", x + 28, y, math.min(13, w - 28), "RENOMMER", function()
-        local label = self:prompt("Nouveau nom du PC", "Maximum 32 caracteres.")
-        local ok, err = self.service:setLabel(label)
-        self:setNotice(ok and "Nom du PC mis a jour." or tostring(err), ok and t.good or t.danger)
-      end)
-    end
-
-    if y + 2 < l.h - 1 then
-      self:button(target, "net:reconnect", x, y + 2, math.min(14, w), "RECONNECTER", function()
+  if x+(bw+1)*2 <= x+w-1 then
+    self:button(target, "net:reconnect", x+(bw+1)*2, y,
+      math.min(bw,w-(bw+1)*2), "RECONN.", function()
         local ok, err = self.service:reconnect()
-        self:setNotice(ok and "Connexion MER retablie." or tostring(err), ok and t.good or t.danger)
+        self:setNotice(ok and "Connexion MER retablie." or tostring(err),
+          ok and t.good or t.danger)
       end)
-    end
+  end
+  y = y + 2
+
+  self:button(target, "net:rename", x, y, math.min(12,w), "RENOMMER", function()
+    local value = self:prompt("Nouveau nom du PC", "Maximum 32 caracteres.")
+    local ok, err = self.service:setLabel(value)
+    self:setNotice(ok and "Nom du PC mis a jour." or tostring(err), ok and t.good or t.danger)
+  end)
+
+  if w >= 24 then
+    self:button(target, "net:details", x+14, y, math.min(10,w-14),
+      self.networkDetails and "MASQUER" or "DETAILS", function()
+        self.networkDetails = not self.networkDetails
+      end)
+  end
+
+  if self.networkDetails then
+    y = y + 3
+    draw.text(target, x, y, "DETAILS TECHNIQUES", t.muted, t.bg, w)
+    y = y + 2
+    draw.text(target, x, y, "Protocole", t.muted, t.bg, 10)
+    draw.text(target, x+11, y, tostring(config.PROTOCOL), t.text, t.bg, math.max(1,w-11))
+    y = y + 1
+    draw.text(target, x, y, "Version", t.muted, t.bg, 10)
+    draw.text(target, x+11, y, tostring(config.VERSION), t.text, t.bg, math.max(1,w-11))
   end
 end
 
@@ -3062,197 +3080,130 @@ function LinkOS:renderSettings(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
 
+  self.settingsTab = self.settingsTab or "style"
   draw.text(target, x, y, "Parametres", t.text, t.bg, w)
   y = y + 2
 
-  -- Petit ecran: version simplifiee pour que toutes les actions importantes restent visibles.
-  if l.mode == "compact" then
-    draw.text(target, x, y, "LinkOS " .. config.VERSION, t.accent, t.bg, w)
+  local tabs = {
+    {"style","STYLE"},
+    {"display","ECRANS"},
+    {"system","SYSTEME"}
+  }
+  local gap = 1
+  local tabW = math.max(6, math.floor((w-2*gap)/3))
+  local tx = x
+  for i,tab in ipairs(tabs) do
+    local width = i==#tabs and math.max(6, x+w-tx) or tabW
+    draw.button(target, tx, y, width, tab[2], colors.white,
+      self.settingsTab==tab[1] and t.accent or colors.black)
+    local id=tab[1]
+    self:addButton("set:tab:"..id,tx,y,width,1,function() self.settingsTab=id end)
+    tx=tx+width+gap
+  end
+  y = y + 3
+
+  if self.settingsTab == "style" then
+    draw.text(target, x, y, "Couleur d'accent", t.muted, t.bg, w)
+    y = y + 2
+
+    local accentNames = {"cyan","blue","lime","orange","purple","red"}
+    local cellW = math.max(4, math.floor((w-2)/3))
+    for i,name in ipairs(accentNames) do
+      local col=(i-1)%3
+      local row=math.floor((i-1)/3)
+      local bx=x+col*(cellW+1)
+      local by=y+row*2
+      local selected=prefs.get("accent","cyan")==name
+      draw.button(target,bx,by,cellW,string.upper(string.sub(name,1,3)),
+        selected and colors.black or colors.white,
+        selected and ACCENTS[name] or colors.black)
+      self:addButton("accent:"..name,bx,by,cellW,1,function()
+        prefs.set("accent",name)
+      end)
+    end
+    y = y + 5
+
+    draw.text(target, x, y, "Fond du bureau", t.muted, t.bg, w)
+    y = y + 1
+    local wallpaper=tostring(prefs.get("wallpaper","dots"))
+    self:button(target,"set:wallpaper",x,y,math.min(18,w),
+      string.upper(wallpaper),function()
+        local order={"dots","clean","grid","lines"}
+        local current=prefs.get("wallpaper","dots")
+        local nextValue=order[1]
+        for i,value in ipairs(order) do
+          if value==current then nextValue=order[(i%#order)+1];break end
+        end
+        prefs.set("wallpaper",nextValue)
+      end)
+    y = y + 2
+
+    if y < l.h-2 then
+      local labels=prefs.get("taskbar_labels",false)
+      self:button(target,"set:taskbarlabels",x,y,math.min(18,w),
+        labels and "TACHES: TEXTE" or "TACHES: COMPACT",function()
+          prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
+        end)
+    end
+
+  elseif self.settingsTab == "display" then
+    draw.text(target, x, y, "Affichage principal", t.muted, t.bg, w)
+    y = y + 2
+
+    for _,d in ipairs(self.displays or {}) do
+      if y>=l.h-2 then break end
+      local selected=self.active and d.id==self.active.id
+      local prefix=selected and "* " or "  "
+      local size=tostring(d.width).."x"..tostring(d.height)
+      draw.fill(target,x,y,w,2,colors.black)
+      draw.text(target,x+1,y,prefix..d.label,selected and t.accent or t.text,
+        colors.black,math.max(1,w-10))
+      draw.text(target,math.max(x+1,x+w-#size),y,size,t.muted,colors.black,#size)
+      if d.kind=="monitor" and d.scale then
+        draw.text(target,x+3,y+1,"Echelle "..tostring(d.scale),t.muted,colors.black,math.max(1,w-4))
+      else
+        draw.text(target,x+3,y+1,d.kind=="computer" and "Ecran du Computer" or "Moniteur",
+          t.muted,colors.black,math.max(1,w-4))
+      end
+      local displayId=d.id
+      self:addButton("display:"..displayId,x,y,w,2,function()
+        prefs.set("display_id",displayId)
+        self:refreshDisplays()
+        self:setNotice("Affichage principal change.",t.good)
+      end)
+      y=y+3
+    end
+
+  else
+    draw.text(target, x, y, "LinkOS " .. tostring(config.VERSION), t.accent, t.bg, w)
     y = y + 1
     draw.text(target, x, y,
       self.service.updateAvailable
-        and ("Mise a jour: " .. tostring(self.service.remoteVersion))
+        and ("Mise a jour disponible: " .. tostring(self.service.remoteVersion))
         or "Systeme a jour",
       self.service.updateAvailable and t.warn or t.muted, t.bg, w)
     y = y + 2
 
-    local updateLabel = self.service.updateAvailable and "MISE A JOUR !" or "VERIFIER MAJ"
-    local updateBg = self.service.updateAvailable and colors.yellow or t.button
-    local updateFg = self.service.updateAvailable and colors.black or t.text
-    draw.button(target, x, y, math.min(15, w), updateLabel, updateFg, updateBg)
-    self:addButton("set:update", x, y, math.min(15, w), 1, function()
-      self:runUpdateAction()
-    end)
-    y = y + 2
+    self:button(target,"set:update",x,y,math.min(14,w),
+      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",
+      function() self:runUpdateAction() end)
+    y = y + 3
 
-    if y < l.h - 6 then
-      local wallpaper = tostring(prefs.get("wallpaper", "grid"))
-      self:button(target, "set:wallpaper", x, y, math.min(15, w), "FOND: " .. string.upper(wallpaper), function()
-        local order = {"grid", "dots", "lines", "clean"}
-        local nextValue = order[1]
-        for i, value in ipairs(order) do
-          if value == prefs.get("wallpaper", "grid") then
-            nextValue = order[(i % #order) + 1]
-            break
-          end
-        end
-        prefs.set("wallpaper", nextValue)
-        self:render()
-      end)
-      y = y + 2
+    local half=math.max(8,math.floor((w-1)/2))
+    self:button(target,"set:reboot",x,y,half,"REDEMARRER",function() os.reboot() end)
+    if w>=18 then
+      self:button(target,"set:shutdown",x+half+1,y,math.min(half,w-half-1),"ARRETER",
+        function() os.shutdown() end)
     end
+    y = y + 3
 
-    self:button(target, "set:reboot", x, y, math.min(10, w), "REBOOT", function()
-      os.reboot()
-    end)
-
-    if w >= 22 then
-      self:button(target, "set:shutdown", x + 12, y, math.min(9, w - 12), "ARRET", function()
-        os.shutdown()
-      end)
-    end
-
-    -- Toujours visible au-dessus de la barre de navigation.
-    local uninstallY = l.h - 2
-    if uninstallY < y + 2 then uninstallY = y + 2 end
-    if uninstallY >= l.h then uninstallY = l.h - 1 end
-
-    draw.text(target, x, uninstallY - 1, "Maintenance", t.muted, t.bg, w)
-    draw.button(target, x, uninstallY, math.min(16, w), "DESINSTALLER", colors.white, colors.red)
-    self:addButton("set:uninstall", x, uninstallY, math.min(16, w), 1, function()
+    draw.text(target,x,y,"Maintenance",t.muted,t.bg,w)
+    y = y + 1
+    draw.button(target,x,y,math.min(16,w),"DESINSTALLER",colors.white,colors.red)
+    self:addButton("set:uninstall",x,y,math.min(16,w),1,function()
       self:runUninstallAction()
     end)
-    return
   end
-
-  draw.text(target, x, y, "Affichage", t.accent, t.bg, w)
-  y = y + 1
-  draw.text(target, x, y,
-    tostring(self.active.label) .. "  " .. tostring(self.active.width) .. "x" .. tostring(self.active.height),
-    t.text, t.bg, w)
-  y = y + 2
-
-  local shown = 0
-  for _, d in ipairs(self.displays) do
-    if shown >= 3 or y >= l.h - 9 then break end
-    local selected = d.id == self.active.id
-    local label = (selected and "* " or "  ") .. d.label .. "  " .. d.width .. "x" .. d.height
-    draw.text(target, x, y, label, selected and t.good or t.muted, t.bg, w)
-
-    local displayId = d.id
-    self:addButton("display:" .. displayId, x, y, w, 1, function()
-      prefs.set("display_id", displayId)
-      self:refreshDisplays()
-      self:setNotice("Affichage principal change.", t.good)
-      self:render()
-    end)
-
-    shown = shown + 1
-    y = y + 1
-  end
-
-  y = y + 1
-  if y < l.h - 8 then
-    draw.text(target, x, y, "Couleur", t.accent, t.bg, w)
-    y = y + 1
-
-    local accentNames = {"cyan", "blue", "lime", "orange", "purple", "red"}
-    local bx = x
-
-    for _, name in ipairs(accentNames) do
-      local bw = math.min(7, math.max(4, math.floor(w / #accentNames)))
-      if bx + bw - 1 <= x + w - 1 then
-        draw.button(target, bx, y, bw, string.sub(name, 1, 3), colors.white, ACCENTS[name])
-        local accentName = name
-        self:addButton("accent:" .. name, bx, y, bw, 1, function()
-          prefs.set("accent", accentName)
-          self:render()
-        end)
-        bx = bx + bw
-      end
-    end
-    y = y + 2
-  end
-
-  if y < l.h - 7 then
-    draw.text(target, x, y, "Bureau", t.accent, t.bg, w)
-    y = y + 1
-
-    local wallpaper = tostring(prefs.get("wallpaper", "grid"))
-    local wallpaperW = math.min(17, w)
-    draw.button(target, x, y, wallpaperW,
-      "FOND " .. string.upper(wallpaper), colors.white, t.button)
-    self:addButton("set:wallpaper", x, y, wallpaperW, 1, function()
-      local order = {"grid", "dots", "lines", "clean"}
-      local current = prefs.get("wallpaper", "grid")
-      local nextValue = order[1]
-      for i, value in ipairs(order) do
-        if value == current then
-          nextValue = order[(i % #order) + 1]
-          break
-        end
-      end
-      prefs.set("wallpaper", nextValue)
-      self:render()
-    end)
-
-    if w >= 36 then
-      local labels = prefs.get("taskbar_labels", false)
-      local taskX = x + 19
-      local taskW = math.min(17, w - 19)
-      draw.button(target, taskX, y, taskW,
-        labels and "BARRE: TEXTE" or "BARRE: ICONES",
-        colors.white, labels and t.accent or t.button)
-      self:addButton("set:taskbarlabels", taskX, y, taskW, 1, function()
-        prefs.set("taskbar_labels", not prefs.get("taskbar_labels", false))
-        self:render()
-      end)
-    end
-
-    y = y + 2
-  end
-
-  if y < l.h - 5 then
-    draw.text(target, x, y, "Systeme", t.accent, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y,
-      "LinkOS " .. config.VERSION
-        .. (self.service.updateAvailable and ("  ->  " .. tostring(self.service.remoteVersion)) or "  |  a jour"),
-      self.service.updateAvailable and t.warn or t.muted, t.bg, w)
-    y = y + 2
-
-    local updateLabel = self.service.updateAvailable and "MISE A JOUR !" or "VERIFIER MAJ"
-    local updateBg = self.service.updateAvailable and colors.yellow or t.button
-    local updateFg = self.service.updateAvailable and colors.black or t.text
-    local updateW = math.min(15, w)
-
-    draw.button(target, x, y, updateW, updateLabel, updateFg, updateBg)
-    self:addButton("set:update", x, y, updateW, 1, function()
-      self:runUpdateAction()
-    end)
-
-    if w >= 31 then
-      self:button(target, "set:reboot", x + 17, y, math.min(10, w - 17), "REBOOT", function()
-        os.reboot()
-      end)
-    end
-
-    if w >= 43 then
-      self:button(target, "set:shutdown", x + 29, y, math.min(10, w - 29), "ARRET", function()
-        os.shutdown()
-      end)
-    end
-  end
-
-  -- Zone reservee en bas: toujours dans la zone utile, au-dessus du bandeau de notification.
-  local uninstallY = math.min(l.contentY + l.contentH - 2, l.h - 5)
-  if uninstallY < l.contentY + 1 then uninstallY = l.contentY + 1 end
-
-  draw.text(target, x, uninstallY - 1, "Maintenance", t.muted, t.bg, w)
-  draw.button(target, x, uninstallY, math.min(16, w), "DESINSTALLER", colors.white, colors.red)
-  self:addButton("set:uninstall", x, uninstallY, math.min(16, w), 1, function()
-    self:runUninstallAction()
-  end)
 end
 
 function LinkOS:renderAbout(target, l)
