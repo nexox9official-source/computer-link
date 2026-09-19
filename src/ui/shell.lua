@@ -74,9 +74,30 @@ function shellui.nextApp(current, operator, delta)
 end
 
 function shellui.wallpaper(target, x, y, w, h, mode, accent)
-  mode = tostring(mode or "dots")
+  mode = tostring(mode or "fluent")
   draw.fill(target, x, y, w, h, colors.black)
   if w <= 0 or h <= 0 or mode == "clean" then return end
+
+  if mode == "fluent" then
+    -- A low-contrast geometric ribbon inspired by Windows wallpapers. It uses
+    -- only background cells, so labels remain readable on CC:Tweaked screens.
+    local cx=x+math.floor(w*0.66)
+    local cy=y+math.floor(h*0.35)
+    local maxW=math.max(4,math.floor(w*0.30))
+    for row=0,math.min(5,h-2) do
+      local width=math.max(2,maxW-row*2)
+      local px=math.max(x,cx-row)
+      local py=cy+row
+      if py<=y+h-1 then
+        draw.fill(target,px,py,math.min(width,x+w-px),1,row%2==0 and colors.blue or colors.gray)
+      end
+    end
+    if h>=10 and w>=30 then
+      draw.fill(target,x+math.floor(w*0.73),y+math.floor(h*0.18),
+        math.max(3,math.floor(w*0.12)),2,colors.lightBlue)
+    end
+    return
+  end
 
   if mode == "lines" then
     for py = y + 1, y + h - 1, 4 do
