@@ -215,73 +215,63 @@ function LinkOS:cycleApp(delta)
   self:openApp(nextId)
 end
 
-function LinkOS:prompt(title, hint)
-  local active = self.active
-  local t = self:theme()
+function LinkOS:inputDialog(title,hint,secret)
+  local active=self.active
+  local t=self:theme()
 
-  if active and active.kind == "monitor" then
-    local target = active.target
-    local w, h = target.getSize()
-    draw.fill(target, 2, math.max(2, h - 4), math.max(1, w - 2), 3, t.panel)
-    draw.text(target, 3, math.max(2, h - 3), "Saisie sur l'ecran du PC...", t.warn, t.panel, math.max(1, w - 4))
+  if active and active.kind=="monitor" then
+    local target=active.target
+    local w,h=target.getSize()
+    fluent.card(target,2,math.max(2,h-5),math.max(1,w-3),4,{
+      bg=t.surface,accent=t.accent,title=secret and "Saisie securisee" or "Saisie",
+      subtitle="Utilise le clavier du Computer.",muted=t.muted
+    })
   end
 
-  local previous = term.current()
+  local previous=term.current()
   term.redirect(self.native)
-  term.setBackgroundColor(colors.black)
-  term.setTextColor(colors.white)
-  term.clear()
-  term.setCursorPos(1, 1)
-  print("Computer Link / LinkOS")
-  print("----------------------")
-  print(tostring(title or "Saisie"))
-  if hint and hint ~= "" then
-    term.setTextColor(colors.lightGray)
-    print(tostring(hint))
-    term.setTextColor(colors.white)
-  end
-  write("> ")
-  local value = read()
-  term.redirect(previous)
+  fluent.applyPalette(self.native)
 
+  local w,h=self.native.getSize()
+  draw.clear(self.native,t.desktop,t.text)
+  local cardW=math.min(math.max(24,math.floor(w*0.72)),math.max(20,w-4))
+  local cardH=math.min(9,math.max(6,h-4))
+  local x=math.max(1,math.floor((w-cardW)/2)+1)
+  local y=math.max(2,math.floor((h-cardH)/2)+1)
+
+  fluent.card(self.native,x,y,cardW,cardH,{
+    bg=t.surface,accent=secret and t.warn or t.accent,
+    title=tostring(title or (secret and "Mot de passe" or "Saisie")),
+    subtitle=tostring(hint or ""),muted=t.muted
+  })
+
+  local inputY=math.min(y+cardH-2,h-1)
+  draw.fill(self.native,x+2,inputY,math.max(4,cardW-4),1,t.surface2)
+  draw.text(self.native,x+3,inputY,">",t.accent,t.surface2,1)
+
+  pcall(self.native.setCursorPos,x+5,inputY)
+  pcall(self.native.setBackgroundColor,t.surface2)
+  pcall(self.native.setTextColor,t.text)
+  pcall(self.native.setCursorBlink,true)
+  local value=secret and read("*") or read()
+  pcall(self.native.setCursorBlink,false)
+
+  term.redirect(previous)
   self:render()
   return value
 end
 
-function LinkOS:confirm(title)
-  local answer = string.lower(self:prompt(title, "Tape OUI pour confirmer.") or "")
-  return answer == "oui" or answer == "o" or answer == "yes" or answer == "y"
+function LinkOS:prompt(title,hint)
+  return self:inputDialog(title,hint,false)
 end
 
-function LinkOS:promptSecret(title, hint)
-  local active = self.active
-  local t = self:theme()
+function LinkOS:confirm(title)
+  local answer=string.lower(self:inputDialog(title,"Tape OUI pour confirmer.",false) or "")
+  return answer=="oui" or answer=="o" or answer=="yes" or answer=="y"
+end
 
-  if active and active.kind == "monitor" then
-    local target = active.target
-    local w, h = target.getSize()
-    draw.fill(target, 2, math.max(2, h - 4), math.max(1, w - 2), 3, t.panel)
-    draw.text(target, 3, math.max(2, h - 3), "Saisie securisee sur le Computer...", t.warn, t.panel, math.max(1, w - 4))
-  end
-
-  local previous = term.current()
-  term.redirect(self.native)
-  term.setBackgroundColor(colors.black)
-  term.setTextColor(colors.white)
-  term.clear()
-  term.setCursorPos(1, 1)
-  print("LinkOS Security")
-  print("---------------")
-  print(tostring(title or "Mot de passe"))
-  if hint and hint ~= "" then
-    term.setTextColor(colors.lightGray)
-    print(tostring(hint))
-    term.setTextColor(colors.white)
-  end
-  write("> ")
-  local value = read("*")
-  term.redirect(previous)
-  return value
+function LinkOS:promptSecret(title,hint)
+  return self:inputDialog(title,hint,true)
 end
 
 function LinkOS:configurePassword()
