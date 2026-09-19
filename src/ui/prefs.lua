@@ -5,10 +5,10 @@ local prefs = {}
 local PATH = config.DATA_DIR .. "/ui.db"
 
 local defaults = {
-  schema = 2,
+  schema = 3,
   display_id = nil,
   accent = "cyan",
-  wallpaper = "grid",
+  wallpaper = "dots",
   taskbar_labels = false,
   start_compact = false,
   quick_panel = true,
