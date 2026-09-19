@@ -1,5 +1,6 @@
 local draw = dofile("/computer-link/src/ui/draw.lua")
 local fluent = dofile("/computer-link/src/ui/fluent.lua")
+local ccui = dofile("/computer-link/src/ui/ccui.lua")
 
 local shellui = {}
 
@@ -217,28 +218,38 @@ function shellui.install(OS, prefs)
   function OS:renderStartMenu(target,l)
     if not self.startMenuOpen then return end
     local t=self:theme()
-    local x,y,w,h=shellui.startMenuRect(l)
-    self.shellOverlay={x=x,y=y,w=w,h=h}
+    local panelW=math.min(math.max(30,math.floor(l.w*0.72)),l.w-3)
+    local x=2
+    local y=2
+    local h=math.max(10,l.h-3)
+    self.shellOverlay={x=x,y=y,w=panelW,h=h}
     self.buttons={}
 
-    draw.fill(target,x,y,w,h,t.elevated)
-    draw.fill(target,x,y,w,1,t.surface)
-    draw.text(target,x+2,y,"Demarrer",t.text,t.surface,math.max(1,w-4))
+    draw.fill(target,x,y,panelW,h,t.elevated)
+    draw.text(target,x+2,y,"Demarrer",t.text,t.elevated,panelW-4)
 
     local query=self.launcherQuery or ""
-    fluent.searchBox(target,x+2,y+2,w-4,query,"Rechercher",t.accent)
-    self:addButton("launcher:search",x+2,y+2,w-4,1,function() end)
+    fluent.searchBox(target,x+2,y+2,panelW-4,query,"Rechercher une application",t.accent)
+    self:addButton("launcher:search",x+2,y+2,panelW-4,1,function() end)
+
+    local mode=self.startAllApps and "all" or "pinned"
+    local tabRects=ccui.tabs(target,x+2,y+4,panelW-4,{
+      {id="pinned",label="Epinglees"},
+      {id="all",label="Toutes"}
+    },mode,t)
+    for _,r in ipairs(tabRects) do
+      self:addButton("launcher:"..r.id,r.x,r.y,r.w,r.h,function()
+        self.startAllApps=(r.id=="all")
+        self.launcherIndex=1
+      end)
+    end
 
     local available=shellui.apps(self:isOperatorUI())
     local map={}
-    for _,app in ipairs(available) do
-      if app.id~="home" then map[app.id]=app end
-    end
+    for _,app in ipairs(available) do if app.id~="home" then map[app.id]=app end end
 
     local apps={}
     local q=query:lower()
-    local allMode=self.startAllApps==true
-
     if q~="" then
       for _,app in ipairs(available) do
         if app.id~="home" and
@@ -246,17 +257,16 @@ function shellui.install(OS, prefs)
           apps[#apps+1]=app
         end
       end
-    elseif allMode then
-      for _,app in ipairs(available) do
-        if app.id~="home" then apps[#apps+1]=app end
-      end
+      table.sort(apps,function(a,b) return a.title:lower()<b.title:lower() end)
+    elseif self.startAllApps then
+      for _,app in ipairs(available) do if app.id~="home" then apps[#apps+1]=app end end
+      table.sort(apps,function(a,b) return a.title:lower()<b.title:lower() end)
     else
       local seen={}
       local preferred={}
       for _,id in ipairs(prefs.get("taskbar_pins",{})) do preferred[#preferred+1]=id end
       for _,id in ipairs(prefs.get("desktop_shortcuts",{})) do preferred[#preferred+1]=id end
-      preferred[#preferred+1]="settings"
-      preferred[#preferred+1]="calculator"
+      for _,id in ipairs({"settings","calculator","store"}) do preferred[#preferred+1]=id end
       for _,id in ipairs(preferred) do
         if map[id] and not seen[id] and #apps<6 then
           apps[#apps+1]=map[id]
@@ -265,88 +275,63 @@ function shellui.install(OS, prefs)
       end
     end
 
-    if allMode or q~="" then
-      table.sort(apps,function(a,b) return a.title:lower()<b.title:lower() end)
-    end
-
     self.launcherApps=apps
     self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
 
-    local contentTop=y+4
+    local listY=y+7
     local footer=y+h-2
-    local gridTop=contentTop+1
-    local cols=w>=30 and 2 or 1
-    local tileH=2
-    self.launcherCols=cols
-    local gap=1
-    local cellW=math.max(10,math.floor((w-4-(cols-1)*gap)/cols))
-    local rows=math.max(1,math.floor((footer-gridTop)/tileH))
-    local capacity=math.max(1,cols*rows)
-    local page=math.floor((self.launcherIndex-1)/capacity)
-    local first=page*capacity+1
-    local pages=math.max(1,math.ceil(#apps/capacity))
+    local pageSize=math.max(1,math.floor((footer-listY)/2))
+    local page=math.floor((self.launcherIndex-1)/pageSize)
+    local first=page*pageSize+1
+    local last=math.min(#apps,first+pageSize-1)
 
-    local title=q~="" and "RESULTATS" or (allMode and "TOUTES LES APPS" or "EPINGLEES")
-    draw.text(target,x+2,contentTop,title,t.muted,t.elevated,math.max(1,w-16))
-
-    if pages>1 then
-      local pager=tostring(page+1).."/"..tostring(pages)
-      local px=x+w-10
-      self:button(target,"launcher:prev",px,contentTop,3,"<",function()
-        local previous=(page-1+pages)%pages
-        self.launcherIndex=previous*capacity+1
-      end)
-      draw.text(target,px+3,contentTop,pager,t.muted,t.elevated,4)
-      self:button(target,"launcher:next",px+7,contentTop,3,">",function()
-        local nextPage=(page+1)%pages
-        self.launcherIndex=math.min(#apps,nextPage*capacity+1)
-      end)
-    end
-
-    for i=first,math.min(#apps,first+capacity-1) do
+    for i=first,last do
       local app=apps[i]
-      local n=i-first
-      local col=n%cols
-      local row=math.floor(n/cols)
-      local bx=x+2+col*(cellW+gap)
-      local by=gridTop+row*tileH
+      local row=i-first
+      local by=listY+row*2
       local selected=i==self.launcherIndex
       local bg=selected and t.selection or t.elevated
-
-      draw.fill(target,bx,by,cellW,tileH,bg)
-      fluent.drawMiniIcon(target,app.id,bx+1,by,selected,bg)
-      local startLabels={store="Apps",settings="Reglages",calculator="Calcul"}
-      local displayTitle=startLabels[app.id] or app.title
-      draw.text(target,bx+5,by,displayTitle,selected and t.text or t.muted,bg,math.max(1,cellW-6))
-      draw.text(target,bx+5,by+1,selected and "Ouvrir" or "",t.accent,bg,math.max(1,cellW-6))
-      self:addButton("launcher:"..app.id,bx,by,cellW,tileH,function() self:openApp(app.id) end)
+      draw.fill(target,x+2,by,panelW-4,2,bg)
+      fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
+      draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
+      draw.text(target,x+7,by+1,selected and "Entrer pour ouvrir" or "",t.accent,bg,panelW-12)
+      self:addButton("launcher:"..app.id,x+2,by,panelW-4,2,function() self:openApp(app.id) end)
     end
 
     if #apps==0 then
-      draw.text(target,x+3,gridTop+1,"Aucun resultat",t.muted,t.elevated,w-6)
+      draw.text(target,x+3,listY+1,"Aucune application trouvee",t.muted,t.elevated,panelW-6)
     end
 
-    draw.fill(target,x,footer,w,2,t.surface)
+    local pages=math.max(1,math.ceil(#apps/pageSize))
+    if pages>1 then
+      local pageText=tostring(page+1).."/"..tostring(pages)
+      draw.text(target,x+panelW-#pageText-2,footer-1,pageText,t.muted,t.elevated,#pageText)
+      if page>0 then
+        ccui.button(target,x+2,footer-1,5,"<",t,{compact=true})
+        self:addButton("launcher:prev",x+2,footer-1,5,1,function()
+          self.launcherIndex=math.max(1,(page-1)*pageSize+1)
+        end)
+      end
+      if page<pages-1 then
+        ccui.button(target,x+8,footer-1,5,">",t,{compact=true})
+        self:addButton("launcher:next",x+8,footer-1,5,1,function()
+          self.launcherIndex=math.min(#apps,(page+1)*pageSize+1)
+        end)
+      end
+    end
+
+    draw.fill(target,x,footer,panelW,2,t.surface)
     local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC #"..tostring(os.getComputerID and os.getComputerID() or "?"))
     draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
-    draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,w-25))
+    draw.text(target,x+4,footer,label,t.text,t.surface,math.max(1,panelW-23))
 
-    if q=="" then
-      self:button(target,"launcher:all",x+2,footer+1,allMode and 8 or 10,allMode and "RETOUR" or "TOUTES",function()
-        self.startAllApps=not self.startAllApps
-        self.launcherIndex=1
-      end)
-    end
-
-    self:button(target,"launcher:settings",math.max(x+12,x+w-18),footer,9,"REGLAGES",function()
-      self:openApp("settings")
-    end)
-    fluent.button(target,x+w-8,footer,7,"POWER",{danger=true})
-    self:addButton("launcher:power",x+w-8,footer,7,1,function()
+    ccui.button(target,x+panelW-18,footer,9,"REGLAGES",t,{})
+    self:addButton("launcher:settings",x+panelW-18,footer,9,1,function() self:openApp("settings") end)
+    ccui.button(target,x+panelW-8,footer,7,"POWER",t,{danger=true})
+    self:addButton("launcher:power",x+panelW-8,footer,7,1,function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
   end
-
   function OS:renderQuickPanel(target,l)
     if not self.quickPanelOpen then return end
     local t=self:theme()
