@@ -3271,11 +3271,11 @@ function LinkOS:renderSettings(target, l)
 
     fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
       subtitle="Fond et densite de la barre des taches.",muted=t.muted})
-    local wallpaper=tostring(prefs.get("wallpaper","clean"))
+    local wallpaper=tostring(prefs.get("wallpaper","fluent"))
     self:button(target,"set:wallpaper",cx+2,py+2,math.min(15,cw-4),
       "FOND: "..string.upper(wallpaper),function()
-        local order={"clean","dots","grid","lines"}
-        local current=prefs.get("wallpaper","clean")
+        local order={"fluent","clean","dots","grid","lines"}
+        local current=prefs.get("wallpaper","fluent")
         local nextValue=order[1]
         for i,value in ipairs(order) do
           if value==current then nextValue=order[(i%#order)+1];break end
