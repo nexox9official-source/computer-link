@@ -25,6 +25,20 @@ jobs:
             echo "Checking $file"
             luac5.3 -p "$file"
           done < <(find . -type f -name '*.lua' -print0)
+      - name: Validate manifest files
+        run: |
+          lua5.3 - <<'LUA'
+          local manifest = dofile("manifest.lua")
+          local groups = {"common_files", "client_files", "server_files", "files", "protected_client_files"}
+          for _, group in ipairs(groups) do
+            for _, path in ipairs(manifest[group] or {}) do
+              local f = assert(io.open(path, "rb"), group .. " missing file: " .. path)
+              f:close()
+            end
+          end
+          print("PASS: manifest files exist")
+          LUA
+
       - name: Test shell layouts and workspace interactions
         run: |
           lua5.3 tests/shell_layout.lua
