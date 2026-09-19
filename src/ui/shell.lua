@@ -282,7 +282,7 @@ function shellui.install(OS, prefs)
 
     local listY=y+7
     local footer=y+h-2
-    local pageSize=math.max(1,math.floor((footer-listY)/2))
+    local pageSize=math.max(1,footer-listY-1)
     local page=math.floor((self.launcherIndex-1)/pageSize)
     local first=page*pageSize+1
     local last=math.min(#apps,first+pageSize-1)
@@ -290,14 +290,13 @@ function shellui.install(OS, prefs)
     for i=first,last do
       local app=apps[i]
       local row=i-first
-      local by=listY+row*2
+      local by=listY+row
       local selected=i==self.launcherIndex
       local bg=selected and t.selection or t.elevated
-      draw.fill(target,x+2,by,panelW-4,2,bg)
+      draw.fill(target,x+2,by,panelW-4,1,bg)
       fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
       draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
-      draw.text(target,x+7,by+1,selected and "Ouvrir" or "",t.accent,bg,panelW-12)
-      self:addButton("launcher:"..app.id,x+2,by,panelW-4,2,function() self:openApp(app.id) end)
+      self:addButton("launcher:"..app.id,x+2,by,panelW-4,1,function() self:openApp(app.id) end)
     end
 
     if #apps==0 then
