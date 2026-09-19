@@ -7,7 +7,7 @@ local function save(items)
 end
 return {draw=function(ctx)
   local d=ctx.data
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   if not d.items then
     d.items={}
     if fs.exists(path) then
