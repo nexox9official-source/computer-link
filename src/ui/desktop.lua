@@ -454,10 +454,10 @@ function M.install(OS,shellui,prefs)
       add(self:isTaskbarPinned(menu.targetId) and "Desepingler" or "Epingler",function()
         self:toggleTaskbarPin(menu.targetId)
       end)
-      add(self:isDesktopShortcut(menu.targetId) and "Retirer du bureau" or "Ajouter au bureau",function()
+      add(self:isDesktopShortcut(menu.targetId) and "Retirer bureau" or "Ajouter bureau",function()
         self:toggleDesktopShortcut(menu.targetId)
       end)
-      if app and app.id~="store" then add("Voir dans Applications",function() self:openApp("store") end) end
+      if app and app.id~="store" then add("Voir dans Apps",function() self:openApp("store") end) end
       add("Parametres",function() self:openApp("settings") end)
     else
       add("Actualiser",function() self:render() end)
