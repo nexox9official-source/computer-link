@@ -282,6 +282,24 @@ function shellui.install(OS, prefs)
       q=="" and "EPINGLEES ET RECENTES" or "RESULTATS",
       t.muted,t.elevated,math.max(1,w-4))
 
+    local pages=math.max(1,math.ceil(#apps/math.max(1,capacity)))
+    local pageNumber=math.min(pages,page+1)
+    if pages>1 and w>=28 then
+      local pagerX=x+w-10
+      self:button(target,"launcher:prev",pagerX,contentTop,3,"<",function()
+        local previous=(pageNumber-2+pages)%pages
+        self.launcherIndex=previous*capacity+1
+        self:render()
+      end)
+      draw.text(target,pagerX+3,contentTop,tostring(pageNumber).."/"..tostring(pages),
+        t.muted,t.elevated,4)
+      self:button(target,"launcher:next",pagerX+7,contentTop,3,">",function()
+        local nextPage=pageNumber%pages
+        self.launcherIndex=math.min(#apps,nextPage*capacity+1)
+        self:render()
+      end)
+    end
+
     for i=first,math.min(#apps,first+capacity-1) do
       local app=apps[i]
       local n=i-first
