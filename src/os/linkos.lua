@@ -3650,35 +3650,40 @@ function LinkOS:renderForcedMessageDisplay(target, flash)
 end
 
 function LinkOS:renderUserLockDisplay(target)
-  local w, h = target.getSize()
-  local t = self:theme()
-  draw.clear(target, colors.black, colors.white)
+  local w,h=target.getSize()
+  local t=self:theme()
+  fluent.applyPalette(target)
+  draw.clear(target,t.desktop,t.text)
 
-  local label = os.getComputerLabel() or ("PC-" .. os.getComputerID())
-  local clock = textutils.formatTime(os.time(), true)
-  local centerY = math.max(3, math.floor(h / 2))
+  local label=os.getComputerLabel() or ("PC-"..os.getComputerID())
+  local clock=textutils.formatTime(os.time(),true)
+  local centerY=math.max(5,math.floor(h/2))
 
-  draw.fill(target, 1, 1, w, 1, t.accent)
-  draw.text(target, 2, 1, "LINKOS", colors.white, t.accent, math.max(1,w-8))
-  draw.text(target, math.max(1,w-#clock-1), 1, clock, colors.white, t.accent, #clock)
-
-  if h >= 12 then
-    draw.center(target, centerY-4, label, t.muted, colors.black)
-    draw.center(target, centerY-2, "[  LOCK  ]", colors.white, t.accent)
-    draw.center(target, centerY, "Session verrouillee", colors.white, colors.black)
-    draw.center(target, centerY+2, "Mot de passe LinkOS requis", t.muted, colors.black)
-  else
-    draw.center(target, centerY-2, label, t.muted, colors.black)
-    draw.center(target, centerY, "SESSION VERROUILLEE", colors.white, colors.black)
-    draw.center(target, centerY+1, "Mot de passe requis", t.muted, colors.black)
+  draw.center(target,math.max(2,centerY-5),clock,t.text,t.desktop)
+  if h>=12 then
+    draw.center(target,centerY-4,"LinkOS",t.muted,t.desktop)
   end
 
-  if h >= 7 then
-    draw.fill(target, 1, h, w, 1, colors.gray)
-    draw.center(target, h, "Touche ou clic pour deverrouiller", colors.white, colors.gray)
+  local cardW=math.min(math.max(24,math.floor(w*0.62)),math.max(20,w-4))
+  local cardH=h>=14 and 7 or 5
+  local cardX=math.max(1,math.floor((w-cardW)/2)+1)
+  local cardY=math.max(2,centerY-2)
+  fluent.card(target,cardX,cardY,cardW,cardH,{
+    bg=t.surface,accent=t.accent,title=label,
+    subtitle="Session verrouillee",muted=t.muted
+  })
+  fluent.drawIcon(target,"security",cardX+2,cardY+2,false,t.surface)
+  if cardW>=28 then
+    draw.text(target,cardX+7,cardY+2,"Mot de passe LinkOS requis",t.text,t.surface,cardW-9)
+    draw.text(target,cardX+7,cardY+3,"Touche ou clic pour continuer",t.muted,t.surface,cardW-9)
   end
 
-  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
+  if h>=7 then
+    draw.fill(target,1,h,w,1,t.taskbar)
+    draw.center(target,h,"LinkOS  •  "..label,t.muted,t.taskbar)
+  end
+
+  if target.setCursorBlink then pcall(target.setCursorBlink,false) end
 end
 
 function LinkOS:renderUserLock()
