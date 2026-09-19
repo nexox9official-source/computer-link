@@ -55,15 +55,18 @@ jobs:
           ASTRALIUM MALCRAFT / COMPUTER LINK 0.11.0
 
           1. Arreter completement le serveur Minecraft.
-          2. Copier mods/malcraft-bridge-0.11.0.jar dans le dossier mods/ du serveur.
-             Ce mod est serveur uniquement : ne pas l'ajouter aux clients.
-          3. Remplacer l'ancien datapack Computer Link par :
+          2. Supprimer tout ancien malcraft-bridge-*.jar du dossier mods/.
+          3. Copier mods/malcraft-bridge-0.11.0.jar dans le dossier mods/ du serveur.
+             Ce mod est SERVEUR UNIQUEMENT : ne pas l'ajouter aux clients.
+          4. Remplacer l'ancien datapack Computer Link par :
              Computer-Link-Server-Datapack-1.20.1-v0.11.0.zip
              dans <monde>/datapacks/.
-          4. Demarrer completement le serveur.
-          5. Redemarrer le MER puis le PC operateur #0.
-          6. Les Computers cibles n'ont pas besoin d'avoir LinkOS.
+          5. Demarrer completement le serveur.
+          6. Redemarrer le MER puis le PC operateur #0.
+          7. Les Computers cibles n'ont pas besoin d'avoir LinkOS ni de modem.
              Le runtime Malcraft est injecte par la ROM CC:Tweaked du datapack.
+          8. Un Computer contamine conserve l'infection apres retrait du disque.
+             Le Bridge conserve aussi l'etat serveur et la derniere position connue.
           EOF
 
           (
