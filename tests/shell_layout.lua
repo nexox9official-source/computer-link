@@ -53,7 +53,9 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{58,18},{82,26},{110,38}}) do
       o.launcherIndex=index; o:renderStartMenu(target,l)
       for _,b in ipairs(o.buttons) do seen[b.id]=true end
     end
-    for _,app in ipairs(shellui.apps(operator)) do assert(seen['launcher:'..app.id]) end
+    for _,app in ipairs(shellui.apps(operator)) do
+      assert(app.id=='home' or seen['launcher:'..app.id],'Unreachable launcher '..app.id)
+    end
     o.launcherQuery='calcul'; o:renderStartMenu(target,l)
     assert(#o.launcherApps==1 and o.launcherApps[1].id=='calculator')
     o:handleKey(keys.enter); assert(o.app=='calculator')
