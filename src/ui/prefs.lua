@@ -5,7 +5,7 @@ local prefs = {}
 local PATH = config.DATA_DIR .. "/ui.db"
 
 local defaults = {
-  schema = 4,
+  schema = 5,
   display_id = nil,
   accent = "cyan",
   wallpaper = "clean",
@@ -13,6 +13,8 @@ local defaults = {
   taskbar_pins = {"messages", "files", "store"},
   desktop_shortcuts = {"messages", "files", "store", "notes"},
   recent_apps = {},
+  restore_session = true,
+  workspace_session = {windows={}, active="home"},
   start_compact = false,
   quick_panel = true,
   aliases = {},
