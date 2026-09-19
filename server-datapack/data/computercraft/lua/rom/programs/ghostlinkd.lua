@@ -327,20 +327,22 @@ local function syncState()
     return
   end
 
-  -- Physical carrier infection is evaluated first. With Malcraft Bridge this
-  -- becomes server-visible immediately, without a modem or LinkOS.
-  localCarrierInfection()
-
   if bus then
     local state = nil
+    local present = carrierPresent()
 
     if type(bus.state) == "function" then
       local ok, raw = pcall(bus.state)
       if ok then state = jsonDecode(raw) end
     end
 
+    -- The Bridge clean tombstone wins before any physical carrier is
+    -- evaluated. This makes an offline remote clean deterministic even if a
+    -- contaminated disk is still inserted when the Computer boots again.
     if state and state.known == true then
       if state.infected == true then
+        settings.unset(LOCAL_CLEAN_LOCK)
+        saveSettings()
         setLocalState(
           true,
           state.spread ~= false,
@@ -350,9 +352,25 @@ local function syncState()
         settings.set(LOCAL_CLEAN_LOCK, true)
         saveSettings()
         setLocalState(false, false, nil)
+
+        -- Once the carrier has actually been removed, acknowledge the clean
+        -- tombstone. A later reinsertion is then a genuinely new infection.
+        if not present and type(bus.acknowledgeClean) == "function" then
+          local ok, acknowledged = pcall(bus.acknowledgeClean)
+          if ok and acknowledged == true then
+            settings.unset(LOCAL_CLEAN_LOCK)
+            saveSettings()
+          end
+        end
       end
-    elseif infected and type(bus.infectSelf) == "function" then
-      pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
+    else
+      -- Unknown to the Bridge: local persisted infection and/or a physical
+      -- contaminated disk may register this host for the first time.
+      localCarrierInfection()
+
+      if infected and type(bus.infectSelf) == "function" then
+        pcall(bus.infectSelf, settings.get(LOCAL_SOURCE) or "local")
+      end
     end
 
     if infected and type(bus.heartbeat) == "function" then
@@ -372,6 +390,7 @@ local function syncState()
 
   -- Legacy modem/MER fallback when the server-only Malcraft Bridge mod is not
   -- installed.
+  localCarrierInfection()
   if not networkModemName then return end
 
   local reply = request("STATE", {
@@ -396,7 +415,6 @@ local function syncState()
     infectConnectedDisks()
   end
 end
-
 local function currentMs()
   if os.epoch then
     local ok, value = pcall(os.epoch, "utc")
@@ -744,12 +762,17 @@ local function processAction(sender, action, argument)
   argument = type(argument) == "table" and argument or {}
 
   if action == "status" then
+    local carrier = carrierPresent()
     return true, {
       infected = infected,
       spread = spreadEnabled,
       computer_id = os.getComputerID(),
       label = os.getComputerLabel(),
-      transport = bus and "malcraft_bridge" or "rednet"
+      transport = bus and "malcraft_bridge" or "rednet",
+      agent = "rom",
+      linkos_installed = fs.exists("/computer-link"),
+      carrier_present = carrier == true,
+      source = settings.get(LOCAL_SOURCE)
     }
 
   elseif action == "devices" then
