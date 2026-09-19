@@ -189,7 +189,46 @@ function M.install(OS,shellui,prefs)
     end
     local index=((current-1+delta)%#list)+1
     self:focusWindow(list[index])
+    self.taskSwitcherOpen=self.altHeld==true
     return true
+  end
+
+  function OS:renderTaskSwitcher(target,w,h)
+    if not self.taskSwitcherOpen then return end
+    local list=self:workspace()
+    if #list==0 then return end
+
+    local t=self:theme()
+    local mw=math.min(math.max(26,math.floor(w*0.56)),math.max(20,w-4))
+    local visible=math.min(7,#list)
+    local mh=visible+3
+    local x=math.max(1,math.floor((w-mw)/2)+1)
+    local y=math.max(1,math.floor((h-mh)/2))
+
+    draw.fill(target,x,y,mw,mh,colors.gray)
+    draw.fill(target,x,y,mw,1,t.accent)
+    draw.text(target,x+2,y,'ALT + TAB',colors.white,t.accent,mw-4)
+    draw.text(target,x+2,y+1,'Applications ouvertes',t.muted,colors.gray,mw-4)
+
+    local first=math.max(1,#list-visible+1)
+    local row=y+2
+    for i=first,#list do
+      local win=list[i]
+      local app=shellui.find(win.id,self:isOperatorUI())
+      local active=win.id==self.app and not win.minimized
+      local bg=active and colors.black or colors.gray
+      local icon=app and (app.icon or '+') or '+'
+      local title=app and app.title or win.id
+      draw.fill(target,x+1,row,mw-2,1,bg)
+      draw.text(target,x+2,row,icon,active and t.accent or t.text,bg,2)
+      draw.text(target,x+5,row,title,active and colors.white or t.text,bg,math.max(1,mw-14))
+      if win.minimized then
+        draw.text(target,x+mw-6,row,'MIN',t.muted,bg,3)
+      elseif active then
+        draw.text(target,x+mw-6,row,'ACT',t.accent,bg,3)
+      end
+      row=row+1
+    end
   end
 
   function OS:toggleShowDesktop()
@@ -813,6 +852,9 @@ function M.install(OS,shellui,prefs)
     if self.contextMenu and not self.startMenuOpen and not self.quickPanelOpen then
       self:renderContextMenu(target,w,h)
     end
+    if self.taskSwitcherOpen and not self.startMenuOpen and not self.quickPanelOpen then
+      self:renderTaskSwitcher(target,w,h)
+    end
 
     for row=1,h do
       physical.setCursorPos(1,row)
@@ -887,7 +929,12 @@ function M.install(OS,shellui,prefs)
     if (event=='mouse_drag' or event=='mouse_up' or event=='mouse_scroll')
       and self.active.kind~='computer' then return false end
     if event=='key_up' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=false;return true end
-    if event=='key_up' and (a==keys.leftAlt or a==keys.rightAlt) then self.altHeld=false;return true end
+    if event=='key_up' and (a==keys.leftAlt or a==keys.rightAlt) then
+      self.altHeld=false
+      self.taskSwitcherOpen=false
+      self:render()
+      return true
+    end
     if event=='key' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=true;return true end
     if event=='key' and (a==keys.leftAlt or a==keys.rightAlt) then self.altHeld=true;return true end
     local note=self.noteDocument
