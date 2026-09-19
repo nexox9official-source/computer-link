@@ -291,7 +291,16 @@ function shellui.install(OS, prefs)
 
     if pages>1 then
       local pager=tostring(page+1).."/"..tostring(pages)
-      draw.text(target,x+w-#pager-2,contentTop,pager,t.muted,t.elevated,#pager)
+      local px=x+w-10
+      self:button(target,"launcher:prev",px,contentTop,3,"<",function()
+        local previous=(page-1+pages)%pages
+        self.launcherIndex=previous*capacity+1
+      end)
+      draw.text(target,px+3,contentTop,pager,t.muted,t.elevated,4)
+      self:button(target,"launcher:next",px+7,contentTop,3,">",function()
+        local nextPage=(page+1)%pages
+        self.launcherIndex=math.min(#apps,nextPage*capacity+1)
+      end)
     end
 
     for i=first,math.min(#apps,first+capacity-1) do
