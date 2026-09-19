@@ -103,6 +103,10 @@ Les surfaces grises ont ete fortement reduites dans l'ensemble du theme.
 Le catalogue officiel passe a huit utilitaires : taches, chronometre, convertisseur,
 peripheriques, calendrier, infos systeme, controle redstone local et GPS.
 
+Le Store sait aussi actualiser son catalogue officiel depuis GitHub sans mettre tout
+LinkOS a jour. Le JSON distant est valide avant utilisation (schema, identifiants,
+tailles, doublons) et le catalogue local reste disponible hors-ligne.
+
 Le catalogue est presente sous forme de lignes compactes avec :
 
 - nom ;
@@ -157,3 +161,29 @@ Les tests couvrent notamment :
 - notes ;
 - packages ;
 - interactions clavier/souris simulees.
+
+
+## Canal preview
+
+L'installateur, l'auto-update, le service de mise a jour et le Store utilisent tous
+le meme `source_ref.txt`. Une installation preview ne repasse donc pas
+silencieusement sur `main`.
+
+Test de la branche 0.15 :
+
+```
+wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/ui/linkos-v0.15-desktop-rebuild/install.lua client ui/linkos-v0.15-desktop-rebuild
+```
+
+Retour au stable depuis le meme installateur :
+
+```
+wget run https://raw.githubusercontent.com/nexox9official-source/computer-link/ui/linkos-v0.15-desktop-rebuild/install.lua client main
+```
+
+## Revue visuelle CI
+
+Le workflow GitHub Actions conserve pendant sept jours des frames de rendu texte
+pour le bureau, le launcher, le panneau Systeme, le Store, la Calculatrice, les
+Parametres et l'ecran de verrouillage. Cela permet de verifier la composition 51x19
+en plus des tests de syntaxe et d'interaction.
