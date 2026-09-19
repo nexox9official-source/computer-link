@@ -327,55 +327,79 @@ function M.install(OS,shellui,prefs)
   end
   function OS:renderStore(target,l)
     local t=self:theme()
-    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-16))
-    self:button(target,'store:refresh',math.max(2,l.w-12),1,11,'ACTUALISER',function()
+    local query=tostring(self.storeQuery or "")
+    local q=query:lower()
+
+    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-25))
+    self:button(target,'store:search',math.max(2,l.w-21),1,9,'CHERCHER',function()
+      self.storeQuery=self:prompt('Rechercher une app','Nom, ID ou description')
+    end)
+    self:button(target,'store:refresh',math.max(2,l.w-11),1,10,'ACTUALISER',function()
       local ok,result=packages.refreshCatalog()
       self:setNotice(ok and (tostring(result)..' apps chargees.') or tostring(result),
         ok and colors.lime or colors.orange)
     end)
-    draw.text(target,2,2,
-      packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
-      packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+
+    if query~='' then
+      draw.text(target,2,2,'Recherche: '..query,t.accent,t.bg,math.max(1,l.w-10))
+      self:button(target,'store:clear',math.max(2,l.w-7),2,6,'TOUS',function()
+        self.storeQuery=''
+      end)
+    else
+      draw.text(target,2,2,
+        packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
+        packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+    end
 
     local row=4
+    local shown=0
     for _,p in ipairs(packages.catalog) do
-      if row+3>l.h then break end
-      local installed=packages.installed(p.id)
-      draw.fill(target,2,row,l.w-3,3,colors.black)
-      draw.fill(target,2,row,2,3,installed and colors.lime or t.accent)
-      draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
-      draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
-      draw.text(target,math.max(5,l.w-10),row,installed and 'INSTALLE' or p.version,
-        installed and colors.lime or t.muted,colors.black,9)
+      local hay=(p.title..' '..p.id..' '..p.description):lower()
+      if q=='' or hay:find(q,1,true) then
+        shown=shown+1
+        local installed=packages.installed(p.id)
+        draw.fill(target,2,row,l.w-3,3,colors.black)
+        draw.fill(target,2,row,2,3,installed and colors.lime or t.accent)
+        draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
+        draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
+        draw.text(target,math.max(5,l.w-10),row,installed and 'INSTALLE' or p.version,
+          installed and colors.lime or t.muted,colors.black,9)
 
-      self:button(target,'store:install:'..p.id,5,row+2,installed and 10 or 9,
-        installed and 'REINSTALL' or 'INSTALLER',function()
-          if self:confirm('Installer '..p.title..' depuis le depot officiel ?') then
-            local ok,msg=packages.install(p.id)
-            self:setNotice(msg,ok and colors.lime or colors.red)
-          end
-        end)
-
-      if installed then
-        self:button(target,'store:open:'..p.id,16,row+2,7,'OUVRIR',function() self:openApp('pkg:'..p.id) end)
-        if l.w>=35 then
-          self:button(target,'store:remove:'..p.id,24,row+2,8,'RETIRER',function()
-            if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
-              local ok,err=packages.remove(p.id)
-              if ok then
-                for j=#self.windows,1,-1 do
-                  if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
-                end
-              end
-              self:setNotice(ok and 'Application retiree.' or tostring(err),ok and colors.orange or colors.red)
+        self:button(target,'store:install:'..p.id,5,row+2,installed and 10 or 9,
+          installed and 'REINSTALL' or 'INSTALLER',function()
+            if self:confirm('Installer '..p.title..' depuis le depot officiel ?') then
+              local ok,msg=packages.install(p.id)
+              self:setNotice(msg,ok and colors.lime or colors.red)
             end
           end)
+
+        if installed then
+          self:button(target,'store:open:'..p.id,16,row+2,7,'OUVRIR',function()
+            self:openApp('pkg:'..p.id)
+          end)
+          if l.w>=35 then
+            self:button(target,'store:remove:'..p.id,24,row+2,8,'RETIRER',function()
+              if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
+                local ok,err=packages.remove(p.id)
+                if ok then
+                  for j=#self.windows,1,-1 do
+                    if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
+                  end
+                end
+                self:setNotice(ok and 'Application retiree.' or tostring(err),
+                  ok and colors.orange or colors.red)
+              end
+            end)
+          end
         end
+        row=row+4
       end
-      row=row+4
+    end
+
+    if shown==0 then
+      draw.text(target,3,5,'Aucune application correspondante.',t.muted,t.bg,math.max(1,l.w-5))
     end
   end
-
   function OS:renderWindow(target,win,w,h)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
