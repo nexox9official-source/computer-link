@@ -43,6 +43,9 @@ Toutes les informations secondaires ont ete retirees de la barre principale.
 - Plus de gros footer PgUp/PgDn permanent.
 - Scrollbar verticale uniquement lorsqu'un contenu est plus grand que la fenetre.
 - Positions et dimensions toujours sauvegardees.
+- Double-clic sur la barre de titre : maximiser/restaurer.
+- Glisser la barre de titre en haut : maximiser.
+- Glisser a gauche ou a droite : snap demi-ecran quand la resolution le permet.
 - Les nouvelles fenetres s'ouvrent en cascade.
 - Une fenetre maximisee utilise tout l'ecran sauf la barre des taches.
 - Le rendu reste compose hors ecran afin de limiter le scintillement.
@@ -68,6 +71,15 @@ Le panneau rapide n'affiche plus une longue barre permanente. Il regroupe :
 - affichage principal ;
 - heure ;
 - raccourcis Parametres et Bureau.
+
+## Applications integrees
+
+Les surfaces grises ont ete fortement reduites dans l'ensemble du theme.
+
+- Reseau affiche d'abord le statut, le PC, le MER et le modem ; protocole/version passent dans DETAILS.
+- Parametres est separe en STYLE / ECRANS / SYSTEME.
+- Securite devient une page de statut concise avec les actions de mot de passe et LinkSec si le poste est autorise.
+- Les autres applications conservent leurs fonctions existantes dans les nouvelles fenetres.
 
 ## Link Store
 
