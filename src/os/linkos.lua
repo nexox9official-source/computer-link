@@ -2686,71 +2686,77 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "ghost_devices" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:devices:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:devices:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Peripheriques connectes - clique pour controler", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Peripheriques",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique un appareil pour ses methodes",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostDevices == 0 then
-      draw.text(target, x, y, "Aucun peripherique detecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostDevices, math.max(1, l.h - y - 2)) do
-        local device = self.ghostDevices[i]
-        local line = tostring(device.name)
-          .. " [" .. table.concat(device.types or {}, ",") .. "]"
-          .. "  " .. tostring(#(device.methods or {})) .. " methodes"
-
-        draw.text(target, x, y, line, t.text, t.panel, w)
-
-        local deviceName = device.name
-        self:addButton("ghost:device:" .. tostring(deviceName), x, y, w, 1, function()
-          self:ghostOpenDevice(deviceName)
-          self:render()
-        end)
-
-        y = y + 1
-      end
+    if #self.ghostDevices==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun peripherique",
+        subtitle="Aucun appareil expose par la cible."})
+      return
     end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/3))
+    self.ghostDevicesOffset=self.ghostDevicesOffset or 0
+    local page=ccui.page(#self.ghostDevices,pageSize,self.ghostDevicesOffset)
+    self.ghostDevicesOffset=page.offset
+
+    for i=page.first,page.last do
+      local device=self.ghostDevices[i]
+      local by=y+(i-page.first)*3
+      local types=table.concat(device.types or {},",")
+      ccui.panel(target,x,by,w,3,t,{accent=t.accent,
+        title=tostring(device.name),
+        subtitle=(types~="" and types or "Peripherique").." / "
+          ..tostring(#(device.methods or {})).." methode(s)"})
+      local deviceName=device.name
+      self:addButton("ghost:device:"..tostring(deviceName),x,by,w,3,function()
+        self:ghostOpenDevice(deviceName);self:render()
+      end)
+    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
 
   if self.linksecView == "ghost_device" and self.ghostDevice then
-    draw.text(target, x, y, "< PERIPHERIQUES", t.accent, t.bg, w)
-    self:addButton("ghost:device:back", x, y, math.min(18, w), 1, function()
-      self.linksecView = "ghost_devices"
-      self:render()
+    ccui.button(target,x,y,15,"< PERIPHERIQUES",t,{compact=true})
+    self:addButton("ghost:device:back",x,y,15,1,function()
+      self.linksecView="ghost_devices";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y,
-      tostring(self.ghostDevice.name)
-        .. " [" .. table.concat(self.ghostDevice.types or {}, ",") .. "]",
-      colors.red, t.bg, w)
-    y = y + 2
+    local types=table.concat(self.ghostDevice.types or {},",")
+    ccui.panel(target,x,y,w,4,t,{accent=t.accent,title=tostring(self.ghostDevice.name),
+      subtitle=types~="" and types or "Peripherique"})
+    y=y+5
 
-    local methods = self.ghostDevice.methods or {}
-    local maxRows = math.max(1, l.h - y - 4)
+    local methods=self.ghostDevice.methods or {}
+    local pageSize=math.max(1,l.h-y-4)
+    self.ghostMethodOffset=self.ghostMethodOffset or 0
+    local page=ccui.page(#methods,pageSize,self.ghostMethodOffset)
+    self.ghostMethodOffset=page.offset
 
-    for i = 1, math.min(#methods, maxRows) do
-      local method = methods[i]
-      draw.text(target, x, y, tostring(method), t.text, t.panel, w)
-
-      local methodName = method
-      self:addButton("ghost:method:" .. tostring(methodName), x, y, w, 1, function()
-        self:ghostCallDevice(methodName)
-        self:render()
+    for i=page.first,page.last do
+      local method=methods[i]
+      local by=y+(i-page.first)
+      ccui.button(target,x,by,w-1,tostring(method),t,{compact=true})
+      local methodName=method
+      self:addButton("ghost:method:"..tostring(methodName),x,by,w-1,1,function()
+        self:ghostCallDevice(methodName);self:render()
       end)
-
-      y = y + 1
     end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,pageSize),page,t)
 
-    if self.ghostDeviceResult and y < l.h - 1 then
-      draw.text(target, x, y + 1, tostring(self.ghostDeviceResult), t.good, t.bg, w)
+    if self.ghostDeviceResult then
+      local ry=l.h-2
+      ccui.panel(target,x,ry,w,2,t,{accent=t.good,title="Resultat",
+        subtitle=tostring(self.ghostDeviceResult)})
     end
     return
   end
