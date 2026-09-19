@@ -449,36 +449,38 @@ end
 
 function LinkOS:renderChrome(target, l)
   local t = self:theme()
+  local operator = self:isOperatorUI()
+  local app = shellui.find(self.app, operator) or shellui.find("home", operator)
+  local appTitle = app and app.title or "Bureau"
+
   draw.clear(target, t.bg, t.text)
 
-  -- Barre systeme haute.
+  -- Top system bar: deliberately compact so the desktop keeps most of the
+  -- ComputerCraft screen. The interaction model is inspired by desktop OSes
+  -- such as LevelOS, but the implementation is native LinkOS.
   draw.fill(target, 1, 1, l.w, 2, colors.black)
-  draw.text(target, 2, 1, "LINK OS", t.accent, colors.black)
+  draw.text(target, 2, 1, "LINKOS", t.accent, colors.black)
 
-  local appTitle = "Bureau"
-  for _, app in ipairs(APPS) do
-    if app.id == self.app then appTitle = app.title break end
-  end
-  draw.text(target, 2, 2, appTitle .. "  |  PC #" .. os.getComputerID(), t.muted, colors.black,
-    math.max(1, l.w - 20))
-
-  local status = self.service.online and "MER OK" or "MER OFF"
-  local statusColour = self.service.online and t.good or t.danger
-
-  if self:isOperatorUI() and l.w >= 38 then
-    draw.text(target, math.max(2, l.w - #status - 13), 1, "LINKSEC OP", colors.red, colors.black)
+  if operator and l.w >= 34 then
+    draw.text(target, 10, 1, "LINKSEC", colors.red, colors.black, 8)
   end
 
-  draw.text(target, math.max(2, l.w - #status - 1), 1, status, statusColour, colors.black)
+  local netText = self.service.online and "NET:ON" or "NET:OFF"
+  local netColour = self.service.online and t.good or t.danger
+  draw.text(target, math.max(2, l.w - #netText - 1), 1, netText, netColour, colors.black)
+
+  local label = os.getComputerLabel() or ("PC-" .. tostring(os.getComputerID()))
+  draw.text(target, 2, 2,
+    appTitle .. " | " .. label .. " (#" .. tostring(os.getComputerID()) .. ")",
+    t.muted, colors.black, math.max(1, l.w - 14))
 
   local clock = nowText()
   draw.text(target, math.max(2, l.w - #clock - 1), 2, clock, t.muted, colors.black)
 
-  -- Acces rapide mise a jour, disponible sur Computer et moniteur principal.
-  local updateLabel = self.service.updateAvailable and "MAJ!" or "MAJ"
+  -- Update indicator remains available from every app.
+  local updateLabel = self.service.updateAvailable and "UPDATE!" or "UPD"
   local updateW = #updateLabel + 2
-  local updateX = math.max(10, l.w - #clock - updateW - 4)
-
+  local updateX = math.max(8, l.w - #clock - updateW - 4)
   if updateX + updateW < l.w - #clock then
     local updateBg = self.service.updateAvailable and colors.yellow or colors.gray
     local updateFg = self.service.updateAvailable and colors.black or colors.white
@@ -488,101 +490,53 @@ function LinkOS:renderChrome(target, l)
     end)
   end
 
-  if l.mode == "compact" then
-    -- Navigation mobile/PC compacte.
-    local navY = l.h
-    draw.fill(target, 1, navY, l.w, 1, t.panel)
-
-    local compactApps = {
-      {"home", "H"},
-      {"messages", "M"},
-      {"network", "N"},
-      {"security", "S"}
-    }
-
-    if self:isOperatorUI() then
-      compactApps[#compactApps + 1] = {"hacker", "CMD"}
-    end
-
-    compactApps[#compactApps + 1] = {"settings", "SET"}
-
-    local slotW = math.max(3, math.floor(l.w / #compactApps))
-    for i, entry in ipairs(compactApps) do
-      local x = (i - 1) * slotW + 1
-      local bw = i == #compactApps and l.w - x + 1 or slotW
-      local selected = self.app == entry[1]
-      draw.button(target, x, navY, bw, entry[2], t.text, selected and t.accent or t.panel)
-      self:addButton("nav:" .. entry[1], x, navY, bw, 1, function()
-        self:openApp(entry[1])
-      end)
-    end
-    return
-  end
-
-  -- Fenetre centrale : sur grands moniteurs on garde un vrai espace "desktop".
-  if self.app ~= "home" then
+  if self.app ~= "home" and l.mode ~= "compact" then
     draw.box(target, 2, 3, l.w - 2, l.h - 6, colors.black, t.panel2, appTitle)
   end
 
-  -- Taskbar desktop. Parametres et LinkSec gardent une place reservee a droite.
-  local taskY = l.h - 1
-  draw.fill(target, 1, taskY, l.w, 2, t.panel)
+  local taskY = l.mode == "compact" and l.h or (l.h - 1)
+  local taskH = l.mode == "compact" and 1 or 2
+  draw.fill(target, 1, taskY, l.w, taskH, t.panel)
 
-  local settingsLabel = "SET"
-  local settingsW = #settingsLabel + 2
-  local settingsX = math.max(2, l.w - settingsW)
-
-  draw.button(
-    target,
-    settingsX,
-    taskY,
-    settingsW,
-    settingsLabel,
-    t.text,
-    self.app == "settings" and t.accent or colors.black
-  )
-  self:addButton("task:settings", settingsX, taskY, settingsW, 1, function()
-    self:openApp("settings")
+  local startW = l.mode == "compact" and 5 or 8
+  local startLabel = l.mode == "compact" and "MENU" or "START"
+  draw.button(target, 1, taskY, startW, startLabel, colors.white,
+    self.startMenuOpen and t.accent or colors.black)
+  self:addButton("shell:start", 1, taskY, startW, 1, function()
+    self:toggleStartMenu()
+    self:render()
   end)
 
-  local rightLimit = settingsX - 1
+  local quickLabel = l.mode == "compact" and "Q" or "SYS"
+  local quickW = #quickLabel + 2
+  local quickX = math.max(startW + 2, l.w - quickW + 1)
+  draw.button(target, quickX, taskY, quickW, quickLabel, colors.white,
+    self.quickPanelOpen and t.accent or colors.black)
+  self:addButton("shell:quick", quickX, taskY, quickW, 1, function()
+    self:toggleQuickPanel()
+    self:render()
+  end)
 
-  if self:isOperatorUI() then
-    local cmdLabel = "CMD"
-    local cmdW = #cmdLabel + 2
-    local cmdX = math.max(2, settingsX - cmdW - 1)
+  local rightLimit = quickX - 1
+  local x = startW + 2
+  local showLabels = prefs.get("taskbar_labels", false)
 
-    draw.button(
-      target,
-      cmdX,
-      taskY,
-      cmdW,
-      cmdLabel,
-      colors.white,
-      self.app == "hacker" and colors.red or colors.black
-    )
-    self:addButton("task:hacker", cmdX, taskY, cmdW, 1, function()
-      self:openApp("hacker")
-    end)
+  for _, pinned in ipairs(shellui.pinned(operator)) do
+    local labelText
+    if l.mode == "compact" then
+      labelText = pinned.icon or string.sub(pinned.short or pinned.title, 1, 2)
+    elseif showLabels then
+      labelText = pinned.short or pinned.title
+    else
+      labelText = pinned.icon or string.sub(pinned.short or pinned.title, 1, 2)
+    end
 
-    rightLimit = cmdX - 1
-  end
-
-  local x = 2
-  local pinned = {
-    {"home", "START"},
-    {"messages", "MSG"},
-    {"network", "NET"},
-    {"security", "SEC"},
-    {"files", "FILES"}
-  }
-
-  for _, entry in ipairs(pinned) do
-    local bw = #entry[2] + 2
-    if x + bw <= rightLimit then
-      local selected = self.app == entry[1]
-      draw.button(target, x, taskY, bw, entry[2], t.text, selected and t.accent or colors.black)
-      local appId = entry[1]
+    local bw = math.max(3, #labelText + 2)
+    if x + bw - 1 < rightLimit then
+      local selected = self.app == pinned.id
+      local bg = selected and (pinned.operator and colors.red or t.accent) or colors.black
+      draw.button(target, x, taskY, bw, labelText, colors.white, bg)
+      local appId = pinned.id
       self:addButton("task:" .. appId, x, taskY, bw, 1, function()
         self:openApp(appId)
       end)
@@ -590,14 +544,131 @@ function LinkOS:renderChrome(target, l)
     end
   end
 
-  local unread = self.service.unread or 0
-  if unread > 0 then
-    local txt = "MSG:" .. unread
-    draw.text(target, 2, taskY + 1, txt, t.warn, t.panel, math.max(1, rightLimit - 2))
+  if taskH >= 2 then
+    local unread = tonumber(self.service.unread) or 0
+    local second = unread > 0
+      and ("Messages: " .. tostring(unread))
+      or ("Libre: " .. humanBytes(fs.getFreeSpace("/")))
+    draw.text(target, 2, taskY + 1, second,
+      unread > 0 and t.warn or t.muted, t.panel, math.max(1, l.w - 14))
+    draw.text(target, math.max(2, l.w - #config.VERSION - 1), taskY + 1,
+      config.VERSION, t.muted, t.panel)
+  end
+end
+
+function LinkOS:renderStartMenu(target, l)
+  if not self.startMenuOpen then return end
+
+  local t = self:theme()
+  local operator = self:isOperatorUI()
+  local apps = shellui.apps(operator)
+  local x, y, w, h = shellui.startMenuRect(l)
+
+  draw.box(target, x, y, w, h, colors.gray, colors.white, " LINKOS ")
+  draw.text(target, x + 2, y + 1,
+    os.getComputerLabel() or ("PC #" .. os.getComputerID()),
+    t.accent, colors.gray, math.max(1, w - 4))
+
+  local appTop = y + 3
+  local footerRows = h >= 12 and 3 or 2
+  local usable = math.max(1, h - footerRows - 4)
+  local cols = w >= 34 and 2 or 1
+  local gap = 1
+  local cellW = math.floor((w - 3 - (cols - 1) * gap) / cols)
+
+  for i, app in ipairs(apps) do
+    local col = (i - 1) % cols
+    local row = math.floor((i - 1) / cols)
+    if row < usable then
+      local bx = x + 2 + col * (cellW + gap)
+      local by = appTop + row
+      local label = tostring(app.icon or "") .. " " .. tostring(app.title)
+      local selected = self.app == app.id
+      local bg = selected and (app.operator and colors.red or t.accent) or colors.black
+      draw.text(target, bx, by, string.rep(" ", cellW), colors.white, bg, cellW)
+      draw.text(target, bx + 1, by, label, colors.white, bg, math.max(1, cellW - 2))
+      local appId = app.id
+      self:addButton("start:" .. appId, bx, by, cellW, 1, function()
+        self:openApp(appId)
+      end)
+    end
   end
 
-  draw.text(target, math.max(2, l.w - #config.VERSION - 1), taskY + 1,
-    config.VERSION, t.muted, t.panel)
+  local fy = y + h - 2
+
+  local setW = math.min(11, math.max(7, math.floor((w - 4) / 3)))
+  draw.button(target, x + 2, fy, setW, "SETTINGS", colors.white, colors.black)
+  self:addButton("start:settings", x + 2, fy, setW, 1, function()
+    self:openApp("settings")
+  end)
+
+  local lockX = x + 3 + setW
+  if security.enabled() and lockX + 7 < x + w then
+    draw.button(target, lockX, fy, 7, "LOCK", colors.white, colors.black)
+    self:addButton("start:lock", lockX, fy, 7, 1, function()
+      self.startMenuOpen = false
+      self:lockSession()
+    end)
+  end
+
+  local powerW = 7
+  local powerX = x + w - powerW - 1
+  draw.button(target, powerX, fy, powerW, "POWER", colors.white, colors.red)
+  self:addButton("start:power", powerX, fy, powerW, 1, function()
+    if self:confirm("Redemarrer ce PC ?") then
+      os.reboot()
+    end
+  end)
+end
+
+function LinkOS:renderQuickPanel(target, l)
+  if not self.quickPanelOpen then return end
+
+  local t = self:theme()
+  local x, y, w, h = shellui.quickPanelRect(l)
+  draw.box(target, x, y, w, h, colors.gray, colors.white, " SYSTEME ")
+
+  local row = y + 2
+  local function line(label, value, colour)
+    if row >= y + h - 2 then return end
+    draw.text(target, x + 2, row, label, t.muted, colors.gray, math.max(1, w - 4))
+    local valueText = tostring(value or "-")
+    draw.text(target, math.max(x + 2, x + w - #valueText - 2), row,
+      valueText, colour or colors.white, colors.gray, math.max(1, w - 4))
+    row = row + 1
+  end
+
+  line("AstralNet", self.service.online and "ONLINE" or "OFFLINE",
+    self.service.online and t.good or t.danger)
+  line("Securite", security.enabled() and "VERROUILLEE" or "STANDARD",
+    security.enabled() and t.good or t.warn)
+  line("Stockage", humanBytes(fs.getFreeSpace("/")), colors.white)
+  line("Affichage", self.active and self.active.label or "-", colors.white)
+
+  local by = y + h - 2
+  local bw = math.min(8, math.max(5, math.floor((w - 4) / 3)))
+
+  draw.button(target, x + 2, by, bw, "UPDATE", colors.white,
+    self.service.updateAvailable and colors.yellow or colors.black)
+  self:addButton("quickpanel:update", x + 2, by, bw, 1, function()
+    self:runUpdateAction()
+  end)
+
+  if security.enabled() and w >= 23 then
+    draw.button(target, x + 3 + bw, by, bw, "LOCK", colors.white, colors.black)
+    self:addButton("quickpanel:lock", x + 3 + bw, by, bw, 1, function()
+      self.quickPanelOpen = false
+      self:lockSession()
+    end)
+  end
+end
+
+function LinkOS:renderShellOverlays(target, l)
+  if self.startMenuOpen then
+    self:renderStartMenu(target, l)
+  elseif self.quickPanelOpen then
+    self:renderQuickPanel(target, l)
+  end
 end
 
 function LinkOS:renderNotice(target, l)
