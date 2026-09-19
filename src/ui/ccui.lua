@@ -117,6 +117,42 @@ function C.scrollbar(target,x,y,h,page,theme)
   draw.fill(target,x,thumbY,1,thumbH,theme.accent)
 end
 
+function C.modal(target,title,subtitle,theme,opts)
+  opts=opts or {}
+  local sw,sh=target.getSize()
+  local w=math.min(opts.w or math.max(28,math.floor(sw*0.70)),math.max(18,sw-2))
+  local h=math.min(opts.h or 8,math.max(6,sh-2))
+  local x=math.max(1,math.floor((sw-w)/2)+1)
+  local y=math.max(1,math.floor((sh-h)/2)+1)
+
+  -- Opaque shadow works better than fake transparency on CC terminals.
+  if x+w<=sw and y+h<=sh then
+    draw.fill(target,x+1,y+1,w,h,theme.surface2)
+  end
+  draw.fill(target,x,y,w,h,theme.elevated or theme.surface)
+  draw.fill(target,x,y,1,h,opts.accent or theme.accent)
+  draw.text(target,x+2,y,tostring(title or "LinkOS"),theme.text,
+    theme.elevated or theme.surface,math.max(1,w-3))
+  if subtitle and h>=3 then
+    draw.text(target,x+2,y+1,tostring(subtitle),theme.muted,
+      theme.elevated or theme.surface,math.max(1,w-3))
+  end
+  return {x=x,y=y,w=w,h=h}
+end
+
+function C.inputField(target,x,y,w,value,theme,opts)
+  opts=opts or {}
+  local bg=opts.bg or theme.surface2
+  local text=tostring(value or "")
+  local prefix=opts.prefix or "> "
+  local available=math.max(1,w-#prefix-1)
+  if #text>available then text=text:sub(#text-available+1) end
+  draw.fill(target,x,y,w,1,bg)
+  draw.text(target,x+1,y,prefix,theme.accent,bg,math.min(#prefix,w-1))
+  draw.text(target,x+1+#prefix,y,text,theme.text,bg,available)
+  return {x=x,y=y,w=w,h=1,cursorX=math.min(x+w-1,x+1+#prefix+#text)}
+end
+
 function C.breadcrumb(target,x,y,w,parts,theme)
   draw.fill(target,x,y,w,1,theme.surface)
   local cursor=x+1

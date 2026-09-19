@@ -341,33 +341,42 @@ function shellui.install(OS, prefs)
     self.buttons={}
 
     draw.fill(target,x,y,w,h,t.elevated)
-    draw.fill(target,x,y,w,1,t.surface)
+    draw.fill(target,x,y,w,2,t.surface)
     draw.text(target,x+2,y,"Systeme",t.text,t.surface,w-4)
+    draw.text(target,x+2,y+1,"Etat du PC",t.muted,t.surface,w-4)
 
-    local row=y+2
-    local function line(label,value,colour)
-      draw.text(target,x+2,row,label,t.muted,t.elevated,math.max(1,w-14))
-      local v=tostring(value)
-      draw.text(target,math.max(x+12,x+w-#v-2),row,v,colour or t.text,t.elevated,#v)
+    local row=y+3
+    local function status(label,value,colour)
+      if row+1>=y+h-2 then return end
+      ccui.panel(target,x+1,row,w-2,2,t,{accent=colour or t.accent,title=label,subtitle=tostring(value)})
       row=row+2
     end
 
-    line("AstralNet",self.service.online and "Connecte" or "Hors-ligne",
+    status("AstralNet",self.service.online and "Connecte" or "Hors-ligne",
       self.service.online and t.good or t.danger)
-    line("Messages",tostring(self.service.unread or 0),
-      (self.service.unread or 0)>0 and t.warn or t.text)
-    line("Ecran",self.active and self.active.label or "-",t.text)
+    status("Messages",tostring(self.service.unread or 0).." non lu(s)",
+      (self.service.unread or 0)>0 and t.warn or t.accent)
+    if row+1<y+h-2 then
+      status("Ecran",self.active and self.active.label or "-",t.accent)
+    end
 
     local footer=y+h-2
     draw.fill(target,x,footer,w,2,t.surface)
-    self:button(target,"quick:settings",x+2,footer,9,"REGLAGES",function() self:openApp("settings") end)
+    ccui.button(target,x+1,footer,9,"REGLAGES",t,{compact=true})
+    self:addButton("quick:settings",x+1,footer,9,1,function() self:openApp("settings") end)
+
+    local cursor=x+11
     if self.securityEnabled and self:securityEnabled() and w>=28 then
-      self:button(target,"quick:lock",x+12,footer,7,"LOCK",function()
+      ccui.button(target,cursor,footer,7,"LOCK",t,{compact=true})
+      self:addButton("quick:lock",cursor,footer,7,1,function()
         self.quickPanelOpen=false
         self:lockSession()
       end)
+      cursor=cursor+8
     end
-    self:button(target,"quick:desktop",x+w-9,footer,7,"BUREAU",function() self:openApp("home") end)
+
+    ccui.button(target,x+w-8,footer,7,"BUREAU",t,{compact=true})
+    self:addButton("quick:desktop",x+w-8,footer,7,1,function() self:openApp("home") end)
   end
 
   function OS:renderShellOverlays(target,l)

@@ -56,13 +56,19 @@ jobs:
         run: |
           set -euo pipefail
           for frame in \
+            linkos-desktop.frame \
             linkos-launcher.frame \
+            linkos-system-panel.frame \
+            linkos-context.frame \
+            linkos-lock.frame \
             linkos-store.frame \
             linkos-settings.frame \
             linkos-files.frame \
             linkos-messages.frame \
             linkos-calculator.frame \
+            linkos-dialog.frame \
             linkos-linksec.frame \
+            linkos-malcraft-target.frame \
             linkos-task-switcher.frame; do
             path="test-output/$frame"
             [ -f "$path" ] || continue

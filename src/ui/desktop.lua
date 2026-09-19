@@ -28,6 +28,9 @@ function M.install(OS,shellui,prefs)
     return apps
   end
   local originalKey=OS.handleKey
+  local originalPrompt=OS.prompt
+  local originalPromptSecret=OS.promptSecret
+  local originalConfirm=OS.confirm
   local renderers={messages='renderMessages',contacts='renderContacts',network='renderNetwork',
     files='renderFiles',security='renderSecurity',settings='renderSettings',about='renderAbout',
     notes='renderNotes',calculator='renderCalculator',terminal='renderTerminal',hacker='renderHacker',store='renderStore'}
@@ -314,11 +317,15 @@ function M.install(OS,shellui,prefs)
 
   function OS:closeWindow(win)
     if win.id=='notes' and self.noteDocument and self.noteDocument.dirty then
-      local answer=self:prompt('Document modifie','OUI: sauver / NON: abandonner / Echap: annuler'):lower()
-      if answer=='oui' then
+      local answer=self:choiceDialog('Document modifie','Que veux-tu faire ?',{
+        {label='ANNULER',value='cancel'},
+        {label='ABANDONNER',value='discard',danger=true},
+        {label='SAUVER',value='save'}
+      },1)
+      if answer=='save' then
         self:saveNote()
         if self.noteDocument.dirty then return end
-      elseif answer~='non' then
+      elseif answer~='discard' then
         return
       end
     end
@@ -443,15 +450,15 @@ function M.install(OS,shellui,prefs)
     local menu=self.contextMenu
     if not menu then return end
     local t=self:theme()
-    local mw=20
     local options={}
 
     local function add(label,action,danger)
       options[#options+1]={label=label,action=action,danger=danger}
     end
 
+    local app=nil
     if menu.targetId then
-      local app=shellui.find(menu.targetId,self:isOperatorUI())
+      app=shellui.find(menu.targetId,self:isOperatorUI())
       add("Ouvrir",function() self:openApp(menu.targetId) end)
       add(self:isTaskbarPinned(menu.targetId) and "Desepingler" or "Epingler",function()
         self:toggleTaskbarPin(menu.targetId)
@@ -459,7 +466,9 @@ function M.install(OS,shellui,prefs)
       add(self:isDesktopShortcut(menu.targetId) and "Retirer bureau" or "Ajouter bureau",function()
         self:toggleDesktopShortcut(menu.targetId)
       end)
-      if app and app.id~="store" then add("Voir dans Apps",function() self:openApp("store") end) end
+      if app and app.id~="store" then
+        add("Voir dans Apps",function() self:openApp("store") end)
+      end
       add("Parametres",function() self:openApp("settings") end)
     else
       add("Actualiser",function() self:render() end)
@@ -468,18 +477,32 @@ function M.install(OS,shellui,prefs)
       add("Personnaliser",function() self:openApp("settings") end)
     end
 
-    local mh=#options+2
+    local longest=menu.targetId and #(app and app.title or "Application") or #"Bureau"
+    for _,item in ipairs(options) do longest=math.max(longest,#item.label) end
+    local mw=math.min(math.max(18,longest+4),math.max(18,w-2))
+    local mh=#options+3
     local mx=clamp(menu.x,1,math.max(1,w-mw+1))
     local my=clamp(menu.y,1,math.max(1,h-mh))
     self.shellOverlay={x=mx,y=my,w=mw,h=mh}
 
     draw.fill(target,mx,my,mw,mh,t.elevated)
-    draw.text(target,mx+2,my,menu.targetId and "Application" or "Bureau",t.muted,t.elevated,mw-4)
+    local headerBg=t.surface
+    draw.fill(target,mx,my,mw,2,headerBg)
+
+    if menu.targetId then
+      fluent.drawMiniIcon(target,menu.targetId,mx+1,my,false,headerBg)
+      draw.text(target,mx+5,my,app and app.title or "Application",t.text,headerBg,math.max(1,mw-6))
+      draw.text(target,mx+5,my+1,"Application",t.muted,headerBg,math.max(1,mw-6))
+    else
+      draw.text(target,mx+2,my,"Bureau",t.text,headerBg,mw-4)
+      draw.text(target,mx+2,my+1,"Actions rapides",t.muted,headerBg,mw-4)
+    end
+
     for i,item in ipairs(options) do
-      local by=my+i
-      local bg=t.surface2
-      draw.fill(target,mx+1,by,mw-2,1,bg)
-      draw.text(target,mx+2,by,item.label,item.danger and t.danger or t.text,bg,mw-4)
+      local by=my+1+i
+      ccui.button(target,mx+1,by,mw-2,item.label,t,{
+        danger=item.danger==true,compact=true
+      })
       self:addButton("context:"..i,mx+1,by,mw-2,1,function()
         self.contextMenu=nil
         item.action()
@@ -516,7 +539,12 @@ function M.install(OS,shellui,prefs)
       if selected then draw.fill(target,x,y,tileW,tileH,tileBg) end
       local iconX=x+math.max(0,math.floor((tileW-3)/2))
       fluent.drawIcon(target,apps[i].id,iconX,y,selected,tileBg)
-      draw.text(target,x,y+4,apps[i].title,t.text,tileBg,tileW)
+      local desktopLabels={store="Apps",settings="Reglages",calculator="Calcul",terminal="Terminal"}
+      local label=apps[i].title
+      if #label>tileW then
+        label=desktopLabels[apps[i].id] or apps[i].short or label
+      end
+      draw.text(target,x,y+4,label,t.text,tileBg,tileW)
 
       self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,index=i,id=apps[i].id}
     end
@@ -833,7 +861,7 @@ function M.install(OS,shellui,prefs)
 
     local taskX=startW+1
     local available=math.max(0,trayX-taskX-2)
-    local taskW=6
+    local taskW=w>=51 and 7 or 6
     local maxTasks=math.max(0,math.floor(available/taskW))
     local visible=math.min(#taskItems,maxTasks)
 
@@ -841,12 +869,18 @@ function M.install(OS,shellui,prefs)
       local item=taskItems[i]
       local app=item.app
       local active=item.win and item.win.id==self.app and not item.win.minimized
+      local minimized=item.win and item.win.minimized
       local bg=active and t.selection or t.taskbar
       local label=(app and (app.short or app.title) or item.id):upper()
-      label=label:sub(1,math.max(1,taskW-1))
+      local glyph=fluent.glyph(item.id)
+      local iconColour=fluent.iconColour(item.id,t.accent)
+      local labelW=math.max(1,taskW-3)
 
       draw.fill(target,taskX,h,taskW,1,bg)
-      draw.text(target,taskX+1,h,label,active and t.text or t.muted,bg,taskW-1)
+      draw.text(target,taskX+1,h,glyph,minimized and t.muted or iconColour,bg,1)
+      draw.text(target,taskX+3,h,label:sub(1,labelW),
+        active and t.text or t.muted,bg,labelW)
+
       self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
         local win=openById[item.id]
         if win then
@@ -875,14 +909,26 @@ function M.install(OS,shellui,prefs)
 
     if self.notice then
       local message=tostring(self.notice)
-      local nw=math.min(math.max(22,math.floor(w*0.46)),math.max(18,w-2))
+      local nw=math.min(math.max(24,math.floor(w*0.50)),math.max(20,w-2))
+      local lines=draw.wrap(message,math.max(1,nw-4))
+      local toastH=math.min(4,2+math.min(2,#lines))
       local nx=math.max(1,w-nw)
-      local ny=math.max(1,h-4)
-      draw.fill(target,nx,ny,nw,3,t.elevated)
-      draw.fill(target,nx,ny,1,3,self.noticeColour or t.accent)
-      draw.text(target,nx+2,ny,"LinkOS",t.text,t.elevated,math.max(1,nw-3))
-      draw.text(target,nx+2,ny+1,message,self.noticeColour or t.text,t.elevated,math.max(1,nw-3))
-      draw.text(target,nx+2,ny+2,"Notification",t.muted,t.elevated,math.max(1,nw-3))
+      local ny=math.max(1,h-toastH-1)
+
+      draw.fill(target,nx,ny,nw,toastH,t.elevated)
+      draw.fill(target,nx,ny,1,toastH,self.noticeColour or t.accent)
+      draw.text(target,nx+2,ny,"LinkOS",t.text,t.elevated,math.max(1,nw-6))
+      draw.text(target,nx+nw-2,ny,"X",t.muted,t.elevated,1)
+
+      for i=1,math.min(2,#lines) do
+        draw.text(target,nx+2,ny+i,lines[i],
+          self.noticeColour or t.text,t.elevated,math.max(1,nw-4))
+      end
+
+      self:addButton("notice:dismiss",nx,ny,nw,toastH,function()
+        self.notice=nil
+        self.noticeExpires=nil
+      end)
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
@@ -1067,44 +1113,17 @@ function M.install(OS,shellui,prefs)
     return false
   end
 
-  function OS:prompt(title,hint,secret)
-    local value=''
-    self.dialogOpen=true
-    local target=self.active.target
-    local w,h=target.getSize()
-    local dw=math.min(w-2,46);local dh=math.min(h-2,8)
-    local x=math.max(1,math.floor((w-dw)/2));local y=math.max(1,math.floor((h-dh)/2))
-    local result
-    while result==nil do
-      draw.fill(target,x,y,dw,dh,colors.gray)
-      draw.fill(target,x,y,dw,1,colors.cyan)
-      draw.text(target,x+1,y,title,colors.white,colors.cyan,dw-2)
-      draw.text(target,x+1,y+2,hint or 'Saisir au clavier du Computer',colors.lightGray,colors.gray,dw-2)
-      local text=secret and string.rep('*',#value) or value
-      draw.fill(target,x+1,y+3,dw-2,1,colors.black)
-      draw.text(target,x+1,y+3,text:sub(-math.max(1,dw-3))..'_',colors.white,colors.black,dw-2)
-      local by=y+dh-2
-      draw.button(target,x+1,by,8,'VALIDER',colors.white,colors.cyan)
-      draw.button(target,x+dw-10,by,9,'ANNULER',colors.white,colors.black)
-      local event,a,b,c=os.pullEventRaw()
-      if event=='key_up' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=false
-      elseif event=='char' or event=='paste' then value=(value..tostring(a):gsub('[\r\n]',' ')):sub(1,500)
-      elseif event=='key' then
-        if a==keys.enter then result=value
-        elseif a==keys.escape then result=''
-        elseif a==keys.backspace then value=value:sub(1,-2) end
-      elseif (event=='mouse_click' and self.active.kind=='computer')
-        or (event=='monitor_touch' and a==self.active.name) then
-        if c==by and b>=x+1 and b<x+9 then result=value
-        elseif c==by and b>=x+dw-10 and b<x+dw-1 then result='' end
-      elseif event=='monitor_resize' or event=='term_resize' or event=='peripheral_detach'
-        or event=='terminate' or event=='linkos_hacked_state' then result='' end
-    end
-    self.dialogOpen=false
-    self:refreshDisplays();self:render()
-    return result
+  function OS:prompt(title,hint)
+    return originalPrompt(self,title,hint)
   end
-  function OS:promptSecret(title,hint) return self:prompt(title,hint,true) end
+
+  function OS:promptSecret(title,hint)
+    return originalPromptSecret(self,title,hint)
+  end
+
+  function OS:confirm(title)
+    return originalConfirm(self,title)
+  end
 
   function OS:loadNote(path)
     local text=''

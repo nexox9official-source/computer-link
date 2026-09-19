@@ -149,6 +149,65 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   assert(o.app~=beforeAlt or #o.windows==1,'Alt+Tab did not cycle the workspace')
   queue={{'char','O'},{'char','K'},{'key',keys.enter}}
   assert(o:prompt('Test','Integrated dialog')=='OK' and not o.dialogOpen)
+
+  queue={{'key',keys.escape}}
+  assert(o:prompt('Test','Cancel dialog')==nil and not o.dialogOpen)
+
+  queue={{'key',keys.right},{'key',keys.enter}}
+  assert(o:confirm('Confirm dialog')==true and not o.dialogOpen)
+
+  queue={{'key',keys.enter}}
+  assert(o:confirm('Cancel confirm')==false and not o.dialogOpen)
+
+  queue={{'key',keys.right},{'key',keys.right},{'key',keys.enter}}
+  assert(o:choiceDialog('Three choices','Keyboard navigation',{
+    {label='ONE',value='one'},{label='TWO',value='two'},{label='THREE',value='three'}
+  },1)=='three')
+
+  if size[1]>=51 then
+    local oldList=fs.list
+    for i=1,14 do
+      disk[string.format('/user/file%02d.txt',i)]='x'
+    end
+    fs.list=function(path)
+      local prefix=tostring(path):gsub("/+$","").."/"
+      local out,seen={},{}
+      for p in pairs(disk) do
+        if p:sub(1,#prefix)==prefix then
+          local rest=p:sub(#prefix+1)
+          local name=rest:match("^([^/]+)")
+          if name and not seen[name] then
+            seen[name]=true
+            out[#out+1]=name
+          end
+        end
+      end
+      table.sort(out)
+      return out
+    end
+
+    o.filePath='/user'
+    o.fileOffset=0
+    o:openApp('files')
+    o:render()
+
+    local nextButton=nil
+    for _,button in ipairs(o.buttons) do
+      if button.id=='file:next' then
+        nextButton=button
+        break
+      end
+    end
+    assert(nextButton,'Explorer next-page button missing for long folder')
+    nextButton.callback()
+    assert(o.fileOffset>0,'Explorer pagination did not advance')
+
+    fs.list=oldList
+    for i=1,14 do
+      disk[string.format('/user/file%02d.txt',i)]=nil
+    end
+  end
+
   for _,app in ipairs({'network','messages','contacts','files','security','settings','calculator','terminal','about'}) do
     o:openApp(app)
     -- All actual built-in renderers run in the mock terminal.
@@ -159,6 +218,19 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   if size[1]==51 then
     o.notice=nil;o.noticeExpires=nil
     o:openApp('home');o:render();native.dump('/tmp/linkos-desktop.frame')
+
+    local oldPullEventRaw=os.pullEventRaw
+    local dialogCaptured=false
+    os.pullEventRaw=function()
+      if not dialogCaptured then
+        native.dump('/tmp/linkos-dialog.frame')
+        dialogCaptured=true
+      end
+      return oldPullEventRaw()
+    end
+    queue={{'key',keys.escape}}
+    o:prompt('Renommer','Nouveau nom')
+    os.pullEventRaw=oldPullEventRaw
 
     o.launcherQuery='';o.launcherIndex=1;o.startAllApps=false
     o.startMenuOpen=true;o:render();native.dump('/tmp/linkos-launcher.frame')
@@ -186,6 +258,24 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     local originalOperator=o.isOperatorUI
     o.isOperatorUI=function() return true end
     captureApp('hacker','/tmp/linkos-linksec.frame')
+
+    o.malcraftTarget=77
+    o.hackerConsole.target=77
+    o.ghostState={
+      state={
+        infected=true,online=true,spread=true,
+        source='bridge',dimension='minecraft:overworld',x=120,y=64,z=-42
+      },
+      agent_status={linkos_installed=false,source='bridge'}
+    }
+    o.linksecView='ghost'
+    o:render()
+    native.dump('/tmp/linkos-malcraft-target.frame')
+
+    o.linksecView='home'
+    o.malcraftTarget=nil
+    o.hackerConsole.target=nil
+    o.ghostState=nil
     o.isOperatorUI=originalOperator
 
     o.windows={};o.app='home'

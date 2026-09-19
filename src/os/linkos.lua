@@ -223,48 +223,75 @@ function LinkOS:cycleApp(delta)
 end
 
 function LinkOS:inputDialog(title,hint,secret)
-  local active=self.active
   local t=self:theme()
+  local active=self.active
+  if not active or not active.target then return nil end
 
-  if active and active.kind=="monitor" then
-    local target=active.target
-    local w,h=target.getSize()
-    fluent.card(target,2,math.max(2,h-5),math.max(1,w-3),4,{
-      bg=t.surface,accent=t.accent,title=secret and "Saisie securisee" or "Saisie",
-      subtitle="Utilise le clavier du Computer.",muted=t.muted
-    })
+  self.dialogOpen=true
+  local value=""
+  local cancelled=false
+  local maxLength=128
+
+  local function drawOn(target,keyboardSource)
+    fluent.applyPalette(target)
+    local box=ccui.modal(target,
+      tostring(title or (secret and "Mot de passe" or "Saisie")),
+      tostring(hint or ""),
+      t,{w=math.min(54,math.max(32,select(1,target.getSize())-2)),h=8,
+        accent=secret and t.warn or t.accent})
+
+    local shown=secret and string.rep("*",#value) or value
+    local field=ccui.inputField(target,box.x+2,box.y+3,box.w-4,shown,t,{prefix="> "})
+    draw.text(target,box.x+2,box.y+5,
+      keyboardSource and "Entree: valider  Echap: annuler" or "Saisie depuis le Computer",
+      t.muted,t.elevated,math.max(1,box.w-4))
+
+    if target.setCursorPos then pcall(target.setCursorPos,field.cursorX,field.y) end
+    if target.setCursorBlink then pcall(target.setCursorBlink,keyboardSource==true) end
   end
 
-  local previous=term.current()
-  term.redirect(self.native)
-  fluent.applyPalette(self.native)
+  local function redraw()
+    drawOn(active.target,active.kind=="computer")
+    if active.kind=="monitor" and self.native and self.native~=active.target then
+      drawOn(self.native,true)
+    end
+  end
 
-  local w,h=self.native.getSize()
-  draw.clear(self.native,t.desktop,t.text)
-  local cardW=math.min(math.max(24,math.floor(w*0.72)),math.max(20,w-4))
-  local cardH=math.min(9,math.max(6,h-4))
-  local x=math.max(1,math.floor((w-cardW)/2)+1)
-  local y=math.max(2,math.floor((h-cardH)/2)+1)
+  redraw()
 
-  fluent.card(self.native,x,y,cardW,cardH,{
-    bg=t.surface,accent=secret and t.warn or t.accent,
-    title=tostring(title or (secret and "Mot de passe" or "Saisie")),
-    subtitle=tostring(hint or ""),muted=t.muted
-  })
+  while true do
+    local pullEvent=os.pullEvent or os.pullEventRaw
+    local event,a1=pullEvent()
+    if event=="char" then
+      if #value<maxLength then
+        value=value..tostring(a1)
+        redraw()
+      end
+    elseif event=="paste" then
+      local text=tostring(a1 or ""):gsub("[\r\n]"," ")
+      if #text>0 and #value<maxLength then
+        value=(value..text):sub(1,maxLength)
+        redraw()
+      end
+    elseif event=="key" then
+      if a1==keys.enter then
+        break
+      elseif a1==keys.escape then
+        cancelled=true
+        break
+      elseif a1==keys.backspace then
+        value=value:sub(1,-2)
+        redraw()
+      end
+    end
+  end
 
-  local inputY=math.min(y+cardH-2,h-1)
-  draw.fill(self.native,x+2,inputY,math.max(4,cardW-4),1,t.surface2)
-  draw.text(self.native,x+3,inputY,">",t.accent,t.surface2,1)
-
-  pcall(self.native.setCursorPos,x+5,inputY)
-  pcall(self.native.setBackgroundColor,t.surface2)
-  pcall(self.native.setTextColor,t.text)
-  pcall(self.native.setCursorBlink,true)
-  local value=secret and read("*") or read()
-  pcall(self.native.setCursorBlink,false)
-
-  term.redirect(previous)
+  if active.target.setCursorBlink then pcall(active.target.setCursorBlink,false) end
+  if self.native and self.native.setCursorBlink then pcall(self.native.setCursorBlink,false) end
+  self.dialogOpen=false
   self:render()
+
+  if cancelled then return nil end
   return value
 end
 
@@ -272,9 +299,96 @@ function LinkOS:prompt(title,hint)
   return self:inputDialog(title,hint,false)
 end
 
+function LinkOS:choiceDialog(title,subtitle,choices,defaultIndex)
+  local t=self:theme()
+  local active=self.active
+  if not active or not active.target then return nil end
+  if type(choices)~="table" or #choices==0 then return nil end
+
+  self.dialogOpen=true
+  local selected=math.max(1,math.min(#choices,tonumber(defaultIndex) or 1))
+  local regions={}
+
+  local function drawOn(target,keyboardSource)
+    fluent.applyPalette(target)
+    local sw=select(1,target.getSize())
+    local width=math.min(math.max(46,#choices*12+4),math.max(20,sw-2))
+    local box=ccui.modal(target,tostring(title or "Choisir"),
+      tostring(subtitle or ""),t,{w=width,h=8,accent=t.warn})
+
+    local available=box.w-4
+    local gap=1
+    local bw=math.max(7,math.floor((available-(#choices-1)*gap)/#choices))
+    local x=box.x+2
+    local out={}
+    for i,choice in ipairs(choices) do
+      local widthHere=(i==#choices) and (box.x+box.w-2-x) or bw
+      local danger=choice.danger==true
+      local primary=i==selected and not danger
+      ccui.button(target,x,box.y+4,widthHere,tostring(choice.label or choice.value or i),t,{
+        selected=i==selected,primary=primary,danger=danger and i==selected,compact=true
+      })
+      out[i]={x=x,y=box.y+4,w=widthHere,h=1}
+      x=x+widthHere+gap
+    end
+
+    draw.text(target,box.x+2,box.y+6,
+      keyboardSource and "Gauche/Droite + Entree  |  Echap" or "Choisis sur le Computer",
+      t.muted,t.elevated,math.max(1,box.w-4))
+    return out
+  end
+
+  local function redraw()
+    regions=drawOn(active.target,active.kind=="computer")
+    if active.kind=="monitor" and self.native and self.native~=active.target then
+      drawOn(self.native,true)
+    end
+  end
+
+  local function hit(px,py)
+    for i,r in ipairs(regions or {}) do
+      if px>=r.x and px<r.x+r.w and py>=r.y and py<r.y+r.h then return i end
+    end
+    return nil
+  end
+
+  redraw()
+  local result=nil
+  while true do
+    local pullEvent=os.pullEvent or os.pullEventRaw
+    local event,a1,a2,a3=pullEvent()
+    if event=="key" then
+      if a1==keys.left or a1==keys.up then
+        selected=((selected-2)%#choices)+1
+        redraw()
+      elseif a1==keys.right or a1==keys.down or a1==keys.tab then
+        selected=(selected%#choices)+1
+        redraw()
+      elseif a1==keys.enter then
+        result=choices[selected].value
+        break
+      elseif a1==keys.escape then
+        break
+      end
+    elseif event=="mouse_click" and active.kind=="computer" then
+      local i=hit(a2,a3)
+      if i then result=choices[i].value;break end
+    elseif event=="monitor_touch" and active.kind=="monitor" and tostring(a1)==tostring(active.name) then
+      local i=hit(a2,a3)
+      if i then result=choices[i].value;break end
+    end
+  end
+
+  self.dialogOpen=false
+  self:render()
+  return result
+end
+
 function LinkOS:confirm(title)
-  local answer=string.lower(self:inputDialog(title,"Tape OUI pour confirmer.",false) or "")
-  return answer=="oui" or answer=="o" or answer=="yes" or answer=="y"
+  return self:choiceDialog(title,"Confirmer cette action ?",{
+    {label="ANNULER",value=false},
+    {label="CONFIRMER",value=true}
+  },1)==true
 end
 
 function LinkOS:promptSecret(title,hint)
@@ -2004,129 +2118,110 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "malcraft_hub" then
-    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
-    self:addButton("malcraft:back", x, y, math.min(12, w), 1, function()
-      self.linksecView = "home"
+    ccui.button(target,x,y,10,"< LINKSEC",t,{compact=true})
+    self:addButton("malcraft:back",x,y,10,1,function()
+      self.linksecView="home"
       self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "MALCRAFT CONTROL CENTER", colors.red, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y,
-      tostring(#self.malcraftHosts) .. " infecte(s) | "
-        .. tostring(#(self.malcraftLiveHosts or {})) .. " charge(s) | "
-        .. tostring(#self.malcraftLocalDisks) .. " disque(s)",
-      t.muted, t.bg, w)
-    y = y + 2
-
-    local bw = math.min(18, math.max(11, math.floor((w - 2) / 2)))
+    ccui.panel(target,x,y,w,4,t,{accent=t.danger,title="Malcraft Control",
+      subtitle=tostring(#self.malcraftHosts).." infecte(s) / "
+        ..tostring(#(self.malcraftLiveHosts or {})).." charge(s) / "
+        ..tostring(#self.malcraftLocalDisks).." disque(s)"})
+    y=y+5
 
     if self.hackerConsole.target then
-      local currentId = tonumber(self.hackerConsole.target)
-      draw.button(target, x, y, bw, "CIBLE #" .. tostring(currentId), colors.white, t.panel)
-      self:addButton("malcraft:current", x, y, bw, 1, function()
+      local currentId=tonumber(self.hackerConsole.target)
+      ccui.panel(target,x,y,w,3,t,{accent=t.warn,
+        title="Cible actuelle: PC #"..tostring(currentId),
+        subtitle="Ouvre la fiche pour verifier ou controler."})
+      self:addButton("malcraft:current",x,y,w,3,function()
         self:malcraftSelectHost(currentId)
         self:render()
       end)
-
-      if w >= bw * 2 + 2 then
-        draw.text(target, x + bw + 2, y,
-          "Verifier / infecter / controler cette cible",
-          t.muted, t.bg, math.max(1, w - bw - 2))
-      end
-
-      y = y + 2
+      y=y+4
     end
 
-    draw.button(target, x, y, bw, "RESEAU INFECTE", colors.white, colors.red)
-    self:addButton("malcraft:hosts", x, y, bw, 1, function()
-      self:malcraftOpenHosts()
-      self:render()
+    local bw=math.max(11,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"RESEAU INFECTE",t,{danger=true,compact=true})
+    self:addButton("malcraft:hosts",x,y,bw,1,function()
+      self:malcraftOpenHosts();self:render()
     end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "PCS CHARGES", colors.white, t.panel)
-      self:addButton("malcraft:live", x + bw + 2, y, bw, 1, function()
-        self:malcraftOpenLiveHosts()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "DISQUES LOCAUX", colors.white, t.panel)
-    self:addButton("malcraft:localdisks", x, y, bw, 1, function()
-      self:malcraftOpenLocalDisks()
-      self:render()
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"PCS CHARGES",t,{compact=true})
+    self:addButton("malcraft:live",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:malcraftOpenLiveHosts();self:render()
     end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "CIBLE PAR ID", colors.white, t.panel)
-      self:addButton("malcraft:byid", x + bw + 2, y, bw, 1, function()
-        self:malcraftSelectById()
-        self:render()
-      end)
+    ccui.button(target,x,y,bw,"DISQUES",t,{compact=true})
+    self:addButton("malcraft:localdisks",x,y,bw,1,function()
+      self:malcraftOpenLocalDisks();self:render()
+    end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"CIBLE PAR ID",t,{compact=true})
+    self:addButton("malcraft:byid",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:malcraftSelectById();self:render()
+    end)
+    y=y+3
+
+    if y+4<l.h then
+      ccui.panel(target,x,y,w,5,t,{title="Propagation",
+        subtitle="Proximite + disques contamines + propagation cible."})
+      draw.text(target,x+2,y+2,"Operateur: immunise",t.good,t.surface,math.max(1,w-4))
+      draw.text(target,x+2,y+3,"Persistance: Bridge + ROM",t.text,t.surface,math.max(1,w-4))
     end
-
-    y = y + 2
-
-    draw.text(target, x, y, "Propagation automatique :", t.text, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- proximite courte portee", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- disque contamine branche sur un PC", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- PC infecte -> nouveaux disques inseres", t.good, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y, "- PC operateur immunise mais emetteur", t.good, t.bg, w)
     return
   end
 
   if self.linksecView == "malcraft_hosts" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("malcraft:hosts:back", x, y, math.min(14, w), 1, function()
-      self:malcraftOpenHub()
-      self:render()
+    ccui.button(target,x,y,11,"< MALCRAFT",t,{compact=true})
+    self:addButton("malcraft:hosts:back",x,y,11,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    y = y + 2
+    ccui.button(target,x+w-7,y,7,"MAJ",t,{compact=true})
+    self:addButton("malcraft:hosts:refresh",x+w-7,y,7,1,function()
+      self:malcraftOpenHosts();self:render()
+    end)
+    y=y+2
 
-    draw.text(target, x, y, "PC actuellement marques Malcraft", colors.red, t.bg, math.max(1,w-11))
-    if w>=24 then
-      self:button(target,"malcraft:hosts:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
-        self:malcraftOpenHosts()
-        self:render()
+    draw.text(target,x,y,"Reseau infecte",t.text,t.bg,w)
+    draw.text(target,x,y+1,tostring(#self.malcraftHosts).." cible(s) enregistree(s)",t.muted,t.bg,w)
+    y=y+3
+
+    if #self.malcraftHosts==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune cible",
+        subtitle="Aucun PC marque Malcraft."})
+      return
+    end
+
+    local pageSize=math.max(1,math.floor((l.h-y-2)/3))
+    self.malcraftHostsOffset=self.malcraftHostsOffset or 0
+    local page=ccui.page(#self.malcraftHosts,pageSize,self.malcraftHostsOffset)
+    self.malcraftHostsOffset=page.offset
+
+    for i=page.first,page.last do
+      local item=self.malcraftHosts[i]
+      local by=y+(i-page.first)*3
+      local lastSeen=tonumber(item.last_seen) or 0
+      local online=item.online==true
+        or (item.online==nil and lastSeen>0 and (epochSeconds()-lastSeen)<=25)
+      local id=item.computer_id
+      local label=tostring(item.label or "")
+      if label=="" then label="Sans label" end
+      local source=tostring(item.source or item.last_source or "-")
+      local accent=online and (item.spread and t.danger or t.good) or t.muted
+
+      ccui.panel(target,x,by,w,3,t,{accent=accent,
+        title="PC #"..tostring(id).."  "..label,
+        subtitle=(online and "ONLINE" or "OFFLINE")
+          ..(item.spread and " / PROPAGATION" or "")
+          .." / "..source})
+      self:addButton("malcraft:host:"..tostring(id),x,by,w,3,function()
+        self:malcraftSelectHost(id);self:render()
       end)
     end
-    y = y + 2
 
-    if #self.malcraftHosts == 0 then
-      draw.text(target, x, y, "Aucun PC infecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.malcraftHosts, math.max(1, l.h - y - 2)) do
-        local item = self.malcraftHosts[i]
-        local lastSeen = tonumber(item.last_seen) or 0
-        local online = item.online == true
-          or (item.online == nil and lastSeen > 0 and (epochSeconds() - lastSeen) <= 25)
-        local source = tostring(item.source or item.last_source or "")
-        if #source > 12 then source = string.sub(source,1,12) end
-        local line = "PC #" .. tostring(item.computer_id)
-          .. " " .. tostring(item.label or "")
-          .. (online and " [ONLINE]" or " [OFFLINE]")
-          .. (item.spread and " [PROP]" or "")
-          .. (source ~= "" and (" <" .. source .. ">") or "")
-
-        draw.text(target, x, y, line,
-          online and (item.spread and colors.red or t.good) or t.muted,
-          t.panel, w)
-        local id = item.computer_id
-        self:addButton("malcraft:host:" .. tostring(id), x, y, w, 1, function()
-          self:malcraftSelectHost(id)
-          self:render()
-        end)
-        y = y + 1
-      end
-    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-2),page,t)
     return
   end
 
@@ -2330,461 +2425,417 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "ghost" then
-    draw.text(target, x, y, "< LINKSEC", t.accent, t.bg, w)
-    self:addButton("ghost:back", x, y, math.min(12, w), 1, function()
-      self:malcraftOpenHub()
-      self:render()
+    ccui.button(target,x,y,11,"< MALCRAFT",t,{compact=true})
+    self:addButton("ghost:back",x,y,11,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    y = y + 2
+    ccui.button(target,x+w-7,y,7,"MAJ",t,{compact=true})
+    self:addButton("ghost:refresh",x+w-7,y,7,1,function()
+      self:ghostRefresh();self:render()
+    end)
+    y=y+2
 
-    local state = (self.ghostState and self.ghostState.state) or {}
-    local infected = state.infected == true
-    local spread = state.spread == true
-    local immune = self.ghostState and self.ghostState.immune == true
+    local state=(self.ghostState and self.ghostState.state) or {}
+    local infected=state.infected==true
+    local spread=state.spread==true
+    local immune=self.ghostState and self.ghostState.immune==true
+    local agent=self.ghostState and self.ghostState.agent_status or nil
+    local online=state.online==true
 
-    draw.text(target, x, y, "Malcraft", colors.red, t.bg, math.max(1,w-11))
-    if w>=24 then
-      self:button(target,"ghost:refresh",math.max(x,x+w-10),y,10,"MAJ",function()
-        self:ghostRefresh()
-        self:render()
-      end)
-    end
-    y = y + 1
-    draw.text(target, x, y,
-      immune and "IMMUNISE"
-        or (infected and "ACTIF" or "ABSENT"),
-      immune and t.good or (infected and colors.red or t.muted),
-      t.bg, w)
-    y = y + 1
+    local profile
+    if immune then profile="IMMUNISE"
+    elseif not infected then profile="NON INFECTE"
+    elseif not online then profile="HORS LIGNE"
+    elseif not agent then profile="AGENT MUET"
+    elseif agent.linkos_installed==true then profile="LINKOS + ROM"
+    else profile="ROM SEUL" end
+
+    ccui.panel(target,x,y,w,5,t,{
+      accent=immune and t.good or (infected and t.danger or t.muted),
+      title="PC #"..tostring(self:malcraftTargetId() or "?").." / "..profile,
+      subtitle=infected and ((online and "ONLINE" or "OFFLINE")
+        ..(spread and " / PROPAGATION" or "")) or "Aucune infection active."
+    })
 
     if infected then
-      local agent = self.ghostState and self.ghostState.agent_status or nil
-      local online = state.online == true
-      local profile
-      if not online then
-        profile = "HORS LIGNE"
-      elseif not agent then
-        profile = "AGENT MUET"
-      elseif agent.linkos_installed == true then
-        profile = "LINKOS + ROM"
-      else
-        profile = "ROM SEUL"
-      end
-      draw.text(target,x,y,
-        "Etat: " .. (online and "ONLINE" or "OFFLINE") .. " | " .. profile,
-        (online and agent) and t.good or (online and t.warn or t.muted),t.bg,w)
-      y = y + 1
-
       local source=tostring((agent and agent.source) or state.source or "-")
-      draw.text(target,x,y,"Source: "..source,t.muted,t.bg,w)
-      y = y + 1
-
-      if state.dimension and state.dimension ~= "" then
-        local pos=tostring(state.dimension).." "
-          ..tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
-        draw.text(target,x,y,"Pos: "..pos,t.muted,t.bg,w)
-        y = y + 1
+      draw.text(target,x+2,y+2,"Source: "..source,t.muted,t.surface,math.max(1,w-4))
+      if state.dimension and state.dimension~="" then
+        local pos=tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
+        draw.text(target,x+2,y+3,"Pos: "..pos,t.muted,t.surface,math.max(1,w-4))
       end
     end
-    y = y + 1
+    y=y+6
 
     if immune then
-      draw.text(target, x, y, "Ce poste est protege par la politique operateur.", t.muted, t.bg, w)
+      ccui.panel(target,x,y,w,4,t,{accent=t.good,title="Protection operateur",
+        subtitle="Ce poste ne peut pas etre infecte."})
       return
     end
 
     if not infected then
-      draw.button(target, x, y, math.min(18, w), "INFECTER MALCRAFT", colors.white, colors.red)
-      self:addButton("ghost:install", x, y, math.min(18, w), 1, function()
-        self:ghostInstall()
-        self:render()
+      ccui.button(target,x,y,18,"INFECTER",t,{danger=true})
+      self:addButton("ghost:install",x,y,18,1,function()
+        self:ghostInstall();self:render()
       end)
       return
     end
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "ECRAN DISTANT", colors.white, colors.red)
-    self:addButton("ghost:desktop", x, y, bw, 1, function()
-      self:openMalcraftDesktop()
+    local bw=math.max(10,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"ECRAN DISTANT",t,{danger=true,compact=true})
+    self:addButton("ghost:desktop",x,y,bw,1,function() self:openMalcraftDesktop() end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"OUTILS",t,{compact=true})
+    self:addButton("ghost:tools",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "OUTILS", colors.white, t.panel)
-      self:addButton("ghost:tools", x + bw + 2, y, bw, 1, function()
-        self.linksecView = "ghost_tools"
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw,
-      spread and "PROPAGATION ON" or "PROPAGATION OFF",
-      colors.white, spread and colors.red or t.panel)
-    self:addButton("ghost:spread", x, y, bw, 1, function()
-      self:ghostToggleSpread()
-      self:render()
+    ccui.button(target,x,y,bw,spread and "PROPAGATION ON" or "PROPAGATION OFF",t,{
+      danger=spread,selected=spread,compact=true
+    })
+    self:addButton("ghost:spread",x,y,bw,1,function()
+      self:ghostToggleSpread();self:render()
     end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "SYSTEME", colors.white, colors.red)
-      self:addButton("ghost:system", x + bw + 2, y, bw, 1, function()
-        self.linksecView = "ghost_system"
-        self:render()
-      end)
-    end
-
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"SYSTEME",t,{danger=true,compact=true})
+    self:addButton("ghost:system",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self.linksecView="ghost_system";self:render()
+    end)
     return
   end
 
   if self.linksecView == "ghost_tools" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:tools:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< CIBLE",t,{compact=true})
+    self:addButton("ghost:tools:back",x,y,11,1,function()
+      self.linksecView="ghost";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Outils de la cible", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Outils cible",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Peripheriques exposes par CC:Tweaked",t.muted,t.bg,w)
+    y=y+3
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "PERIPHERIQUES", colors.white, t.panel)
-    self:addButton("ghost:devices", x, y, bw, 1, function()
-      self:ghostLoadDevices()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "INVENTAIRES", colors.white, t.panel)
-      self:addButton("ghost:inventories", x + bw + 2, y, bw, 1, function()
-        self:ghostInventoryScan()
-        self:render()
-      end)
+    local bw=math.max(10,math.floor((w-1)/2))
+    local actions={
+      {"PERIPHERIQUES","ghost:devices",function() self:ghostLoadDevices() end},
+      {"INVENTAIRES","ghost:inventories",function() self:ghostInventoryScan() end},
+      {"REDSTONE","ghost:redstone",function() self:ghostLoadRedstone() end},
+      {"DISQUES","ghost:drives",function() self:ghostLoadDrives() end}
+    }
+    for i=1,#actions,2 do
+      local left=actions[i]
+      local right=actions[i+1]
+      ccui.button(target,x,y,bw,left[1],t,{compact=true})
+      self:addButton(left[2],x,y,bw,1,function() left[3]();self:render() end)
+      if right then
+        ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),right[1],t,{compact=true})
+        self:addButton(right[2],x+bw+1,y,math.max(10,w-bw-1),1,function()
+          right[3]();self:render()
+        end)
+      end
+      y=y+2
     end
 
-    y = y + 2
-
-    draw.button(target, x, y, bw, "REDSTONE", colors.white, t.panel)
-    self:addButton("ghost:redstone", x, y, bw, 1, function()
-      self:ghostLoadRedstone()
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "DISQUES", colors.white, t.panel)
-      self:addButton("ghost:drives", x + bw + 2, y, bw, 1, function()
-        self:ghostLoadDrives()
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, math.min(18, w), "PC PROCHES / CABLE", colors.white, t.panel)
-    self:addButton("ghost:nearby", x, y, math.min(18, w), 1, function()
-      self:ghostLoadNearbyComputers()
-      self:render()
+    ccui.button(target,x,y,20,"PC PROCHES / CABLE",t,{compact=true})
+    self:addButton("ghost:nearby",x,y,20,1,function()
+      self:ghostLoadNearbyComputers();self:render()
     end)
     return
   end
 
   if self.linksecView == "ghost_system" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:system:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< CIBLE",t,{compact=true})
+    self:addButton("ghost:system:back",x,y,11,1,function()
+      self.linksecView="ghost";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Systeme distant PC #" .. tostring(self:malcraftTargetId() or "?"),
-      colors.red, t.bg, w)
-    y = y + 2
+    ccui.panel(target,x,y,w,4,t,{accent=t.danger,
+      title="Systeme distant PC #"..tostring(self:malcraftTargetId() or "?"),
+      subtitle="Actions d'alimentation et infection."})
+    y=y+5
 
-    local bw = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, bw, "ALLUMER", colors.white, t.good)
-    self:addButton("ghost:sys:on", x, y, bw, 1, function()
-      self:ghostPower("turn_on")
-      self:render()
+    local bw=math.max(10,math.floor((w-1)/2))
+    ccui.button(target,x,y,bw,"ALLUMER",t,{primary=true,compact=true})
+    self:addButton("ghost:sys:on",x,y,bw,1,function()
+      self:ghostPower("turn_on");self:render()
     end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"REBOOT",t,{compact=true})
+    self:addButton("ghost:sys:reboot",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:ghostPower("reboot");self:render()
+    end)
+    y=y+2
 
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "REBOOT", colors.white, t.panel)
-      self:addButton("ghost:sys:reboot", x + bw + 2, y, bw, 1, function()
-        self:ghostPower("reboot")
-        self:render()
+    ccui.button(target,x,y,bw,"ARRET",t,{danger=true,compact=true})
+    self:addButton("ghost:sys:shutdown",x,y,bw,1,function()
+      self:ghostPower("shutdown");self:render()
+    end)
+    ccui.button(target,x+bw+1,y,math.max(10,w-bw-1),"CRASH",t,{danger=true,compact=true})
+    self:addButton("ghost:sys:crash",x+bw+1,y,math.max(10,w-bw-1),1,function()
+      self:ghostPower("crash");self:render()
+    end)
+    y=y+3
+
+    ccui.panel(target,x,y,w,5,t,{title="Malcraft",
+      subtitle="Nettoyage et propagation vers une autre cible."})
+    ccui.button(target,x+2,y+3,bw,"NETTOYER",t,{compact=true})
+    self:addButton("ghost:sys:clean",x+2,y+3,bw,1,function()
+      self:ghostClean();self:render()
+    end)
+    if x+3+bw<=x+w-1 then
+      ccui.button(target,x+3+bw,y+3,math.min(bw,w-bw-4),"CONTAMINER",t,{danger=true,compact=true})
+      self:addButton("ghost:sys:spreadto",x+3+bw,y+3,math.min(bw,w-bw-4),1,function()
+        self:ghostSpreadTo();self:render()
       end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "ARRET", colors.white, colors.red)
-    self:addButton("ghost:sys:shutdown", x, y, bw, 1, function()
-      self:ghostPower("shutdown")
-      self:render()
-    end)
-
-    if w >= bw * 2 + 2 then
-      draw.button(target, x + bw + 2, y, bw, "CRASH", colors.white, colors.red)
-      self:addButton("ghost:sys:crash", x + bw + 2, y, bw, 1, function()
-        self:ghostPower("crash")
-        self:render()
-      end)
-    end
-
-    y = y + 2
-
-    draw.button(target, x, y, bw, "NETTOYER", colors.white, t.panel)
-    self:addButton("ghost:sys:clean", x, y, bw, 1, function()
-      self:ghostClean()
-      self:render()
-    end)
-
-    y = y + 2
-
-    draw.button(target, x, y, math.min(18, w), "CONTAMINER PC", colors.white, colors.red)
-    self:addButton("ghost:sys:spreadto", x, y, math.min(18, w), 1, function()
-      self:ghostSpreadTo()
-      self:render()
-    end)
-
-    if y + 2 < l.h then
-      draw.text(target, x, y + 2,
-        "Malcraft Bridge peut rallumer un Computer infecte charge, sans modem.",
-        t.muted, t.bg, w)
     end
     return
   end
 
   if self.linksecView == "ghost_inventories" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:inventories:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:inventories:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Inventaires accessibles depuis la cible", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Inventaires",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Inventaires exposes par la cible",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostInventories == 0 then
-      draw.text(target, x, y, "Aucun inventaire expose a CC:Tweaked.", t.muted, t.bg, w)
-    else
-      local remaining = math.max(1, l.h - y - 2)
-      for _, inventory in ipairs(self.ghostInventories) do
-        if remaining <= 0 then break end
-        draw.text(target, x, y,
-          tostring(inventory.name) .. " [" .. table.concat(inventory.types or {}, ",") .. "]",
-          t.accent, t.bg, w)
-        y = y + 1
-        remaining = remaining - 1
+    if #self.ghostInventories==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun inventaire",
+        subtitle="Aucun stockage expose a CC:Tweaked."})
+      return
+    end
 
-        local slots = inventory.items or {}
-        for slot, item in pairs(slots) do
-          if remaining <= 0 then break end
-          local line = "  " .. tostring(slot) .. ": "
-            .. tostring(type(item) == "table" and (item.name or item.displayName or "item") or item)
-          if type(item) == "table" and item.count then
-            line = line .. " x" .. tostring(item.count)
-          end
-          draw.text(target, x, y, line, t.text, t.bg, w)
-          y = y + 1
-          remaining = remaining - 1
-        end
+    local remaining=math.max(1,l.h-y-1)
+    for _,inventory in ipairs(self.ghostInventories) do
+      if remaining<3 then break end
+      local types=table.concat(inventory.types or {},",")
+      ccui.panel(target,x,y,w,3,t,{accent=t.accent,title=tostring(inventory.name),
+        subtitle=types~="" and types or "Inventaire"})
+      y=y+3
+      remaining=remaining-3
+
+      local shown=0
+      for slot,item in pairs(inventory.items or {}) do
+        if remaining<=0 or shown>=3 then break end
+        local name=type(item)=="table" and (item.name or item.displayName or "item") or tostring(item)
+        local count=type(item)=="table" and item.count or nil
+        draw.text(target,x+2,y,tostring(slot)..": "..tostring(name)
+          ..(count and (" x"..tostring(count)) or ""),t.muted,t.bg,math.max(1,w-4))
+        y=y+1
+        remaining=remaining-1
+        shown=shown+1
       end
+      if remaining<=0 then break end
     end
     return
   end
 
   if self.linksecView == "ghost_nearby" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:nearby:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:nearby:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Computers accessibles autour / via reseau cable", colors.red, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"PC proches / cable",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Computers exposes depuis la cible",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostNearbyComputers == 0 then
-      draw.text(target, x, y, "Aucun Computer expose comme peripherique.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostNearbyComputers, math.max(1, math.floor((l.h - y - 2) / 2))) do
-        local pc = self.ghostNearbyComputers[i]
-        draw.text(target, x, y,
-          tostring(pc.name) .. "  PC #" .. tostring(pc.id or "?")
-            .. "  " .. tostring(pc.label or "")
-            .. (pc.on and " [ON]" or " [OFF]"),
-          pc.on and t.good or t.muted, t.panel, w)
-        y = y + 1
-
-        local half = math.max(8, math.floor((w - 2) / 3))
-        draw.button(target, x, y, half, "ON", colors.white, t.panel)
-        local name = pc.name
-        self:addButton("ghost:nearby:on:" .. tostring(name), x, y, half, 1, function()
-          self:ghostNearbyPower(name, "on")
-          self:render()
-        end)
-
-        if w >= half * 2 + 1 then
-          draw.button(target, x + half + 1, y, half, "REBOOT", colors.white, t.panel)
-          self:addButton("ghost:nearby:reboot:" .. tostring(name), x + half + 1, y, half, 1, function()
-            self:ghostNearbyPower(name, "reboot")
-            self:render()
-          end)
-        end
-
-        if w >= half * 3 + 2 then
-          draw.button(target, x + (half + 1) * 2, y, half, "OFF", colors.white, colors.red)
-          self:addButton("ghost:nearby:off:" .. tostring(name), x + (half + 1) * 2, y, half, 1, function()
-            self:ghostNearbyPower(name, "off")
-            self:render()
-          end)
-        end
-
-        y = y + 1
-      end
+    if #self.ghostNearbyComputers==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun Computer",
+        subtitle="Aucun PC proche ou cable expose."})
+      return
     end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/4))
+    self.ghostNearbyOffset=self.ghostNearbyOffset or 0
+    local page=ccui.page(#self.ghostNearbyComputers,pageSize,self.ghostNearbyOffset)
+    self.ghostNearbyOffset=page.offset
+
+    for i=page.first,page.last do
+      local pc=self.ghostNearbyComputers[i]
+      local by=y+(i-page.first)*4
+      local accent=pc.on and t.good or t.muted
+      ccui.panel(target,x,by,w,4,t,{accent=accent,
+        title=tostring(pc.name).." / PC #"..tostring(pc.id or "?"),
+        subtitle=(pc.on and "ALLUME" or "ETEINT").." / "..tostring(pc.label or "Sans label")})
+
+      local bw=math.max(7,math.floor((w-5)/3))
+      ccui.button(target,x+2,by+2,bw,"ON",t,{primary=not pc.on,compact=true})
+      local name=pc.name
+      self:addButton("ghost:nearby:on:"..tostring(name),x+2,by+2,bw,1,function()
+        self:ghostNearbyPower(name,"on");self:render()
+      end)
+
+      ccui.button(target,x+3+bw,by+2,bw,"REBOOT",t,{compact=true})
+      self:addButton("ghost:nearby:reboot:"..tostring(name),x+3+bw,by+2,bw,1,function()
+        self:ghostNearbyPower(name,"reboot");self:render()
+      end)
+
+      local offX=x+4+bw*2
+      local offW=math.max(5,math.min(bw,w-(offX-x)-1))
+      ccui.button(target,offX,by+2,offW,"OFF",t,{danger=pc.on,compact=true})
+      self:addButton("ghost:nearby:off:"..tostring(name),offX,by+2,offW,1,function()
+        self:ghostNearbyPower(name,"off");self:render()
+      end)
+    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
 
   if self.linksecView == "ghost_devices" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:devices:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:devices:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Peripheriques connectes - clique pour controler", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Peripheriques",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique un appareil pour ses methodes",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostDevices == 0 then
-      draw.text(target, x, y, "Aucun peripherique detecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostDevices, math.max(1, l.h - y - 2)) do
-        local device = self.ghostDevices[i]
-        local line = tostring(device.name)
-          .. " [" .. table.concat(device.types or {}, ",") .. "]"
-          .. "  " .. tostring(#(device.methods or {})) .. " methodes"
-
-        draw.text(target, x, y, line, t.text, t.panel, w)
-
-        local deviceName = device.name
-        self:addButton("ghost:device:" .. tostring(deviceName), x, y, w, 1, function()
-          self:ghostOpenDevice(deviceName)
-          self:render()
-        end)
-
-        y = y + 1
-      end
+    if #self.ghostDevices==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun peripherique",
+        subtitle="Aucun appareil expose par la cible."})
+      return
     end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/3))
+    self.ghostDevicesOffset=self.ghostDevicesOffset or 0
+    local page=ccui.page(#self.ghostDevices,pageSize,self.ghostDevicesOffset)
+    self.ghostDevicesOffset=page.offset
+
+    for i=page.first,page.last do
+      local device=self.ghostDevices[i]
+      local by=y+(i-page.first)*3
+      local types=table.concat(device.types or {},",")
+      ccui.panel(target,x,by,w,3,t,{accent=t.accent,
+        title=tostring(device.name),
+        subtitle=(types~="" and types or "Peripherique").." / "
+          ..tostring(#(device.methods or {})).." methode(s)"})
+      local deviceName=device.name
+      self:addButton("ghost:device:"..tostring(deviceName),x,by,w,3,function()
+        self:ghostOpenDevice(deviceName);self:render()
+      end)
+    end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
 
   if self.linksecView == "ghost_device" and self.ghostDevice then
-    draw.text(target, x, y, "< PERIPHERIQUES", t.accent, t.bg, w)
-    self:addButton("ghost:device:back", x, y, math.min(18, w), 1, function()
-      self.linksecView = "ghost_devices"
-      self:render()
+    ccui.button(target,x,y,15,"< PERIPHERIQUES",t,{compact=true})
+    self:addButton("ghost:device:back",x,y,15,1,function()
+      self.linksecView="ghost_devices";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y,
-      tostring(self.ghostDevice.name)
-        .. " [" .. table.concat(self.ghostDevice.types or {}, ",") .. "]",
-      colors.red, t.bg, w)
-    y = y + 2
+    local types=table.concat(self.ghostDevice.types or {},",")
+    ccui.panel(target,x,y,w,4,t,{accent=t.accent,title=tostring(self.ghostDevice.name),
+      subtitle=types~="" and types or "Peripherique"})
+    y=y+5
 
-    local methods = self.ghostDevice.methods or {}
-    local maxRows = math.max(1, l.h - y - 4)
+    local methods=self.ghostDevice.methods or {}
+    local pageSize=math.max(1,l.h-y-4)
+    self.ghostMethodOffset=self.ghostMethodOffset or 0
+    local page=ccui.page(#methods,pageSize,self.ghostMethodOffset)
+    self.ghostMethodOffset=page.offset
 
-    for i = 1, math.min(#methods, maxRows) do
-      local method = methods[i]
-      draw.text(target, x, y, tostring(method), t.text, t.panel, w)
-
-      local methodName = method
-      self:addButton("ghost:method:" .. tostring(methodName), x, y, w, 1, function()
-        self:ghostCallDevice(methodName)
-        self:render()
+    for i=page.first,page.last do
+      local method=methods[i]
+      local by=y+(i-page.first)
+      ccui.button(target,x,by,w-1,tostring(method),t,{compact=true})
+      local methodName=method
+      self:addButton("ghost:method:"..tostring(methodName),x,by,w-1,1,function()
+        self:ghostCallDevice(methodName);self:render()
       end)
-
-      y = y + 1
     end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,pageSize),page,t)
 
-    if self.ghostDeviceResult and y < l.h - 1 then
-      draw.text(target, x, y + 1, tostring(self.ghostDeviceResult), t.good, t.bg, w)
+    if self.ghostDeviceResult then
+      local ry=l.h-2
+      ccui.panel(target,x,ry,w,2,t,{accent=t.good,title="Resultat",
+        subtitle=tostring(self.ghostDeviceResult)})
     end
     return
   end
 
   if self.linksecView == "ghost_redstone" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:redstone:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:redstone:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Redstone - clique une face pour modifier", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Redstone",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique une face pour modifier la sortie",t.muted,t.bg,w)
+    y=y+3
 
-    for i = 1, math.min(#self.ghostRedstone, math.max(1, l.h - y - 2)) do
-      local side = self.ghostRedstone[i]
-      local line = tostring(side.side)
-        .. "  IN:" .. tostring(side.analog_input or (side.input and 15 or 0))
-        .. "  OUT:" .. tostring(side.analog_output or (side.output and 15 or 0))
+    if #self.ghostRedstone==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune face",
+        subtitle="Aucune information redstone disponible."})
+      return
+    end
 
-      draw.text(target, x, y, line, t.text, t.panel, w)
-      local sideName = side.side
-      self:addButton("ghost:redstone:" .. tostring(sideName), x, y, w, 1, function()
-        self:ghostSetRedstone(sideName)
-        self:render()
+    for i=1,math.min(#self.ghostRedstone,math.max(1,l.h-y-1)) do
+      local side=self.ghostRedstone[i]
+      local input=side.analog_input or (side.input and 15 or 0)
+      local output=side.analog_output or (side.output and 15 or 0)
+      local label=string.upper(tostring(side.side)).."  IN "..tostring(input).."  OUT "..tostring(output)
+      ccui.button(target,x,y,w,label,t,{selected=tonumber(output)>0,compact=true})
+      local sideName=side.side
+      self:addButton("ghost:redstone:"..tostring(sideName),x,y,w,1,function()
+        self:ghostSetRedstone(sideName);self:render()
       end)
-      y = y + 1
+      y=y+1
     end
     return
   end
 
   if self.linksecView == "ghost_drives" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:drives:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:drives:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Disques connectes - clique pour marquer un vecteur", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Disques",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique un disque pour changer son etat",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostDrives == 0 then
-      draw.text(target, x, y, "Aucun disque detecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
-        local drive = self.ghostDrives[i]
-        local diskId = tonumber(type(drive)=="table" and drive.id or drive)
-        local active = diskId and self.ghostDiskStates[diskId] == true
-        local label = type(drive)=="table" and tostring(drive.label or "") or ""
-        local line = "Disk #" .. tostring(diskId or "?")
-          .. (label ~= "" and (" " .. label) or "")
-          .. (active and "  [MALCRAFT - NETTOYER]"
-            or "  [CONTAMINER]")
-        draw.text(target, x, y, line, active and colors.red or t.text, t.panel, w)
-        if diskId then
-          self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
-            self:ghostCarrier(diskId)
-            self:render()
-          end)
-        end
-        y = y + 1
+    if #self.ghostDrives==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun disque",
+        subtitle="Aucun disque expose par la cible."})
+      return
+    end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/3))
+    self.ghostDrivesOffset=self.ghostDrivesOffset or 0
+    local page=ccui.page(#self.ghostDrives,pageSize,self.ghostDrivesOffset)
+    self.ghostDrivesOffset=page.offset
+
+    for i=page.first,page.last do
+      local drive=self.ghostDrives[i]
+      local by=y+(i-page.first)*3
+      local diskId=tonumber(type(drive)=="table" and drive.id or drive)
+      local active=diskId and self.ghostDiskStates[diskId]==true
+      local label=type(drive)=="table" and tostring(drive.label or "") or ""
+      if label=="" then label="Sans label" end
+      ccui.panel(target,x,by,w,3,t,{accent=active and t.danger or t.muted,
+        title="Disk #"..tostring(diskId or "?").." / "..label,
+        subtitle=active and "Malcraft actif - cliquer pour nettoyer"
+          or "Propre - cliquer pour contaminer"})
+      if diskId then
+        self:addButton("ghost:disk:"..tostring(diskId),x,by,w,3,function()
+          self:ghostCarrier(diskId);self:render()
+        end)
       end
     end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
+
 
   draw.text(target,x,y,"Poste operateur PC #"..tostring(os.getComputerID()),t.text,t.bg,w)
   draw.text(target,x,y+1,"Choisis le mode de controle.",t.muted,t.bg,w)
@@ -2969,9 +3020,10 @@ function LinkOS:listFiles(path)
   return entries
 end
 
-function LinkOS:renderFiles(target, l)
+function LinkOS:renderFiles(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
+  local viewH=self.drawingWindow and math.max(8,self.drawingWindow.h-2) or l.h
 
   local function safeName(name)
     name=tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
@@ -2979,137 +3031,250 @@ function LinkOS:renderFiles(target, l)
     if name:find("[/\\]") or name:find("..",1,true) then return nil end
     return name
   end
-  local function childPath(name) return fs.combine(self.filePath,safeName(name) or "") end
 
-  fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
+  local function childPath(name)
+    return fs.combine(self.filePath,safeName(name) or "")
+  end
+
+  local function fileMeta(name,isDir)
+    if isDir then return "files","Dossier" end
+    local ext=tostring(name):match("%.([^%.]+)$")
+    ext=ext and ext:lower() or ""
+    if ext=="lua" then return "terminal","Code Lua" end
+    if ext=="txt" or ext=="md" or ext=="log" then return "notes","Document" end
+    if ext=="json" or ext=="cfg" or ext=="conf" then return "settings","Configuration" end
+    return "notes","Fichier"
+  end
+
+  draw.text(target,x,y,"Explorateur",t.text,t.bg,w)
+  draw.text(target,x,y+1,"Fichiers personnels",t.muted,t.bg,w)
   y=y+3
 
-  -- Explorer command bar + breadcrumb, based on familiar file-manager patterns.
+  local useSidebar=w>=60
+  local sideW=useSidebar and 14 or 0
+  local mainX=useSidebar and (x+sideW+1) or x
+  local mainW=useSidebar and (w-sideW-1) or w
+
+  if useSidebar then
+    ccui.panel(target,x,y,sideW,math.max(8,viewH-y-1),t,{title="Acces rapide"})
+    local sy=y+2
+
+    local function quick(label,path)
+      if sy>=viewH-2 then return end
+      local selected=self.filePath==path
+      ccui.button(target,x+1,sy,sideW-2,label,t,{selected=selected,compact=true})
+      self:addButton("file:quick:"..path,x+1,sy,sideW-2,1,function()
+        self.filePath=path
+        self.filePreview=nil
+        self.fileOffset=0
+      end)
+      sy=sy+1
+    end
+
+    quick("Accueil","/user")
+
+    local ok,items=pcall(fs.list,"/user")
+    if ok and type(items)=="table" then
+      table.sort(items)
+      local shown=0
+      for _,name in ipairs(items) do
+        local full=fs.combine("/user",name)
+        if fs.isDir(full) and not self:isHiddenFilePath(full) then
+          quick(name,full)
+          shown=shown+1
+          if shown>=5 then break end
+        end
+      end
+    end
+
+    if sy+2<viewH then
+      draw.text(target,x+1,sy+1,"Espace libre",t.muted,t.surface,sideW-2)
+      draw.text(target,x+1,sy+2,humanBytes(fs.getFreeSpace("/")),t.text,t.surface,sideW-2)
+    end
+  end
+
   local parts={{label="Accueil"}}
   if self.filePath~="/user" then
     local relative=self.filePath:sub(7)
     for part in relative:gmatch("[^/]+") do parts[#parts+1]={label=part} end
   end
-  ccui.breadcrumb(target,x,y,w-18,parts,t)
+
+  ccui.breadcrumb(target,mainX,y,math.max(8,mainW-18),parts,t)
+
   if self.filePath~="/user" then
-    self:button(target,"file:parent",x,y,3,"<",function()
+    ccui.button(target,mainX,y,3,"<",t,{compact=true})
+    self:addButton("file:parent",mainX,y,3,1,function()
       local parent="/"..fs.getDir(string.sub(self.filePath,2))
       if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
         parent="/user"
       end
       self.filePath=parent
       self.filePreview=nil
+      self.fileOffset=0
     end)
   end
-  draw.text(target,x+1,y+1,self.filePath,t.muted,t.bg,math.max(1,w-2))
 
-  if not self.filePreview and w>=32 then
-    self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"DOSSIER",function()
+  if not self.filePreview and mainW>=28 then
+    ccui.button(target,mainX+mainW-17,y,8,"DOSSIER",t,{compact=true})
+    self:addButton("file:new-folder",mainX+mainW-17,y,8,1,function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
-      if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
+      if not name then return end
       local full=childPath(name)
-      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
+      if fs.exists(full) then self:setNotice("Ce nom existe deja.",t.warn);return end
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
-    self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"TEXTE",function()
-      local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
-      if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
+
+    ccui.button(target,mainX+mainW-8,y,8,"TEXTE",t,{compact=true})
+    self:addButton("file:new-text",mainX+mainW-8,y,8,1,function()
+      local name=safeName(self:prompt("Nouveau fichier","Exemple: note.txt"))
+      if not name then return end
       local full=childPath(name)
-      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
+      if fs.exists(full) then self:setNotice("Ce nom existe deja.",t.warn);return end
       local handle=fs.open(full,"w")
       if not handle then self:setNotice("Creation impossible.",t.danger);return end
-      handle.write("");handle.close()
+      handle.write("")
+      handle.close()
       self:runNativeProgram("edit",full)
     end)
   end
+
+  draw.text(target,mainX+1,y+1,self.filePath,t.muted,t.bg,math.max(1,mainW-2))
   y=y+3
 
   if self.filePreview then
     local path=self.filePreview.path
-    fluent.card(target,x,y,w,3,{
-      bg=t.surface,accent=t.accent,title=fs.getName(path),subtitle=path,muted=t.muted
-    })
+    ccui.panel(target,mainX,y,mainW,3,t,{accent=t.accent,
+      title=fs.getName(path),subtitle=path})
     y=y+4
-    self:button(target,"file:back",x,y,8,"FERMER",function() self.filePreview=nil end)
-    if w>=21 then
-      self:button(target,"file:edit",x+9,y,8,"EDITER",function()
+
+    ccui.button(target,mainX,y,7,"FERMER",t,{compact=true})
+    self:addButton("file:back",mainX,y,7,1,function() self.filePreview=nil end)
+
+    if mainW>=18 then
+      ccui.button(target,mainX+8,y,7,"EDITER",t,{compact=true})
+      self:addButton("file:edit",mainX+8,y,7,1,function()
         self:runNativeProgram("edit",path)
         local handle=fs.open(path,"r")
         if handle then self.filePreview.content=handle.read(4096) or "";handle.close() end
       end)
     end
-    if w>=31 then
-      self:button(target,"file:rename",x+18,y,9,"RENOMMER",function()
+
+    if mainW>=28 then
+      ccui.button(target,mainX+16,y,9,"RENOMMER",t,{compact=true})
+      self:addButton("file:rename",mainX+16,y,9,1,function()
         local name=safeName(self:prompt("Renommer",fs.getName(path)))
-        if not name then self:setNotice("Nouveau nom invalide.",t.danger);return end
+        if not name then return end
         local dest=fs.combine(fs.getDir(path),name)
         if fs.exists(dest) then self:setNotice("Ce nom existe deja.",t.warn);return end
         local ok,err=pcall(fs.move,path,dest)
-        if ok then self.filePreview.path=dest;self:setNotice("Fichier renomme.",t.good)
-        else self:setNotice(tostring(err),t.danger) end
-      end)
-    end
-    if w>=40 then
-      fluent.button(target,x+28,y,10,"SUPPRIMER",{danger=true})
-      self:addButton("file:delete",x+28,y,10,1,function()
-        if self:confirm("Supprimer "..fs.getName(path).." ?") then
-          local ok,err=pcall(fs.delete,path)
-          if ok then self.filePreview=nil;self:setNotice("Fichier supprime.",t.warn)
-          else self:setNotice(tostring(err),t.danger) end
+        if ok then
+          self.filePreview.path=dest
+          self:setNotice("Fichier renomme.",t.good)
+        else
+          self:setNotice(tostring(err),t.danger)
         end
       end)
     end
+
+    if mainW>=39 then
+      ccui.button(target,mainX+26,y,10,"SUPPRIMER",t,{danger=true,compact=true})
+      self:addButton("file:delete",mainX+26,y,10,1,function()
+        if self:confirm("Supprimer "..fs.getName(path).." ?") then
+          local ok,err=pcall(fs.delete,path)
+          if ok then
+            self.filePreview=nil
+            self:setNotice("Fichier supprime.",t.warn)
+          else
+            self:setNotice(tostring(err),t.danger)
+          end
+        end
+      end)
+    end
+
     y=y+2
-    draw.fill(target,x,y,w,math.max(3,l.h-y-1),t.surface2)
-    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w-2))
+    draw.fill(target,mainX,y,mainW,math.max(3,viewH-y-1),t.surface2)
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,mainW-2))
     for i,line in ipairs(lines) do
-      if y+i>=l.h-1 then break end
-      draw.text(target,x+1,y+i-1,line,t.text,t.surface2,w-2)
+      if y+i>=viewH-1 then break end
+      draw.text(target,mainX+1,y+i-1,line,t.text,t.surface2,mainW-2)
     end
     return
   end
 
   local entries,err=self:listFiles(self.filePath)
-  if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
-  if #entries==0 then
-    fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
-      subtitle="Utilise DOSSIER ou TEXTE pour commencer.",muted=t.muted})
+  if err then
+    draw.text(target,mainX,y,err,t.danger,t.bg,mainW)
     return
   end
 
-  draw.text(target,x,y,"NOM",t.muted,t.bg,math.max(1,w-14))
-  draw.text(target,math.max(x+1,x+w-9),y,"TAILLE",t.muted,t.bg,8)
-  y=y+1
-  for _,name in ipairs(entries) do
-    if y+1>=l.h-1 then break end
+  if #entries==0 then
+    ccui.panel(target,mainX,y,mainW,4,t,{accent=t.muted,title="Dossier vide",
+      subtitle="Utilise DOSSIER ou TEXTE."})
+    return
+  end
+
+  local listTop=y+1
+  local footer=viewH-2
+  local rowH=2
+  local pageSize=math.max(1,math.floor((footer-listTop)/rowH))
+  self.fileOffset=self.fileOffset or 0
+  local page=ccui.page(#entries,pageSize,self.fileOffset)
+  self.fileOffset=page.offset
+
+  draw.text(target,mainX,y,"NOM",t.muted,t.bg,math.max(1,mainW-14))
+  draw.text(target,math.max(mainX+1,mainX+mainW-9),y,"TAILLE",t.muted,t.bg,8)
+
+  for i=page.first,page.last do
+    local name=entries[i]
     local full=fs.combine(self.filePath,name)
-    if self:isHiddenFilePath(full) then break end
-    local isDir=fs.isDir(full)
-    local bg=t.surface2
-    draw.fill(target,x,y,w,2,bg)
-    fluent.drawMiniIcon(target,isDir and "files" or "notes",x+1,y,false,bg)
-    draw.text(target,x+5,y,name,isDir and t.accent or t.text,bg,math.max(1,w-16))
-    draw.text(target,x+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,w-16))
-    if not isDir then
-      local size=humanBytes(fs.getSize(full))
-      draw.text(target,math.max(x+5,x+w-#size-1),y,size,t.muted,bg,#size)
-    end
-    self:addButton("file:"..full,x,y,w,2,function()
-      if fs.isDir(full) then
-        self.filePath=full
-      else
-        local handle=fs.open(full,"r")
-        if handle then
-          local content=handle.read(4096) or ""
-          handle.close()
-          self.filePreview={path=full,content=content}
-        else
-          self:setNotice("Fichier non lisible.",t.danger)
-        end
+    if not self:isHiddenFilePath(full) then
+      local by=listTop+(i-page.first)*rowH
+      local isDir=fs.isDir(full)
+      local icon,kind=fileMeta(name,isDir)
+      local bg=t.surface2
+
+      draw.fill(target,mainX,by,mainW,2,bg)
+      fluent.drawMiniIcon(target,icon,mainX+1,by,false,bg)
+      draw.text(target,mainX+5,by,name,isDir and t.accent or t.text,bg,math.max(1,mainW-16))
+      draw.text(target,mainX+5,by+1,kind,t.muted,bg,math.max(1,mainW-16))
+
+      if not isDir then
+        local size=humanBytes(fs.getSize(full))
+        draw.text(target,math.max(mainX+5,mainX+mainW-#size-1),by,size,t.muted,bg,#size)
       end
+
+      self:addButton("file:"..full,mainX,by,mainW,2,function()
+        if fs.isDir(full) then
+          self.filePath=full
+          self.fileOffset=0
+        else
+          local handle=fs.open(full,"r")
+          if handle then
+            local content=handle.read(4096) or ""
+            handle.close()
+            self.filePreview={path=full,content=content}
+          else
+            self:setNotice("Fichier non lisible.",t.danger)
+          end
+        end
+      end)
+    end
+  end
+
+  ccui.scrollbar(target,mainX+mainW-1,listTop,math.max(1,footer-listTop),page,t)
+
+  if page.canUp then
+    ccui.button(target,mainX,footer,6,"< PREC",t,{compact=true})
+    self:addButton("file:prev",mainX,footer,6,1,function()
+      self.fileOffset=math.max(0,self.fileOffset-pageSize)
     end)
-    y=y+3
+  end
+  if page.canDown then
+    ccui.button(target,mainX+mainW-7,footer,7,"SUIV >",t,{compact=true})
+    self:addButton("file:next",mainX+mainW-7,footer,7,1,function()
+      self.fileOffset=self.fileOffset+pageSize
+    end)
   end
 end
 

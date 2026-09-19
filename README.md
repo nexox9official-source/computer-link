@@ -1,5 +1,18 @@
 # Computer Link — LinkOS / AstralNet
 
+## LinkOS 0.23 — interaction polish
+
+LinkOS 0.23 conserve l'architecture CCUI de 0.22 mais pousse les interactions
+quotidiennes beaucoup plus loin : vrais dialogues modaux, confirmations
+clavier/souris/tactile, Explorer pagine sur la hauteur visible, clic droit et
+panneau Systeme coherents, taskbar/toasts polis et navigation LinkSec/Malcraft
+restructuree jusque dans les sous-pages.
+
+Cette release reste compatible avec AstralNet/MER et ne change pas le protocole
+Malcraft. Le Bridge et le datapack serveur restent en 0.11.0.
+
+Voir [Desktop 0.23](docs/DESKTOP-0.23.md).
+
 ## LinkOS 0.22 — interface reconstruite a partir d'OS ComputerCraft
 
 LinkOS 0.22 remplace une grande partie de l'ancienne UI dessinee au cas par cas
