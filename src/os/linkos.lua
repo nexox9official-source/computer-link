@@ -202,6 +202,12 @@ function LinkOS:toggleStartMenu()
   self.startMenuOpen = not self.startMenuOpen
   self.quickPanelOpen = false
   self.appSwitcherOpen = false
+
+  if self.startMenuOpen then
+    self.startAllApps = false
+    self.launcherQuery = ""
+    self.launcherIndex = 1
+  end
 end
 
 function LinkOS:toggleQuickPanel()
