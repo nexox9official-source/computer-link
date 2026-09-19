@@ -237,7 +237,7 @@ function LinkOS:inputDialog(title,hint,secret)
     local box=ccui.modal(target,
       tostring(title or (secret and "Mot de passe" or "Saisie")),
       tostring(hint or ""),
-      t,{w=math.max(26,math.floor(select(1,target.getSize())*0.72)),h=8,
+      t,{w=math.max(32,math.floor(select(1,target.getSize())*0.84)),h=8,
         accent=secret and t.warn or t.accent})
 
     local shown=secret and string.rep("*",#value) or value
