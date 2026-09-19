@@ -1266,6 +1266,15 @@ function LinkOS:malcraftOpenHub()
   self.linksecView = "malcraft_hub"
 end
 
+function LinkOS:malcraftRefreshHosts()
+  local registry = self.service:ghostList()
+  if registry and type(registry.hosts) == "table" then
+    self.malcraftHosts = registry.hosts
+    return true
+  end
+  return false
+end
+
 function LinkOS:malcraftOpenHosts()
   local registry, err = self.service:ghostList()
   if not registry then
@@ -3314,6 +3323,16 @@ function LinkOS:uiLoop()
 
     if event == "timer" and self.lockTimer and a == self.lockTimer then
       self.lockTimer = os.startTimer(1)
+
+      local malcraftListVisible = self.app == "hacker"
+        and (self.linksecView == "malcraft_hub"
+          or self.linksecView == "malcraft_hosts")
+
+      if malcraftListVisible and self:isOperatorUI() then
+        if self:malcraftRefreshHosts() then
+          self:render()
+        end
+      end
 
       if security.enabled()
         and not self.sessionLocked
