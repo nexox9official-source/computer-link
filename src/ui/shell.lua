@@ -233,6 +233,7 @@ function shellui.install(OS, prefs)
     local footer=y+h-2
     local contentBottom=footer-1
     local cols=w>=40 and 3 or 2
+    self.launcherCols=cols
     local gap=1
     local cellW=math.max(9,math.floor((w-4-(cols-1)*gap)/cols))
     local rows=math.max(1,math.floor((contentBottom-contentTop)/2))
@@ -365,15 +366,30 @@ function shellui.install(OS, prefs)
 
   function OS:handleKey(key)
     if self.startMenuOpen then
-      if key==keys.down or key==keys.tab then
-        self.launcherIndex=math.min(#(self.launcherApps or {}),(self.launcherIndex or 1)+1)
-      elseif key==keys.up then self.launcherIndex=math.max(1,(self.launcherIndex or 1)-1)
+      local apps=self.launcherApps or {}
+      local cols=math.max(1,self.launcherCols or 1)
+      local index=self.launcherIndex or 1
+      if key==keys.right or key==keys.tab then
+        self.launcherIndex=math.min(#apps,index+1)
+      elseif key==keys.left then
+        self.launcherIndex=math.max(1,index-1)
+      elseif key==keys.down then
+        self.launcherIndex=math.min(#apps,index+cols)
+      elseif key==keys.up then
+        self.launcherIndex=math.max(1,index-cols)
+      elseif key==keys.home then
+        self.launcherIndex=1
+      elseif key==keys["end"] then
+        self.launcherIndex=math.max(1,#apps)
       elseif key==keys.backspace then
-        self.launcherQuery=(self.launcherQuery or ""):sub(1,-2); self.launcherIndex=1
+        self.launcherQuery=(self.launcherQuery or ""):sub(1,-2)
+        self.launcherIndex=1
       elseif key==keys.enter then
-        local app=(self.launcherApps or {})[self.launcherIndex or 1]
+        local app=apps[self.launcherIndex or 1]
         if app then self:openApp(app.id) end
-      elseif key==keys.escape or key==keys.f10 then self.startMenuOpen=false end
+      elseif key==keys.escape or key==keys.f10 then
+        self.startMenuOpen=false
+      end
       return
     end
     if self.app=="home" and (key==keys.left or key==keys.right) then
