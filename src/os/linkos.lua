@@ -3337,6 +3337,25 @@ function LinkOS:renderSettings(target, l)
       function() self:runUpdateAction() end)
     y = y + 3
 
+    draw.text(target,x,y,"Session",t.muted,t.bg,w)
+    y = y + 1
+    local restore=prefs.get("restore_session",true)
+    self:button(target,"set:restore-session",x,y,math.min(18,w),
+      restore and "RESTAURATION: OUI" or "RESTAURATION: NON",function()
+        prefs.set("restore_session",not prefs.get("restore_session",true))
+        self:setNotice(prefs.get("restore_session",true)
+          and "Restauration de session activee."
+          or "Restauration de session desactivee.",
+          t.good)
+      end)
+    if w>=31 then
+      self:button(target,"set:forget-session",x+20,y,math.min(13,w-20),"OUBLIER SESSION",function()
+        prefs.set("workspace_session",{windows={},active="home"})
+        self:setNotice("Session sauvegardee effacee.",t.warn)
+      end)
+    end
+    y = y + 3
+
     local half=math.max(8,math.floor((w-1)/2))
     self:button(target,"set:reboot",x,y,half,"REDEMARRER",function() os.reboot() end)
     if w>=18 then
