@@ -159,12 +159,26 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o.startMenuOpen=false;o.quickPanelOpen=true;o:render();native.dump('/tmp/linkos-system-panel.frame')
     o.quickPanelOpen=false
 
-    o:openApp('store');o:render();native.dump('/tmp/linkos-store.frame')
-    o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
-    o:openApp('files');o:render();native.dump('/tmp/linkos-files.frame')
-    o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+    local function captureApp(id,path)
+      o.windows={}
+      o.app='home'
+      o:openApp(id)
+      local win=o.windows[#o.windows]
+      if win then win.maximized=true end
+      o:render()
+      native.dump(path)
+    end
 
-    o:openApp('messages')
+    captureApp('store','/tmp/linkos-store.frame')
+    captureApp('calculator','/tmp/linkos-calculator.frame')
+    captureApp('files','/tmp/linkos-files.frame')
+    o.windows={};o.app='home';o:openApp('settings');o.settingsTab='style'
+    if o.windows[#o.windows] then o.windows[#o.windows].maximized=true end
+    o:render();native.dump('/tmp/linkos-settings.frame')
+    captureApp('messages','/tmp/linkos-messages.frame')
+
+    o.windows={};o.app='home'
+    o:openApp('messages');o:openApp('files');o:openApp('settings')
     o:workspaceEvent('key',keys.leftAlt)
     o:handleKey(keys.tab)
     o:render();native.dump('/tmp/linkos-task-switcher.frame')
