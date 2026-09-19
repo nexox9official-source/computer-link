@@ -856,7 +856,7 @@ function M.install(OS,shellui,prefs)
 
     local taskX=startW+1
     local available=math.max(0,trayX-taskX-2)
-    local taskW=6
+    local taskW=w>=51 and 7 or 6
     local maxTasks=math.max(0,math.floor(available/taskW))
     local visible=math.min(#taskItems,maxTasks)
 
@@ -864,12 +864,18 @@ function M.install(OS,shellui,prefs)
       local item=taskItems[i]
       local app=item.app
       local active=item.win and item.win.id==self.app and not item.win.minimized
+      local minimized=item.win and item.win.minimized
       local bg=active and t.selection or t.taskbar
       local label=(app and (app.short or app.title) or item.id):upper()
-      label=label:sub(1,math.max(1,taskW-1))
+      local glyph=fluent.glyph(item.id)
+      local iconColour=fluent.iconColour(item.id,t.accent)
+      local labelW=math.max(1,taskW-3)
 
       draw.fill(target,taskX,h,taskW,1,bg)
-      draw.text(target,taskX+1,h,label,active and t.text or t.muted,bg,taskW-1)
+      draw.text(target,taskX+1,h,glyph,minimized and t.muted or iconColour,bg,1)
+      draw.text(target,taskX+3,h,label:sub(1,labelW),
+        active and t.text or t.muted,bg,labelW)
+
       self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
         local win=openById[item.id]
         if win then
@@ -898,14 +904,26 @@ function M.install(OS,shellui,prefs)
 
     if self.notice then
       local message=tostring(self.notice)
-      local nw=math.min(math.max(22,math.floor(w*0.46)),math.max(18,w-2))
+      local nw=math.min(math.max(24,math.floor(w*0.50)),math.max(20,w-2))
+      local lines=draw.wrap(message,math.max(1,nw-4))
+      local toastH=math.min(4,2+math.min(2,#lines))
       local nx=math.max(1,w-nw)
-      local ny=math.max(1,h-4)
-      draw.fill(target,nx,ny,nw,3,t.elevated)
-      draw.fill(target,nx,ny,1,3,self.noticeColour or t.accent)
-      draw.text(target,nx+2,ny,"LinkOS",t.text,t.elevated,math.max(1,nw-3))
-      draw.text(target,nx+2,ny+1,message,self.noticeColour or t.text,t.elevated,math.max(1,nw-3))
-      draw.text(target,nx+2,ny+2,"Notification",t.muted,t.elevated,math.max(1,nw-3))
+      local ny=math.max(1,h-toastH-1)
+
+      draw.fill(target,nx,ny,nw,toastH,t.elevated)
+      draw.fill(target,nx,ny,1,toastH,self.noticeColour or t.accent)
+      draw.text(target,nx+2,ny,"LinkOS",t.text,t.elevated,math.max(1,nw-6))
+      draw.text(target,nx+nw-2,ny,"X",t.muted,t.elevated,1)
+
+      for i=1,math.min(2,#lines) do
+        draw.text(target,nx+2,ny+i,lines[i],
+          self.noticeColour or t.text,t.elevated,math.max(1,nw-4))
+      end
+
+      self:addButton("notice:dismiss",nx,ny,nw,toastH,function()
+        self.notice=nil
+        self.noticeExpires=nil
+      end)
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
