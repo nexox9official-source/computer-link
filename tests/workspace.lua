@@ -175,7 +175,9 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:openDesktopContext(icon.x,icon.y);o:render();native.dump('/tmp/linkos-context.frame')
     o.contextMenu=nil
 
-    o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
+    if o.renderUserLockDisplay then
+      o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
+    end
 
     -- Persist a controlled session, create a fresh LinkOS instance and restore it.
     local sourceOS=OS.new()
