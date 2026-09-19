@@ -1,7 +1,7 @@
 -- Computer Link server policy.
 -- Injected into CraftOS ROM by the Astralium server datapack.
 return {
-  version = 8,
+  version = 9,
 
   github_raw = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/",
 
@@ -31,6 +31,7 @@ return {
 
   -- Malcraft: les postes infectes marquent automatiquement les disques inseres.
   -- Le poste operateur reste immunise mais peut agir comme emetteur de proximite.
+  -- La persistance principale est assuree par Malcraft Bridge cote monde serveur.
   malcraft_auto_infect_disks = true,
   malcraft_operator_proximity_emitter = true,
 
