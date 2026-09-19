@@ -56,6 +56,13 @@ function M.install(OS,shellui,prefs)
     end
     return out
   end
+  function OS:persistWindowGeometry(win)
+    if not win then return end
+    local geometry=prefs.get('window_geometry',{})
+    geometry[win.id]={x=win.x,y=win.y,w=win.w,h=win.h}
+    prefs.set('window_geometry',geometry)
+  end
+
   function OS:saveWorkspaceSession()
     if self.restoringSession then return end
     local windows={}
@@ -601,7 +608,12 @@ function M.install(OS,shellui,prefs)
       self:addButton('win:'..win.id..':'..label,x,win.y,3,1,callback)
     end
 
-    control(9,'-',titleBg,function() win.minimized=true;self.app='home' end)
+    control(9,'-',titleBg,function()
+      win.minimized=true
+      self.app='home'
+      self.showDesktopSnapshot=nil
+      self:saveWorkspaceSession()
+    end)
     control(6,'O',titleBg,function()
       if win.maximized then
         win.maximized=false
@@ -611,6 +623,7 @@ function M.install(OS,shellui,prefs)
         win.restore={win.x,win.y,win.w,win.h}
         win.maximized=true
       end
+      self:saveWorkspaceSession()
     end)
     control(3,'X',colors.red,function() self:closeWindow(win) end)
 
@@ -687,6 +700,7 @@ function M.install(OS,shellui,prefs)
   function OS:render()
     if self.dialogOpen or not self.active then return end
     local t=self:theme()
+    self:restoreWorkspaceSession()
     local list=self:workspace()
     if self:renderHijackState() or self:renderUserLock() then return end
 
@@ -757,6 +771,8 @@ function M.install(OS,shellui,prefs)
           if win.id==self.app and not win.minimized then
             win.minimized=true
             self.app='home'
+            self.showDesktopSnapshot=nil
+            self:saveWorkspaceSession()
           else
             self:focusWindow(win)
           end
@@ -780,6 +796,10 @@ function M.install(OS,shellui,prefs)
     self:addButton('wm:system',rightX,h,3,1,function() self:toggleQuickPanel() end)
     draw.text(target,w-5,h,textutils.formatTime(os.time(),true),colors.white,colors.black,5)
     self:addButton('wm:clock',w-5,h,5,1,function() self:toggleQuickPanel() end)
+    draw.text(target,w,h,'|',t.muted,colors.black,1)
+    self:addButton('wm:desktop',w,h,1,1,function()
+      self:toggleShowDesktop()
+    end)
 
     if self.notice then
       local nw=math.min(w-2,math.max(12,#tostring(self.notice)+2))
@@ -828,6 +848,7 @@ function M.install(OS,shellui,prefs)
               end
               self.lastTitleWindow=nil
               self.lastTitleClick=0
+              self:saveWorkspaceSession()
               self:render()
               return true
             end
@@ -866,7 +887,9 @@ function M.install(OS,shellui,prefs)
     if (event=='mouse_drag' or event=='mouse_up' or event=='mouse_scroll')
       and self.active.kind~='computer' then return false end
     if event=='key_up' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=false;return true end
+    if event=='key_up' and (a==keys.leftAlt or a==keys.rightAlt) then self.altHeld=false;return true end
     if event=='key' and (a==keys.leftCtrl or a==keys.rightCtrl) then self.ctrlHeld=true;return true end
+    if event=='key' and (a==keys.leftAlt or a==keys.rightAlt) then self.altHeld=true;return true end
     local note=self.noteDocument
     if self.app=='notes' and note and note.editing and not self.startMenuOpen and not self.quickPanelOpen then
       local line=note.lines[note.row] or ''
@@ -946,9 +969,8 @@ function M.install(OS,shellui,prefs)
           end
         end
 
-        local geometry=prefs.get('window_geometry',{})
-        geometry[win.id]={x=win.x,y=win.y,w=win.w,h=win.h}
-        prefs.set('window_geometry',geometry)
+        self:persistWindowGeometry(win)
+        self:saveWorkspaceSession()
       end
       self.iconDrag,self.iconMoved,self.windowDrag=nil,nil,nil
       self:render();return true
@@ -1059,18 +1081,47 @@ function M.install(OS,shellui,prefs)
     local list=self:workspace()
     local focused
     for _,win in ipairs(list) do if win.id==self.app and not win.minimized then focused=win end end
+
+    if self.altHeld and key==keys.tab then
+      self:cycleWindow(1)
+      return
+    end
+
+    if self.ctrlHeld and key==keys.d then
+      self:toggleShowDesktop()
+      return
+    end
+
     if self.ctrlHeld and focused then
-      if key==keys.w then self:closeWindow(focused)
-      elseif key==keys.m then focused.minimized=true;self.app='home'
+      if key==keys.w then
+        self:closeWindow(focused)
+      elseif key==keys.m then
+        focused.minimized=true
+        self.app='home'
+        self.showDesktopSnapshot=nil
+        self:saveWorkspaceSession()
       elseif key==keys.enter then
         if focused.maximized then
           focused.maximized=false
           if focused.restore then focused.x,focused.y,focused.w,focused.h=table.unpack(focused.restore) end
-        else focused.restore={focused.x,focused.y,focused.w,focused.h};focused.maximized=true end
-      elseif key==keys.left then focused.maximized=false;focused.x=focused.x-1
-      elseif key==keys.right then focused.maximized=false;focused.x=focused.x+1
-      elseif key==keys.up then focused.maximized=false;focused.y=focused.y-1
-      elseif key==keys.down then focused.maximized=false;focused.y=focused.y+1 end
+        else
+          focused.restore={focused.x,focused.y,focused.w,focused.h}
+          focused.maximized=true
+        end
+        self:saveWorkspaceSession()
+      elseif key==keys.left then
+        focused.maximized=false;focused.x=focused.x-1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.right then
+        focused.maximized=false;focused.x=focused.x+1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.up then
+        focused.maximized=false;focused.y=focused.y-1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      elseif key==keys.down then
+        focused.maximized=false;focused.y=focused.y+1
+        self:persistWindowGeometry(focused);self:saveWorkspaceSession()
+      end
       return
     end
     if focused and key==keys.tab then
@@ -1083,7 +1134,7 @@ function M.install(OS,shellui,prefs)
       return
     end
     if key==keys.f12 then
-      if #list>0 then local win=table.remove(list,1);list[#list+1]=win;self:focusWindow(win) end
+      self:cycleWindow(1)
     elseif key==keys.pageUp or key==keys.pageDown then
       for _,win in ipairs(list) do if win.id==self.app then win.scroll=math.max(0,(win.scroll or 0)+(key==keys.pageDown and 4 or -4)) end end
     elseif self.app=='home' and (key==keys.tab or key==keys.enter or key==keys.m) then
