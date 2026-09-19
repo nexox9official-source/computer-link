@@ -677,7 +677,8 @@ function M.install(OS,shellui,prefs)
 
     local virtualH=math.max(30,bodyH)
     if win.id=="store" then
-      virtualH=math.max(virtualH,#packages.catalog*4+7)
+      local storeCols=bodyW>=40 and 2 or 1
+      virtualH=math.max(virtualH,math.ceil(#packages.catalog/storeCols)*7+8)
     elseif win.id=="settings" then
       virtualH=math.max(virtualH,38)
     end
