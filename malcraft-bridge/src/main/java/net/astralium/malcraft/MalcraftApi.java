@@ -44,7 +44,7 @@ public final class MalcraftApi implements ILuaAPI {
 
     @LuaFunction
     public final String version() {
-        return "0.10.0";
+        return "0.10.1";
     }
 
     @LuaFunction
