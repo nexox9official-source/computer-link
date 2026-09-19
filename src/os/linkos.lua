@@ -2762,68 +2762,80 @@ function LinkOS:renderHacker(target, l)
   end
 
   if self.linksecView == "ghost_redstone" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:redstone:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:redstone:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Redstone - clique une face pour modifier", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Redstone",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique une face pour modifier la sortie",t.muted,t.bg,w)
+    y=y+3
 
-    for i = 1, math.min(#self.ghostRedstone, math.max(1, l.h - y - 2)) do
-      local side = self.ghostRedstone[i]
-      local line = tostring(side.side)
-        .. "  IN:" .. tostring(side.analog_input or (side.input and 15 or 0))
-        .. "  OUT:" .. tostring(side.analog_output or (side.output and 15 or 0))
+    if #self.ghostRedstone==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune face",
+        subtitle="Aucune information redstone disponible."})
+      return
+    end
 
-      draw.text(target, x, y, line, t.text, t.panel, w)
-      local sideName = side.side
-      self:addButton("ghost:redstone:" .. tostring(sideName), x, y, w, 1, function()
-        self:ghostSetRedstone(sideName)
-        self:render()
+    for i=1,math.min(#self.ghostRedstone,math.max(1,l.h-y-1)) do
+      local side=self.ghostRedstone[i]
+      local input=side.analog_input or (side.input and 15 or 0)
+      local output=side.analog_output or (side.output and 15 or 0)
+      local label=string.upper(tostring(side.side)).."  IN "..tostring(input).."  OUT "..tostring(output)
+      ccui.button(target,x,y,w,label,t,{selected=tonumber(output)>0,compact=true})
+      local sideName=side.side
+      self:addButton("ghost:redstone:"..tostring(sideName),x,y,w,1,function()
+        self:ghostSetRedstone(sideName);self:render()
       end)
-      y = y + 1
+      y=y+1
     end
     return
   end
 
   if self.linksecView == "ghost_drives" then
-    draw.text(target, x, y, "< MALCRAFT", t.accent, t.bg, w)
-    self:addButton("ghost:drives:back", x, y, math.min(14, w), 1, function()
-      self.linksecView = "ghost"
-      self:render()
+    ccui.button(target,x,y,11,"< OUTILS",t,{compact=true})
+    self:addButton("ghost:drives:back",x,y,11,1,function()
+      self.linksecView="ghost_tools";self:render()
     end)
-    y = y + 2
+    y=y+2
 
-    draw.text(target, x, y, "Disques connectes - clique pour marquer un vecteur", t.text, t.bg, w)
-    y = y + 2
+    draw.text(target,x,y,"Disques",t.text,t.bg,w)
+    draw.text(target,x,y+1,"Clique un disque pour changer son etat",t.muted,t.bg,w)
+    y=y+3
 
-    if #self.ghostDrives == 0 then
-      draw.text(target, x, y, "Aucun disque detecte.", t.muted, t.bg, w)
-    else
-      for i = 1, math.min(#self.ghostDrives, math.max(1, l.h - y - 2)) do
-        local drive = self.ghostDrives[i]
-        local diskId = tonumber(type(drive)=="table" and drive.id or drive)
-        local active = diskId and self.ghostDiskStates[diskId] == true
-        local label = type(drive)=="table" and tostring(drive.label or "") or ""
-        local line = "Disk #" .. tostring(diskId or "?")
-          .. (label ~= "" and (" " .. label) or "")
-          .. (active and "  [MALCRAFT - NETTOYER]"
-            or "  [CONTAMINER]")
-        draw.text(target, x, y, line, active and colors.red or t.text, t.panel, w)
-        if diskId then
-          self:addButton("ghost:disk:" .. tostring(diskId), x, y, w, 1, function()
-            self:ghostCarrier(diskId)
-            self:render()
-          end)
-        end
-        y = y + 1
+    if #self.ghostDrives==0 then
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucun disque",
+        subtitle="Aucun disque expose par la cible."})
+      return
+    end
+
+    local pageSize=math.max(1,math.floor((l.h-y-1)/3))
+    self.ghostDrivesOffset=self.ghostDrivesOffset or 0
+    local page=ccui.page(#self.ghostDrives,pageSize,self.ghostDrivesOffset)
+    self.ghostDrivesOffset=page.offset
+
+    for i=page.first,page.last do
+      local drive=self.ghostDrives[i]
+      local by=y+(i-page.first)*3
+      local diskId=tonumber(type(drive)=="table" and drive.id or drive)
+      local active=diskId and self.ghostDiskStates[diskId]==true
+      local label=type(drive)=="table" and tostring(drive.label or "") or ""
+      if label=="" then label="Sans label" end
+      ccui.panel(target,x,by,w,3,t,{accent=active and t.danger or t.muted,
+        title="Disk #"..tostring(diskId or "?").." / "..label,
+        subtitle=active and "Malcraft actif - cliquer pour nettoyer"
+          or "Propre - cliquer pour contaminer"})
+      if diskId then
+        self:addButton("ghost:disk:"..tostring(diskId),x,by,w,3,function()
+          self:ghostCarrier(diskId);self:render()
+        end)
       end
     end
+    ccui.scrollbar(target,x+w-1,y,math.max(1,l.h-y-1),page,t)
     return
   end
+
 
   draw.text(target,x,y,"Poste operateur PC #"..tostring(os.getComputerID()),t.text,t.bg,w)
   draw.text(target,x,y+1,"Choisis le mode de controle.",t.muted,t.bg,w)
