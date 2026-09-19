@@ -1,6 +1,14 @@
-local BASE = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/"
 local ROOT = "/computer-link"
 local args = { ... }
+
+local SOURCE_REF = tostring(args[2] or "main")
+if SOURCE_REF == "" or SOURCE_REF:find("..", 1, true)
+  or not SOURCE_REF:match("^[%w%._%-%/]+$") then
+  SOURCE_REF = "main"
+end
+
+local BASE = "https://raw.githubusercontent.com/nexox9official-source/computer-link/"
+  .. SOURCE_REF .. "/"
 
 local function colour(value)
   if term.isColor and term.isColor() then
@@ -220,6 +228,7 @@ if not okManifest or type(manifest) ~= "table" then
 end
 
 print("Version: " .. tostring(manifest.version))
+print("Canal  : " .. SOURCE_REF)
 print()
 
 if not fs.exists(ROOT) then fs.makeDir(ROOT) end
@@ -254,6 +263,7 @@ for index, path in ipairs(files) do
 end
 
 writeFile(ROOT .. "/role.txt", role .. "\n")
+writeFile(ROOT .. "/source_ref.txt", SOURCE_REF .. "\n")
 
 if role == "client" then
   for _, path in ipairs({
@@ -299,7 +309,8 @@ local installState = {
   role = role,
   startup_backup = backup,
   installed_at = os.epoch and math.floor(os.epoch("utc") / 1000) or os.time(),
-  installer_version = manifest.version
+  installer_version = manifest.version,
+  source_ref = SOURCE_REF
 }
 writeFile(ROOT .. "/install_state.db", textutils.serialize(installState))
 
@@ -311,6 +322,7 @@ print("================================")
 colour(colors.white)
 print("Role    : " .. string.upper(role))
 print("Version : " .. tostring(manifest.version))
+print("Canal   : " .. SOURCE_REF)
 
 if backup then
   print("Ancien startup sauvegarde:")
