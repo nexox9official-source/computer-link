@@ -68,6 +68,7 @@ jobs:
             linkos-calculator.frame \
             linkos-dialog.frame \
             linkos-linksec.frame \
+            linkos-malcraft-target.frame \
             linkos-task-switcher.frame; do
             path="test-output/$frame"
             [ -f "$path" ] || continue
