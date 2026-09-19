@@ -902,8 +902,8 @@ function LinkOS:renderMessages(target,l)
 
   if not self.selectedPeer then
     ccui.panel(target,chatX,y,chatW,6,t,{accent=t.accent,
-      title="Aucune conversation ouverte",
-      subtitle="Clique NOUVEAU pour ecrire."})
+      title="Aucun message",
+      subtitle="Clique NOUVEAU."})
     return
   end
 
