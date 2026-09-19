@@ -1128,25 +1128,35 @@ function M.install(OS,shellui,prefs)
     self:setNotice(ok and 'Document sauvegarde.' or tostring(err),ok and colors.lime or colors.red)
   end
   function OS:renderNotes(target,l)
-    if not self.noteDocument then self:loadNote('/user/notes.txt') end
+    if not self.noteDocument then self:loadNote("/user/notes.txt") end
     local note=self.noteDocument
     if not note then return end
-    draw.text(target,2,1,(note.dirty and '* ' or '')..note.path,colors.cyan,colors.black,l.w-3)
-    self:button(target,'note:edit',2,3,10,note.editing and 'EDITION' or 'EDITER',function() note.editing=not note.editing end)
-    self:button(target,'note:save',13,3,11,'SAUVEGARDER',function() self:saveNote() end)
-    draw.text(target,2,5,'Entree: ligne | Ctrl+S: sauver | Esc: fin',colors.lightGray,colors.black,l.w-3)
-    local win=self.drawingWindow
-    -- A dedicated text page keeps long notes editable without losing the toolbar.
+    local t=self:theme()
+
+    fluent.sectionTitle(target,2,1,l.w-3,"Notes",
+      (note.dirty and "Modifications non enregistrees" or note.path),t.accent)
+    self:button(target,"note:edit",2,4,10,note.editing and "EDITION" or "EDITER",
+      function() note.editing=not note.editing end)
+    self:button(target,"note:save",13,4,11,"SAUVEGARDER",function() self:saveNote() end)
+
+    draw.fill(target,2,6,l.w-3,1,t.surface)
+    draw.text(target,3,6,"Entree: ligne  |  Ctrl+S: sauver  |  Esc: quitter l'edition",
+      t.muted,t.surface,l.w-5)
+
+    draw.fill(target,2,8,l.w-3,math.max(5,l.h-9),t.surface2)
     local page=math.floor((note.row-1)/18)
     for row=page*18+1,math.min(#note.lines,page*18+18) do
       local text=note.lines[row]
-      if row==note.row and note.editing then
-        local start=math.max(1,note.col-(l.w-6))
-        text=text:sub(start,note.col-1)..'|'..text:sub(note.col)
+      local active=row==note.row
+      if active and note.editing then
+        local start=math.max(1,note.col-(l.w-8))
+        text=text:sub(start,note.col-1).."|"..text:sub(note.col)
       end
-      local y=7+row-page*18-1
-      draw.text(target,2,y,text,colors.white,colors.black,l.w-3)
-      self:addButton('note:line:'..row,2,y,l.w-3,1,function()
+      local y=8+row-page*18-1
+      local bg=active and t.selection or t.surface2
+      if active then draw.fill(target,2,y,l.w-3,1,bg) end
+      draw.text(target,3,y,text,active and t.text or t.muted,bg,l.w-5)
+      self:addButton("note:line:"..row,2,y,l.w-3,1,function()
         note.row=row;note.col=#note.lines[row]+1;note.editing=true
       end)
     end
