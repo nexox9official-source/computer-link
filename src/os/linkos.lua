@@ -1007,8 +1007,8 @@ function LinkOS:renderNetwork(target, l)
     info.online and t.good or t.danger, t.bg, #status)
   y = y + 2
 
-  draw.fill(target, x, y, w, 5, colors.black)
-  draw.fill(target, x, y, 1, 5, info.online and t.good or t.danger)
+  draw.fill(target, x, y, w, 6, colors.black)
+  draw.fill(target, x, y, 1, 6, info.online and t.good or t.danger)
 
   local label = tostring(info.label or ("PC-" .. tostring(info.computer_id)))
   draw.text(target, x+2, y, label, t.text, colors.black, math.max(1,w-3))
@@ -1019,7 +1019,10 @@ function LinkOS:renderNetwork(target, l)
   draw.text(target, x+2, y+3,
     "Modem  " .. tostring(info.modem or "absent"),
     info.modem and t.text or t.warn, colors.black, math.max(1,w-3))
-  y = y + 6
+  draw.text(target, x+2, y+4,
+    "Malcraft Bridge  " .. (info.malcraft_bridge and "ONLINE" or "ABSENT"),
+    info.malcraft_bridge and t.good or t.muted, colors.black, math.max(1,w-3))
+  y = y + 7
 
   local bw = math.max(7, math.floor((w-2)/3))
   self:button(target, "net:ping", x, y, bw, "PING", function()
