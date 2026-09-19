@@ -12,7 +12,12 @@ fs={exists=function(p) return disk[p]~=nil end,makeDir=function(p) disk[p]=true 
   getFreeSpace=function() return 1000000 end,list=function() return {} end,
   getSize=function(p) return #(disk[p] or '') end,
   getName=function(p) return p:match('([^/]+)$') or '' end,
-  combine=function(a,b) return a..'/'..b end,
+  combine=function(a,b)
+    local p=tostring(a or '')..'/'..tostring(b or '')
+    p=p:gsub('/+','/')
+    if p=='' then return '/' end
+    return p
+  end,
   move=function(a,b) assert(disk[a]~=nil and disk[b]==nil);disk[b]=disk[a];disk[a]=nil end,
   delete=function(p) disk[p]=nil end}
 function fs.open(p,mode)
@@ -159,12 +164,26 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o.startMenuOpen=false;o.quickPanelOpen=true;o:render();native.dump('/tmp/linkos-system-panel.frame')
     o.quickPanelOpen=false
 
-    o:openApp('store');o:render();native.dump('/tmp/linkos-store.frame')
-    o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
-    o:openApp('files');o:render();native.dump('/tmp/linkos-files.frame')
-    o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+    local function captureApp(id,path)
+      o.windows={}
+      o.app='home'
+      o:openApp(id)
+      local win=o.windows[#o.windows]
+      if win then win.maximized=true end
+      o:render()
+      native.dump(path)
+    end
 
-    o:openApp('messages')
+    captureApp('store','/tmp/linkos-store.frame')
+    captureApp('calculator','/tmp/linkos-calculator.frame')
+    captureApp('files','/tmp/linkos-files.frame')
+    o.windows={};o.app='home';o:openApp('settings');o.settingsTab='style'
+    if o.windows[#o.windows] then o.windows[#o.windows].maximized=true end
+    o:render();native.dump('/tmp/linkos-settings.frame')
+    captureApp('messages','/tmp/linkos-messages.frame')
+
+    o.windows={};o.app='home'
+    o:openApp('messages');o:openApp('files');o:openApp('settings')
     o:workspaceEvent('key',keys.leftAlt)
     o:handleKey(keys.tab)
     o:render();native.dump('/tmp/linkos-task-switcher.frame')
@@ -175,7 +194,9 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:openDesktopContext(icon.x,icon.y);o:render();native.dump('/tmp/linkos-context.frame')
     o.contextMenu=nil
 
-    o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
+    if o.renderUserLockDisplay then
+      o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
+    end
 
     -- Persist a controlled session, create a fresh LinkOS instance and restore it.
     local sourceOS=OS.new()

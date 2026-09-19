@@ -1,5 +1,6 @@
 local config = dofile("/computer-link/src/common/config.lua")
 local draw = dofile("/computer-link/src/ui/draw.lua")
+local fluent = dofile("/computer-link/src/ui/fluent.lua")
 local display = dofile("/computer-link/src/ui/display.lua")
 local prefs = dofile("/computer-link/src/ui/prefs.lua")
 local shellui = dofile("/computer-link/src/ui/shell.lua")
@@ -104,22 +105,13 @@ function LinkOS.new()
 end
 
 function LinkOS:theme()
-  local accentName = prefs.get("accent", "cyan")
-  local accent = ACCENTS[accentName] or colors.cyan
-
-  return {
-    bg = colors.black,
-    panel = colors.black,
-    panel2 = colors.gray,
-    text = colors.white,
-    muted = colors.lightGray,
-    accent = accent,
-    good = colors.lime,
-    warn = colors.orange,
-    danger = colors.red,
-    sidebar = colors.black,
-    button = colors.gray
-  }
+  local t = fluent.theme(prefs.get("accent", "blue"))
+  -- Compatibility aliases for the application renderers while the v0.19
+  -- redesign migrates them to the Fluent component vocabulary.
+  t.panel = t.surface
+  t.panel2 = t.elevated
+  t.sidebar = t.surface2
+  return t
 end
 
 function LinkOS:isOperatorUI()
@@ -131,6 +123,13 @@ end
 function LinkOS:refreshDisplays()
   local selected = prefs.get("display_id")
   self.displays, self.active = display.refresh(selected)
+
+  for _, d in ipairs(self.displays or {}) do
+    if d.color and d.target then fluent.applyPalette(d.target) end
+  end
+  if self.native and self.native.isColor and self.native.isColor() then
+    fluent.applyPalette(self.native)
+  end
 
   if self.active and self.active.id ~= selected then
     prefs.set("display_id", self.active.id)
@@ -145,7 +144,11 @@ end
 
 function LinkOS:button(target, id, x, y, w, label, callback, selected)
   local t = self:theme()
-  draw.button(target, x, y, w, label, t.text, selected and t.accent or t.button, false)
+  fluent.button(target, x, y, w, label, {
+    active = selected == true,
+    primary = selected == true,
+    accent = t.accent
+  })
   self:addButton(id, x, y, w, 1, callback)
 end
 
@@ -212,73 +215,63 @@ function LinkOS:cycleApp(delta)
   self:openApp(nextId)
 end
 
-function LinkOS:prompt(title, hint)
-  local active = self.active
-  local t = self:theme()
+function LinkOS:inputDialog(title,hint,secret)
+  local active=self.active
+  local t=self:theme()
 
-  if active and active.kind == "monitor" then
-    local target = active.target
-    local w, h = target.getSize()
-    draw.fill(target, 2, math.max(2, h - 4), math.max(1, w - 2), 3, t.panel)
-    draw.text(target, 3, math.max(2, h - 3), "Saisie sur l'ecran du PC...", t.warn, t.panel, math.max(1, w - 4))
+  if active and active.kind=="monitor" then
+    local target=active.target
+    local w,h=target.getSize()
+    fluent.card(target,2,math.max(2,h-5),math.max(1,w-3),4,{
+      bg=t.surface,accent=t.accent,title=secret and "Saisie securisee" or "Saisie",
+      subtitle="Utilise le clavier du Computer.",muted=t.muted
+    })
   end
 
-  local previous = term.current()
+  local previous=term.current()
   term.redirect(self.native)
-  term.setBackgroundColor(colors.black)
-  term.setTextColor(colors.white)
-  term.clear()
-  term.setCursorPos(1, 1)
-  print("Computer Link / LinkOS")
-  print("----------------------")
-  print(tostring(title or "Saisie"))
-  if hint and hint ~= "" then
-    term.setTextColor(colors.lightGray)
-    print(tostring(hint))
-    term.setTextColor(colors.white)
-  end
-  write("> ")
-  local value = read()
-  term.redirect(previous)
+  fluent.applyPalette(self.native)
 
+  local w,h=self.native.getSize()
+  draw.clear(self.native,t.desktop,t.text)
+  local cardW=math.min(math.max(24,math.floor(w*0.72)),math.max(20,w-4))
+  local cardH=math.min(9,math.max(6,h-4))
+  local x=math.max(1,math.floor((w-cardW)/2)+1)
+  local y=math.max(2,math.floor((h-cardH)/2)+1)
+
+  fluent.card(self.native,x,y,cardW,cardH,{
+    bg=t.surface,accent=secret and t.warn or t.accent,
+    title=tostring(title or (secret and "Mot de passe" or "Saisie")),
+    subtitle=tostring(hint or ""),muted=t.muted
+  })
+
+  local inputY=math.min(y+cardH-2,h-1)
+  draw.fill(self.native,x+2,inputY,math.max(4,cardW-4),1,t.surface2)
+  draw.text(self.native,x+3,inputY,">",t.accent,t.surface2,1)
+
+  pcall(self.native.setCursorPos,x+5,inputY)
+  pcall(self.native.setBackgroundColor,t.surface2)
+  pcall(self.native.setTextColor,t.text)
+  pcall(self.native.setCursorBlink,true)
+  local value=secret and read("*") or read()
+  pcall(self.native.setCursorBlink,false)
+
+  term.redirect(previous)
   self:render()
   return value
 end
 
-function LinkOS:confirm(title)
-  local answer = string.lower(self:prompt(title, "Tape OUI pour confirmer.") or "")
-  return answer == "oui" or answer == "o" or answer == "yes" or answer == "y"
+function LinkOS:prompt(title,hint)
+  return self:inputDialog(title,hint,false)
 end
 
-function LinkOS:promptSecret(title, hint)
-  local active = self.active
-  local t = self:theme()
+function LinkOS:confirm(title)
+  local answer=string.lower(self:inputDialog(title,"Tape OUI pour confirmer.",false) or "")
+  return answer=="oui" or answer=="o" or answer=="yes" or answer=="y"
+end
 
-  if active and active.kind == "monitor" then
-    local target = active.target
-    local w, h = target.getSize()
-    draw.fill(target, 2, math.max(2, h - 4), math.max(1, w - 2), 3, t.panel)
-    draw.text(target, 3, math.max(2, h - 3), "Saisie securisee sur le Computer...", t.warn, t.panel, math.max(1, w - 4))
-  end
-
-  local previous = term.current()
-  term.redirect(self.native)
-  term.setBackgroundColor(colors.black)
-  term.setTextColor(colors.white)
-  term.clear()
-  term.setCursorPos(1, 1)
-  print("LinkOS Security")
-  print("---------------")
-  print(tostring(title or "Mot de passe"))
-  if hint and hint ~= "" then
-    term.setTextColor(colors.lightGray)
-    print(tostring(hint))
-    term.setTextColor(colors.white)
-  end
-  write("> ")
-  local value = read("*")
-  term.redirect(previous)
-  return value
+function LinkOS:promptSecret(title,hint)
+  return self:inputDialog(title,hint,true)
 end
 
 function LinkOS:configurePassword()
@@ -852,89 +845,98 @@ function LinkOS:peerName(id)
 end
 
 function LinkOS:renderMessages(target, l)
-  local t = self:theme()
-  local x, y, w, h = l.contentX, l.contentY, l.contentW, l.contentH
+  local t=self:theme()
+  local x,y,w,h=l.contentX,l.contentY,l.contentW,l.contentH
 
-  draw.text(target, x, y, "Messages", t.text, t.bg, math.max(1,w-12))
-  self:button(target, "msg:new", math.max(x,x+w-10), y, math.min(10,w), "+ NOUVEAU", function()
-    local targetId = tonumber(self:prompt("Nouveau message", "Computer ID du destinataire"))
-    if not targetId then
-      self:setNotice("Computer ID invalide.", t.danger)
-      return
-    end
-    local body = self:prompt("PC #" .. targetId, "Ecris ton message")
-    if body and body ~= "" then
-      local message, err = self.service:sendMessage(targetId, body)
+  fluent.sectionTitle(target,x,y,w,"Messages","Conversations AstralNet",t.accent)
+  self:button(target,"msg:new",math.max(x,x+w-10),y,10,"+ NOUVEAU",function()
+    local targetId=tonumber(self:prompt("Nouveau message","Computer ID du destinataire"))
+    if not targetId then self:setNotice("Computer ID invalide.",t.danger);return end
+    local body=self:prompt("PC #"..targetId,"Ecris ton message")
+    if body and body~="" then
+      local message,err=self.service:sendMessage(targetId,body)
       if message then
-        self.selectedPeer = targetId
-        self:setNotice("Message envoye.", t.good)
+        self.selectedPeer=targetId
+        self:setNotice("Message envoye.",t.good)
       else
-        self:setNotice(tostring(err), t.danger)
+        self:setNotice(tostring(err),t.danger)
       end
     end
   end)
-  y=y+2
+  y=y+4
 
   local peers=self.service:peers()
-  if not self.selectedPeer then
-    if #peers==0 then
-      draw.text(target,x,y+1,"Aucune conversation",t.text,t.bg,w)
-      draw.text(target,x,y+3,"Utilise + NOUVEAU pour contacter un Computer.",t.muted,t.bg,w)
-      return
-    end
+  local sideW=w>=34 and math.min(14,math.floor(w*0.36)) or w
+  local chatX=x+sideW+1
+  local chatW=math.max(1,w-sideW-1)
 
-    draw.text(target,x,y,"CONVERSATIONS",t.muted,t.bg,w)
-    y=y+2
+  draw.fill(target,x,y,sideW,math.max(5,h-5),t.surface)
+  draw.text(target,x+1,y,"CONVERSATIONS",t.muted,t.surface,math.max(1,sideW-2))
+  local row=y+2
+  if #peers==0 then
+    draw.text(target,x+1,row,"Aucune discussion",t.muted,t.surface,math.max(1,sideW-2))
+  else
     for _,peer in ipairs(peers) do
-      if y+1>=l.h-1 then break end
-      local name=self:peerName(peer.id)
-      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
-      draw.fill(target,x,y,w,2,colors.black)
-      draw.fill(target,x,y,1,2,t.accent)
-      draw.text(target,x+2,y,name,t.text,colors.black,math.max(1,w-3))
-      draw.text(target,x+2,y+1,last,t.muted,colors.black,math.max(1,w-3))
+      if row+1>=l.h-1 then break end
       local pid=peer.id
-      self:addButton("peer:"..pid,x,y,w,2,function()
+      local selected=tonumber(self.selectedPeer)==tonumber(pid)
+      local bg=selected and t.selection or t.surface
+      local name=self:peerName(pid)
+      local last=peer.last and tostring(peer.last.body or "") or "Aucun message"
+      draw.fill(target,x,row,sideW,2,bg)
+      fluent.drawMiniIcon(target,"messages",x+1,row,selected,bg)
+      draw.text(target,x+5,row,name,selected and t.text or t.muted,bg,math.max(1,sideW-6))
+      draw.text(target,x+1,row+1,last,t.muted,bg,math.max(1,sideW-2))
+      self:addButton("peer:"..pid,x,row,sideW,2,function()
         self.selectedPeer=pid
         self.service:markRead()
       end)
-      y=y+3
+      row=row+2
     end
+  end
+
+  if w<34 then return end
+
+  draw.fill(target,chatX,y,chatW,math.max(5,h-5),t.bg)
+  if not self.selectedPeer then
+    fluent.card(target,chatX+1,y+2,math.max(8,chatW-2),5,{
+      bg=t.surface,accent=t.accent,title="Selectionne une conversation",
+      subtitle="Ou utilise + NOUVEAU pour contacter un Computer.",muted=t.muted
+    })
     return
   end
 
   local peerId=self.selectedPeer
   local name=self:peerName(peerId)
-  draw.text(target,x,y,"< Conversations",t.accent,t.bg,math.min(16,w))
-  self:addButton("msg:back",x,y,math.min(16,w),1,function() self.selectedPeer=nil end)
-  if w>=26 then
-    draw.text(target,x+18,y,name,t.text,t.bg,math.max(1,w-18))
-  end
-  y=y+2
+  draw.text(target,chatX+1,y,name,t.text,t.bg,math.max(1,chatW-2))
+  draw.text(target,chatX+1,y+1,"Computer #"..tostring(peerId),t.muted,t.bg,math.max(1,chatW-2))
 
-  local history=self.service:history(peerId,math.max(8,h-7))
-  local maxLines=math.max(1,math.min(#history,l.h-y-5))
+  local history=self.service:history(peerId,math.max(8,h-9))
+  local maxLines=math.max(1,math.min(#history,l.h-(y+7)))
   local first=math.max(1,#history-maxLines+1)
+  local cy=y+3
   for i=first,#history do
-    if y>=l.h-4 then break end
+    if cy>=l.h-3 then break end
     local m=history[i]
     local mine=tonumber(m.from_id)==os.getComputerID()
-    local prefix=mine and "MOI  " or "EUX  "
-    local fg=mine and t.accent or t.text
-    draw.text(target,x,y,prefix..tostring(m.body),fg,t.bg,w)
-    y=y+1
+    local bubbleBg=mine and t.selection or t.surface
+    local prefix=mine and "MOI" or string.upper(string.sub(name,1,3))
+    draw.fill(target,chatX+1,cy,chatW-2,1,bubbleBg)
+    draw.text(target,chatX+2,cy,prefix,mine and t.accent or t.muted,bubbleBg,4)
+    draw.text(target,chatX+7,cy,tostring(m.body),t.text,bubbleBg,math.max(1,chatW-9))
+    cy=cy+1
   end
 
-  local actionY=math.min(l.h-2,math.max(y+1,l.h-4))
-  self:button(target,"msg:reply",x,actionY,math.min(12,w),"REPONDRE",function()
+  local actionY=math.max(y+4,l.h-2)
+  self:button(target,"msg:reply",chatX+1,actionY,10,"REPONDRE",function()
     local body=self:prompt(name,"Ecris ton message")
     if body and body~="" then
       local _,err=self.service:sendMessage(peerId,body)
       self:setNotice(err or "Message envoye.",err and t.danger or t.good)
     end
   end)
-  if w>=27 then
-    self:button(target,"msg:alias",x+14,actionY,math.min(10,w-14),"ALIAS",function()
+  if chatW>=22 then
+    self:button(target,"msg:alias",chatX+12,actionY,8,"ALIAS",function()
       local alias=self:prompt("Alias de PC #"..peerId,"Vide = supprimer")
       prefs.setAlias(peerId,alias)
       self:setNotice("Alias mis a jour.",t.good)
@@ -942,141 +944,115 @@ function LinkOS:renderMessages(target, l)
   end
 end
 
-function LinkOS:renderContacts(target, l)
+function LinkOS:renderContacts(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target,x,y,"Contacts",t.text,t.bg,math.max(1,w-11))
-  self:button(target,"contact:add",math.max(x,x+w-10),y,math.min(10,w),"+ AJOUTER",function()
+  fluent.sectionTitle(target,x,y,w,"Contacts","Carnet d'adresses local",t.accent)
+  self:button(target,"contact:add",math.max(x,x+w-10),y,10,"+ AJOUTER",function()
     local id=tonumber(self:prompt("Nouveau contact","Computer ID"))
-    if not id then
-      self:setNotice("Computer ID invalide.",t.danger)
-      return
-    end
+    if not id then self:setNotice("Computer ID invalide.",t.danger);return end
     local name=self:prompt("PC #"..id,"Nom local du contact")
-    if name and name~="" then
-      prefs.setAlias(id,name)
-      self:setNotice("Contact ajoute.",t.good)
-    end
+    if name and name~="" then prefs.setAlias(id,name);self:setNotice("Contact ajoute.",t.good) end
   end)
-  y=y+2
+  y=y+4
 
   local contacts={}
-  for id,name in pairs(prefs.all().aliases or {}) do
-    contacts[#contacts+1]={id=tonumber(id) or id,name=name}
-  end
-  table.sort(contacts,function(a,b)
-    return string.lower(tostring(a.name))<string.lower(tostring(b.name))
-  end)
+  for id,name in pairs(prefs.all().aliases or {}) do contacts[#contacts+1]={id=tonumber(id) or id,name=name} end
+  table.sort(contacts,function(a,b) return string.lower(tostring(a.name))<string.lower(tostring(b.name)) end)
 
   if #contacts==0 then
-    draw.text(target,x,y+1,"Aucun contact",t.text,t.bg,w)
-    draw.text(target,x,y+3,"Les alias restent uniquement sur ce Computer.",t.muted,t.bg,w)
+    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.muted,title="Aucun contact",
+      subtitle="Ajoute un Computer ID pour le retrouver ici.",muted=t.muted})
     return
   end
 
-  for _,contact in ipairs(contacts) do
-    if y+1>=l.h-1 then break end
+  local cols=w>=38 and 2 or 1
+  local gap=1
+  local cw=math.max(14,math.floor((w-(cols-1)*gap)/cols))
+  for i,contact in ipairs(contacts) do
+    local col=(i-1)%cols
+    local row=math.floor((i-1)/cols)
+    local bx=x+col*(cw+gap)
+    local by=y+row*4
+    if by+2>=l.h-1 then break end
     local cid=tonumber(contact.id)
-    draw.fill(target,x,y,w,2,colors.black)
-    draw.fill(target,x,y,2,2,t.accent)
-    draw.text(target,x,y,"@",colors.white,t.accent,2)
-    draw.text(target,x+3,y,tostring(contact.name),t.text,colors.black,math.max(1,w-11))
-    local idText="#"..tostring(contact.id)
-    draw.text(target,math.max(x+3,x+w-#idText),y,idText,t.muted,colors.black,#idText)
-    draw.text(target,x+3,y+1,cid and "Ouvrir la conversation" or "Alias local",
-      t.muted,colors.black,math.max(1,w-4))
-    self:addButton("contact:"..tostring(contact.id),x,y,w,2,function()
-      if cid then
-        self.selectedPeer=cid
-        self:openApp("messages")
-      end
+    draw.fill(target,bx,by,cw,3,t.surface)
+    fluent.drawMiniIcon(target,"contacts",bx+1,by,false,t.surface)
+    draw.text(target,bx+5,by,tostring(contact.name),t.text,t.surface,math.max(1,cw-6))
+    draw.text(target,bx+5,by+1,"Computer #"..tostring(contact.id),t.muted,t.surface,math.max(1,cw-6))
+    draw.text(target,bx+1,by+2,cid and "Ouvrir Messages" or "Alias local",t.accent,t.surface,cw-2)
+    self:addButton("contact:"..tostring(contact.id),bx,by,cw,3,function()
+      if cid then self.selectedPeer=cid;self:openApp("messages") end
     end)
-    y=y+3
   end
 end
 
-function LinkOS:renderNetwork(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
-  local info = self.service:identity()
+function LinkOS:renderNetwork(target,l)
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
+  local info=self.service:identity()
 
-  draw.text(target, x, y, "AstralNet", t.text, t.bg, math.max(1,w-12))
-  local status = info.online and "ONLINE" or "OFFLINE"
-  draw.text(target, math.max(x,x+w-#status), y, status,
-    info.online and t.good or t.danger, t.bg, #status)
-  y = y + 2
+  fluent.sectionTitle(target,x,y,w,"Reseau","AstralNet et connectivite du poste",t.accent)
+  y=y+4
 
-  draw.fill(target, x, y, w, 6, colors.black)
-  draw.fill(target, x, y, 1, 6, info.online and t.good or t.danger)
+  local status=info.online and "Connecte" or "Hors-ligne"
+  fluent.card(target,x,y,w,6,{
+    bg=t.surface,accent=info.online and t.good or t.danger,
+    title=tostring(info.label or ("PC-"..tostring(info.computer_id))),
+    subtitle=status.." / Computer #"..tostring(info.computer_id),muted=t.muted
+  })
+  draw.text(target,x+2,y+2,"MER",t.muted,t.surface,9)
+  draw.text(target,x+12,y+2,info.server_id and ("#"..tostring(info.server_id)) or "Non detecte",
+    info.server_id and t.text or t.warn,t.surface,math.max(1,w-14))
+  draw.text(target,x+2,y+3,"Modem",t.muted,t.surface,9)
+  draw.text(target,x+12,y+3,tostring(info.modem or "Absent"),
+    info.modem and t.text or t.warn,t.surface,math.max(1,w-14))
+  draw.text(target,x+2,y+4,"Malcraft",t.muted,t.surface,9)
+  draw.text(target,x+12,y+4,info.malcraft_bridge and "Bridge online" or "Bridge absent",
+    info.malcraft_bridge and t.good or t.muted,t.surface,math.max(1,w-14))
+  y=y+7
 
-  local label = tostring(info.label or ("PC-" .. tostring(info.computer_id)))
-  draw.text(target, x+2, y, label, t.text, colors.black, math.max(1,w-3))
-  draw.text(target, x+2, y+1, "Computer #" .. tostring(info.computer_id), t.muted, colors.black, math.max(1,w-3))
-  draw.text(target, x+2, y+2,
-    "MER  " .. (info.server_id and ("#" .. tostring(info.server_id)) or "non detecte"),
-    info.server_id and t.accent or t.warn, colors.black, math.max(1,w-3))
-  draw.text(target, x+2, y+3,
-    "Modem  " .. tostring(info.modem or "absent"),
-    info.modem and t.text or t.warn, colors.black, math.max(1,w-3))
-  draw.text(target, x+2, y+4,
-    "Malcraft Bridge  " .. (info.malcraft_bridge and "ONLINE" or "ABSENT"),
-    info.malcraft_bridge and t.good or t.muted, colors.black, math.max(1,w-3))
-  y = y + 7
-
-  local bw = math.max(7, math.floor((w-2)/3))
-  self:button(target, "net:ping", x, y, bw, "PING", function()
-    local result, err = self.service:ping()
-    if result then
-      self:setNotice("MER ~" .. tostring(result.latency) .. " ms", t.good)
-    else
-      self:setNotice(tostring(err), t.danger)
-    end
+  local bw=math.max(7,math.floor((w-2)/3))
+  self:button(target,"net:ping",x,y,bw,"PING",function()
+    local result,err=self.service:ping()
+    self:setNotice(result and ("MER ~"..tostring(result.latency).." ms") or tostring(err),
+      result and t.good or t.danger)
   end)
+  if x+bw+1<=x+w-1 then
+    self:button(target,"net:sync",x+bw+1,y,math.min(bw,w-bw-1),"SYNC",function()
+      local count,err=self.service:syncInbox(true)
+      self:setNotice(count and (tostring(count).." message(s) synchronise(s).") or tostring(err),
+        count and t.good or t.danger)
+    end)
+  end
+  if x+(bw+1)*2<=x+w-1 then
+    self:button(target,"net:reconnect",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"RECONN.",function()
+      local ok,err=self.service:reconnect()
+      self:setNotice(ok and "Connexion MER retablie." or tostring(err),ok and t.good or t.danger)
+    end)
+  end
+  y=y+2
 
-  if x+bw+1 <= x+w-1 then
-    self:button(target, "net:sync", x+bw+1, y, math.min(bw,w-bw-1), "SYNC", function()
-      local count, err = self.service:syncInbox(true)
-      if count then
-        self:setNotice(tostring(count) .. " message(s) synchronise(s).", t.good)
-      else
-        self:setNotice(tostring(err), t.danger)
-      end
+  self:button(target,"net:rename",x,y,math.min(12,w),"RENOMMER",function()
+    local value=self:prompt("Nouveau nom du PC","Maximum 32 caracteres.")
+    local ok,err=self.service:setLabel(value)
+    self:setNotice(ok and "Nom du PC mis a jour." or tostring(err),ok and t.good or t.danger)
+  end)
+  if w>=24 then
+    self:button(target,"net:details",x+14,y,math.min(10,w-14),self.networkDetails and "MASQUER" or "DETAILS",function()
+      self.networkDetails=not self.networkDetails
     end)
   end
 
-  if x+(bw+1)*2 <= x+w-1 then
-    self:button(target, "net:reconnect", x+(bw+1)*2, y,
-      math.min(bw,w-(bw+1)*2), "RECONN.", function()
-        local ok, err = self.service:reconnect()
-        self:setNotice(ok and "Connexion MER retablie." or tostring(err),
-          ok and t.good or t.danger)
-      end)
-  end
-  y = y + 2
-
-  self:button(target, "net:rename", x, y, math.min(12,w), "RENOMMER", function()
-    local value = self:prompt("Nouveau nom du PC", "Maximum 32 caracteres.")
-    local ok, err = self.service:setLabel(value)
-    self:setNotice(ok and "Nom du PC mis a jour." or tostring(err), ok and t.good or t.danger)
-  end)
-
-  if w >= 24 then
-    self:button(target, "net:details", x+14, y, math.min(10,w-14),
-      self.networkDetails and "MASQUER" or "DETAILS", function()
-        self.networkDetails = not self.networkDetails
-      end)
-  end
-
   if self.networkDetails then
-    y = y + 3
-    draw.text(target, x, y, "DETAILS TECHNIQUES", t.muted, t.bg, w)
-    y = y + 2
-    draw.text(target, x, y, "Protocole", t.muted, t.bg, 10)
-    draw.text(target, x+11, y, tostring(config.PROTOCOL), t.text, t.bg, math.max(1,w-11))
-    y = y + 1
-    draw.text(target, x, y, "Version", t.muted, t.bg, 10)
-    draw.text(target, x+11, y, tostring(config.VERSION), t.text, t.bg, math.max(1,w-11))
+    y=y+3
+    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Details techniques",
+      subtitle="Informations de protocole LinkOS",muted=t.muted})
+    draw.text(target,x+2,y+2,"Protocole",t.muted,t.surface,10)
+    draw.text(target,x+13,y+2,tostring(config.PROTOCOL),t.text,t.surface,math.max(1,w-15))
+    draw.text(target,x+2,y+3,"Version",t.muted,t.surface,10)
+    draw.text(target,x+13,y+3,tostring(config.VERSION),t.text,t.surface,math.max(1,w-15))
   end
 end
 
@@ -1904,22 +1880,19 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "LinkSec", colors.red, t.bg, w)
+  fluent.sectionTitle(target,x,y,w,"LinkSec","Console operateur / securite reseau",t.danger)
 
-  local malcraftView = string.sub(tostring(self.linksecView or ""), 1, 5) == "ghost"
-    or string.sub(tostring(self.linksecView or ""), 1, 8) == "malcraft"
-  local shownTarget = malcraftView and self:malcraftTargetId() or tonumber(self.hackerConsole.target)
+  local malcraftView=string.sub(tostring(self.linksecView or ""),1,5)=="ghost"
+    or string.sub(tostring(self.linksecView or ""),1,8)=="malcraft"
+  local shownTarget=malcraftView and self:malcraftTargetId() or tonumber(self.hackerConsole.target)
+  local targetText=shownTarget and ("Cible PC #"..tostring(shownTarget)) or "Aucune cible"
 
-  local targetText = shownTarget
-    and ("Cible PC #" .. tostring(shownTarget))
-    or "Aucune cible"
-
-  if w >= 26 then
-    draw.text(target, math.max(x, x + w - #targetText), y, targetText,
-      shownTarget and t.good or t.warn, t.bg, #targetText)
+  if w>=26 then
+    draw.text(target,math.max(x,x+w-#targetText),y+1,targetText,
+      shownTarget and t.good or t.warn,t.bg,#targetText)
   end
 
-  y = y + 2
+  y=y+4
 
   if self.linksecView == "targets" then
     draw.text(target, x, y, "< ACCUEIL", t.accent, t.bg, w)
@@ -2806,132 +2779,88 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  draw.text(target, x, y, "Poste operateur PC #" .. os.getComputerID(), t.muted, t.bg, w)
-  y = y + 2
+  fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.danger,
+    title="Poste operateur PC #"..tostring(os.getComputerID()),
+    subtitle="Malcraft gere les cibles ROM-only; le scan LinkOS reste disponible.",muted=t.muted})
+  y=y+5
 
-  local buttonW = math.min(18, math.max(10, math.floor((w - 2) / 2)))
-
-  draw.button(target, x, y, buttonW, "MALCRAFT", colors.white, colors.red)
-  self:addButton("linksec:malcraft", x, y, buttonW, 1, function()
-    self:malcraftOpenHub()
-    self:render()
+  local buttonW=math.min(18,math.max(10,math.floor((w-2)/2)))
+  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="Malcraft",
+    subtitle="PC vierges, disques, ROM et controle persistant.",muted=t.muted})
+  fluent.button(target,x+2,y+3,buttonW,"OUVRIR MALCRAFT",{primary=true,accent=t.danger})
+  self:addButton("linksec:malcraft",x+2,y+3,buttonW,1,function()
+    self:malcraftOpenHub();self:render()
   end)
+  y=y+6
 
-  if w >= buttonW * 2 + 2 then
-    draw.text(target, x + buttonW + 2, y,
-      "PC vierges + disques + ROM + controle persistant",
-      t.muted, t.bg, math.max(1, w - buttonW - 2))
-  end
-
-  y = y + 2
-
-  draw.button(target, x, y, buttonW, "SCAN LINKOS", colors.white, t.panel)
-  self:addButton("linksec:scan", x, y, buttonW, 1, function()
-    self:linksecScan()
-    self:render()
+  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Outils LinkOS",
+    subtitle="Scan clients LinkOS et terminal operateur avance.",muted=t.muted})
+  self:button(target,"linksec:scan",x+2,y+3,buttonW,"SCAN LINKOS",function()
+    self:linksecScan();self:render()
   end)
-
-  if w >= buttonW * 2 + 2 then
-    draw.button(target, x + buttonW + 2, y, buttonW, "TERMINAL", colors.white, t.panel)
-    self:addButton("linksec:terminal", x + buttonW + 2, y, buttonW, 1, function()
+  if w>=buttonW*2+5 then
+    self:button(target,"linksec:terminal",x+3+buttonW,y+3,buttonW,"TERMINAL",function()
       self:openHackerTerminal()
     end)
   end
-
-  y = y + 2
+  y=y+6
 
   if self.hackerConsole.target then
-    local actionW = math.min(16, math.max(10, math.floor((w - 2) / 2)))
-
-    draw.button(target, x, y, actionW, "CONVERSATIONS", colors.white, t.panel)
-    self:addButton("linksec:conversations", x, y, actionW, 1, function()
-      self:linksecLoadConversationIndex()
-      self:render()
+    fluent.card(target,x,y,w,7,{bg=t.surface,accent=t.good,
+      title="Session active / PC #"..tostring(self.hackerConsole.target),
+      subtitle="Outils disponibles pour la cible LinkOS selectionnee.",muted=t.muted})
+    local actionW=math.min(16,math.max(10,math.floor((w-2)/2)))
+    self:button(target,"linksec:conversations",x+2,y+3,actionW,"MESSAGES",function()
+      self:linksecLoadConversationIndex();self:render()
     end)
-
-    if w >= actionW * 2 + 2 then
-      draw.button(target, x + actionW + 2, y, actionW, "PERIPHERIQUES", colors.white, t.panel)
-      self:addButton("linksec:devices", x + actionW + 2, y, actionW, 1, function()
-        self:linksecLoadDevices()
-        self:render()
+    if w>=actionW*2+5 then
+      self:button(target,"linksec:devices",x+3+actionW,y+3,actionW,"PERIPHERIQUES",function()
+        self:linksecLoadDevices();self:render()
       end)
     end
-
-    y = y + 2
-
-    draw.button(target, x, y, actionW, "REDSTONE", colors.white, t.panel)
-    self:addButton("linksec:redstone", x, y, actionW, 1, function()
-      self:linksecLoadRedstone()
-      self:render()
+    self:button(target,"linksec:redstone",x+2,y+5,actionW,"REDSTONE",function()
+      self:linksecLoadRedstone();self:render()
     end)
-
-    if w >= actionW * 2 + 2 then
-      draw.button(target, x + actionW + 2, y, actionW, "DISQUES", colors.white, t.panel)
-      self:addButton("linksec:drives", x + actionW + 2, y, actionW, 1, function()
-        self:linksecLoadDrives()
-        self:render()
+    if w>=actionW*2+5 then
+      self:button(target,"linksec:drives",x+3+actionW,y+5,actionW,"DISQUES",function()
+        self:linksecLoadDrives();self:render()
       end)
     end
-
-    y = y + 2
-
-    draw.text(target, x, y,
-      "Session active sur PC #" .. tostring(self.hackerConsole.target),
-      t.good, t.bg, w)
   else
-    draw.text(target, x, y,
-      "1. SCAN PC  2. Clique une cible  3. Ouvre ses outils",
-      t.muted, t.bg, w)
-  end
-
-  if y + 2 < l.h - 1 then
-    draw.text(target, x, y + 2,
-      "F8 ouvre toujours le terminal avance.",
-      t.muted, t.bg, w)
+    draw.text(target,x,y,"Aucune session LinkOS active. Malcraft fonctionne sans LinkOS.",t.muted,t.bg,w)
   end
 end
 
-function LinkOS:renderSecurity(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
-  local passwordOn = security.enabled()
-  local operator = self:isOperatorUI()
+function LinkOS:renderSecurity(target,l)
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
+  local passwordOn=security.enabled()
+  local operator=self:isOperatorUI()
 
-  draw.text(target, x, y, "Securite", t.text, t.bg, math.max(1,w-12))
-  local state = passwordOn and "PROTEGE" or "STANDARD"
-  draw.text(target, math.max(x,x+w-#state), y, state,
-    passwordOn and t.good or t.warn, t.bg, #state)
-  y = y + 2
+  fluent.sectionTitle(target,x,y,w,"Securite","Protection de la session et acces LinkSec",t.accent)
+  y=y+4
 
-  draw.fill(target,x,y,w,4,colors.black)
-  draw.fill(target,x,y,1,4,passwordOn and t.good or t.warn)
-  draw.text(target,x+2,y,passwordOn and "Mot de passe actif" or "Aucun mot de passe",
-    t.text,colors.black,math.max(1,w-3))
-  draw.text(target,x+2,y+1,
-    passwordOn and ("Verrouillage auto apres "..tostring(security.autoLockSeconds()).."s")
-      or "Active une protection locale pour ce poste.",
-    t.muted,colors.black,math.max(1,w-3))
-  draw.text(target,x+2,y+2,
-    operator and "Privileges LinkSec autorises" or "Poste utilisateur standard",
-    operator and colors.red or t.muted,colors.black,math.max(1,w-3))
-  y = y + 5
+  fluent.card(target,x,y,w,6,{
+    bg=t.surface,accent=passwordOn and t.good or t.warn,
+    title=passwordOn and "Session protegee" or "Protection standard",
+    subtitle=passwordOn and ("Verrouillage automatique apres "..tostring(security.autoLockSeconds()).."s")
+      or "Ajoute un mot de passe local pour proteger ce poste.",muted=t.muted
+  })
+  draw.text(target,x+2,y+3,"Privileges",t.muted,t.surface,10)
+  draw.text(target,x+13,y+3,operator and "LinkSec autorise" or "Utilisateur standard",
+    operator and t.danger or t.text,t.surface,math.max(1,w-15))
+  y=y+7
 
   if not passwordOn then
-    self:button(target,"sec:password-on",x,y,math.min(18,w),"ACTIVER MDP",function()
-      self:configurePassword()
-    end)
+    self:button(target,"sec:password-on",x,y,18,"ACTIVER MDP",function() self:configurePassword() end)
   else
     local bw=math.max(8,math.floor((w-2)/3))
-    self:button(target,"sec:lock-now",x,y,bw,"VERROUILLER",function()
-      self:lockSession()
+    self:button(target,"sec:lock-now",x,y,bw,"VERROUILLER",function() self:lockSession() end)
+    self:button(target,"sec:password-change",x+bw+1,y,math.min(bw,w-bw-1),"MODIFIER",function()
+      self:configurePassword()
     end)
-    if x+bw+1<=x+w-1 then
-      self:button(target,"sec:password-change",x+bw+1,y,math.min(bw,w-bw-1),"MODIFIER",function()
-        self:configurePassword()
-      end)
-    end
     if x+(bw+1)*2<=x+w-1 then
-      draw.button(target,x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"DESACTIVER",colors.white,colors.red)
+      fluent.button(target,x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),"DESACTIVER",{danger=true})
       self:addButton("sec:password-off",x+(bw+1)*2,y,math.min(bw,w-(bw+1)*2),1,function()
         self:disablePassword()
       end)
@@ -2939,18 +2868,10 @@ function LinkOS:renderSecurity(target, l)
   end
 
   if operator then
-    y = y + 3
-    if y < l.h-2 then
-      draw.text(target,x,y,"LINKSEC",colors.red,t.bg,w)
-      y = y + 1
-      draw.text(target,x,y,"Outils operateur reserves a ce Computer ID.",t.muted,t.bg,w)
-      y = y + 2
-      if y < l.h then
-        self:button(target,"sec:linksec",x,y,math.min(18,w),"OUVRIR LINKSEC",function()
-          self:openApp("hacker")
-        end)
-      end
-    end
+    y=y+3
+    fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="LinkSec",
+      subtitle="Console operateur interne reservee a ce Computer ID.",muted=t.muted})
+    self:button(target,"sec:linksec",x+2,y+3,18,"OUVRIR LINKSEC",function() self:openApp("hacker") end)
   end
 end
 
@@ -3036,46 +2957,42 @@ function LinkOS:renderFiles(target, l)
     if name:find("[/\\]") or name:find("..",1,true) then return nil end
     return name
   end
+  local function childPath(name) return fs.combine(self.filePath,safeName(name) or "") end
 
-  local function childPath(name)
-    return fs.combine(self.filePath,safeName(name) or "")
+  fluent.sectionTitle(target,x,y,w,"Explorateur","Fichiers personnels /user",t.accent)
+  y=y+3
+
+  -- Command bar.
+  draw.fill(target,x,y,w,1,t.surface)
+  if self.filePath~="/user" then
+    self:button(target,"file:parent",x,y,5,"<",function()
+      local parent="/"..fs.getDir(string.sub(self.filePath,2))
+      if parent=="/" or parent=="//" or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
+        parent="/user"
+      end
+      self.filePath=parent
+      self.filePreview=nil
+    end)
   end
-
-  draw.text(target,x,y,"Fichiers",t.text,t.bg,math.max(1,w-18))
+  draw.text(target,x+6,y,self.filePath,t.muted,t.surface,math.max(1,w-24))
 
   if not self.filePreview and w>=32 then
     self:button(target,"file:new-folder",math.max(x,x+w-17),y,8,"+ DOSSIER",function()
       local name=safeName(self:prompt("Nouveau dossier","Nom du dossier"))
-      if not name then
-        self:setNotice("Nom de dossier invalide.",t.danger)
-        return
-      end
+      if not name then self:setNotice("Nom de dossier invalide.",t.danger);return end
       local full=childPath(name)
-      if fs.exists(full) then
-        self:setNotice("Un element porte deja ce nom.",t.warn)
-        return
-      end
+      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
       local ok,err=pcall(fs.makeDir,full)
       self:setNotice(ok and "Dossier cree." or tostring(err),ok and t.good or t.danger)
     end)
     self:button(target,"file:new-text",math.max(x,x+w-8),y,8,"+ TEXTE",function()
       local name=safeName(self:prompt("Nouveau fichier","Nom, par ex. note.txt"))
-      if not name then
-        self:setNotice("Nom de fichier invalide.",t.danger)
-        return
-      end
+      if not name then self:setNotice("Nom de fichier invalide.",t.danger);return end
       local full=childPath(name)
-      if fs.exists(full) then
-        self:setNotice("Un element porte deja ce nom.",t.warn)
-        return
-      end
+      if fs.exists(full) then self:setNotice("Un element porte deja ce nom.",t.warn);return end
       local handle=fs.open(full,"w")
-      if not handle then
-        self:setNotice("Creation impossible.",t.danger)
-        return
-      end
-      handle.write("")
-      handle.close()
+      if not handle then self:setNotice("Creation impossible.",t.danger);return end
+      handle.write("");handle.close()
       self:runNativeProgram("edit",full)
     end)
   end
@@ -3083,110 +3000,73 @@ function LinkOS:renderFiles(target, l)
 
   if self.filePreview then
     local path=self.filePreview.path
-    self:button(target,"file:back",x,y,9,"< RETOUR",function() self.filePreview=nil end)
+    fluent.card(target,x,y,w,3,{
+      bg=t.surface,accent=t.accent,title=fs.getName(path),subtitle=path,muted=t.muted
+    })
+    y=y+4
+    self:button(target,"file:back",x,y,8,"FERMER",function() self.filePreview=nil end)
     if w>=21 then
-      self:button(target,"file:edit",x+10,y,8,"EDITER",function()
+      self:button(target,"file:edit",x+9,y,8,"EDITER",function()
         self:runNativeProgram("edit",path)
         local handle=fs.open(path,"r")
-        if handle then
-          self.filePreview.content=handle.read(4096) or ""
-          handle.close()
-        end
+        if handle then self.filePreview.content=handle.read(4096) or "";handle.close() end
       end)
     end
     if w>=31 then
-      self:button(target,"file:rename",x+19,y,10,"RENOMMER",function()
+      self:button(target,"file:rename",x+18,y,9,"RENOMMER",function()
         local name=safeName(self:prompt("Renommer",fs.getName(path)))
-        if not name then
-          self:setNotice("Nouveau nom invalide.",t.danger)
-          return
-        end
+        if not name then self:setNotice("Nouveau nom invalide.",t.danger);return end
         local dest=fs.combine(fs.getDir(path),name)
-        if fs.exists(dest) then
-          self:setNotice("Ce nom existe deja.",t.warn)
-          return
-        end
+        if fs.exists(dest) then self:setNotice("Ce nom existe deja.",t.warn);return end
         local ok,err=pcall(fs.move,path,dest)
-        if ok then
-          self.filePreview.path=dest
-          self:setNotice("Fichier renomme.",t.good)
-        else
-          self:setNotice(tostring(err),t.danger)
-        end
+        if ok then self.filePreview.path=dest;self:setNotice("Fichier renomme.",t.good)
+        else self:setNotice(tostring(err),t.danger) end
       end)
     end
-    if w>=41 then
-      draw.button(target,x+30,y,9,"SUPPRIMER",colors.white,colors.red)
-      self:addButton("file:delete",x+30,y,9,1,function()
+    if w>=40 then
+      fluent.button(target,x+28,y,10,"SUPPRIMER",{danger=true})
+      self:addButton("file:delete",x+28,y,10,1,function()
         if self:confirm("Supprimer "..fs.getName(path).." ?") then
           local ok,err=pcall(fs.delete,path)
-          if ok then
-            self.filePreview=nil
-            self:setNotice("Fichier supprime.",t.warn)
-          else
-            self:setNotice(tostring(err),t.danger)
-          end
+          if ok then self.filePreview=nil;self:setNotice("Fichier supprime.",t.warn)
+          else self:setNotice(tostring(err),t.danger) end
         end
       end)
     end
-
     y=y+2
-    draw.text(target,x,y,tostring(path),t.accent,t.bg,w)
-    y=y+2
-    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w))
-    for _,line in ipairs(lines) do
-      if y>=l.h-1 then break end
-      draw.text(target,x,y,line,t.text,t.bg,w)
-      y=y+1
+    draw.fill(target,x,y,w,math.max(3,l.h-y-1),t.surface2)
+    local lines=draw.wrap(self.filePreview.content or "",math.max(1,w-2))
+    for i,line in ipairs(lines) do
+      if y+i>=l.h-1 then break end
+      draw.text(target,x+1,y+i-1,line,t.text,t.surface2,w-2)
     end
     return
-  end
-
-  draw.fill(target,x,y,w,1,colors.black)
-  draw.text(target,x+1,y,self.filePath,t.muted,colors.black,math.max(1,w-2))
-  y=y+2
-
-  if self.filePath~="/user" then
-    draw.fill(target,x,y,w,1,colors.black)
-    draw.text(target,x+1,y,"^  DOSSIER PARENT",t.accent,colors.black,math.max(1,w-2))
-    self:addButton("file:parent",x,y,w,1,function()
-      local parent="/"..fs.getDir(string.sub(self.filePath,2))
-      if parent=="/" or parent=="//"
-        or (parent~="/user" and string.sub(parent,1,6)~="/user/") then
-        parent="/user"
-      end
-      self.filePath=parent
-    end)
-    y=y+2
   end
 
   local entries,err=self:listFiles(self.filePath)
-  if err then
-    draw.text(target,x,y,err,t.danger,t.bg,w)
-    return
-  end
+  if err then draw.text(target,x,y,err,t.danger,t.bg,w);return end
   if #entries==0 then
-    draw.text(target,x,y,"Ce dossier est vide.",t.muted,t.bg,w)
+    fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.muted,title="Ce dossier est vide",
+      subtitle="Cree un dossier ou un fichier depuis la barre d'outils.",muted=t.muted})
     return
   end
 
+  draw.text(target,x,y,"NOM",t.muted,t.bg,math.max(1,w-14))
+  draw.text(target,math.max(x+1,x+w-9),y,"TAILLE",t.muted,t.bg,8)
+  y=y+1
   for _,name in ipairs(entries) do
-    if y>=l.h-1 then break end
+    if y+1>=l.h-1 then break end
     local full=fs.combine(self.filePath,name)
     if self:isHiddenFilePath(full) then break end
     local isDir=fs.isDir(full)
-    local icon=isDir and "D" or "F"
-    local badge=isDir and t.accent or colors.gray
-    draw.fill(target,x,y,w,2,colors.black)
-    draw.fill(target,x,y,2,2,badge)
-    draw.text(target,x,y,icon,colors.white,badge,2)
-    draw.text(target,x+3,y,name,isDir and t.accent or t.text,colors.black,math.max(1,w-12))
+    local bg=t.surface2
+    draw.fill(target,x,y,w,2,bg)
+    fluent.drawMiniIcon(target,isDir and "files" or "notes",x+1,y,false,bg)
+    draw.text(target,x+5,y,name,isDir and t.accent or t.text,bg,math.max(1,w-16))
+    draw.text(target,x+5,y+1,isDir and "Dossier" or "Document",t.muted,bg,math.max(1,w-16))
     if not isDir then
       local size=humanBytes(fs.getSize(full))
-      draw.text(target,math.max(x+3,x+w-#size-1),y,size,t.muted,colors.black,#size)
-      draw.text(target,x+3,y+1,"Cliquer pour previsualiser",t.muted,colors.black,math.max(1,w-4))
-    else
-      draw.text(target,x+3,y+1,"Dossier",t.muted,colors.black,math.max(1,w-4))
+      draw.text(target,math.max(x+5,x+w-#size-1),y,size,t.muted,bg,#size)
     end
     self:addButton("file:"..full,x,y,w,2,function()
       if fs.isDir(full) then
@@ -3205,6 +3085,7 @@ function LinkOS:renderFiles(target, l)
     y=y+3
   end
 end
+
 function LinkOS:runNativeProgram(program, ...)
   local previous = term.current()
   term.redirect(self.native)
@@ -3265,24 +3146,20 @@ function LinkOS:evaluate(expression)
   return result
 end
 
-function LinkOS:renderCalculator(target, l)
+function LinkOS:renderCalculator(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target,x,y,"Calculatrice",t.text,t.bg,w)
-  y=y+2
-
-  draw.fill(target,x,y,w,4,colors.black)
-  draw.text(target,x+1,y+1,
-    self.calculatorExpression~="" and self.calculatorExpression or "0",
-    self.calculatorExpression~="" and t.text or t.muted,colors.black,math.max(1,w-2))
-  draw.text(target,x+1,y+2,tostring(self.calculatorResult or "Pret"),t.accent,colors.black,math.max(1,w-2))
+  fluent.sectionTitle(target,x,y,w,"Calculatrice","Calcul rapide",t.accent)
+  y=y+4
+  draw.fill(target,x,y,w,4,t.surface)
+  draw.text(target,x+1,y+1,self.calculatorExpression~="" and self.calculatorExpression or "0",
+    self.calculatorExpression~="" and t.text or t.muted,t.surface,math.max(1,w-2))
+  draw.text(target,x+1,y+2,tostring(self.calculatorResult or "Pret"),t.accent,t.surface,math.max(1,w-2))
   y=y+5
 
   local function append(value)
-    if #self.calculatorExpression<80 then
-      self.calculatorExpression=self.calculatorExpression..value
-    end
+    if #self.calculatorExpression<80 then self.calculatorExpression=self.calculatorExpression..value end
   end
   local function solve()
     if self.calculatorExpression=="" then return end
@@ -3291,13 +3168,7 @@ function LinkOS:renderCalculator(target, l)
     if not result then self:setNotice(tostring(err),t.danger) end
   end
 
-  local keysGrid={
-    {"7","8","9","/"},
-    {"4","5","6","*"},
-    {"1","2","3","-"},
-    {"0",".","(",")"},
-    {"C","<","=","+"}
-  }
+  local keysGrid={{"7","8","9","/"},{"4","5","6","*"},{"1","2","3","-"},{"0",".","(",")"},{"C","<","=","+"}}
   local gap=1
   local bw=math.max(3,math.floor((w-3*gap)/4))
   for row,items in ipairs(keysGrid) do
@@ -3305,443 +3176,259 @@ function LinkOS:renderCalculator(target, l)
     for col,label in ipairs(items) do
       local bx=x+(col-1)*(bw+gap)
       local width=col==4 and math.max(3,x+w-bx) or bw
-      local bg=(label=="=" and t.accent) or (label=="C" and colors.red) or colors.gray
-      draw.button(target,bx,by,width,label,colors.white,bg)
+      fluent.button(target,bx,by,width,label,{
+        primary=label=="=",danger=label=="C",accent=t.accent
+      })
       self:addButton("calc:"..row..":"..col,bx,by,width,1,function()
-        if label=="C" then
-          self.calculatorExpression=""
-          self.calculatorResult="Pret"
-        elseif label=="<" then
-          self.calculatorExpression=self.calculatorExpression:sub(1,-2)
-        elseif label=="=" then
-          solve()
-        else
-          append(label)
-        end
+        if label=="C" then self.calculatorExpression="";self.calculatorResult="Pret"
+        elseif label=="<" then self.calculatorExpression=self.calculatorExpression:sub(1,-2)
+        elseif label=="=" then solve()
+        else append(label) end
       end)
     end
   end
 
   local by=y+#keysGrid+1
   if by<l.h-1 then
-    self:button(target,"calc:keyboard",x,by,math.min(18,w),"SAISIE CLAVIER",function()
+    self:button(target,"calc:keyboard",x,by,18,"SAISIE CLAVIER",function()
       local expression=self:prompt("Calcul LinkOS","Operateurs: + - * / % ^ ( )")
-      if expression and expression~="" then
-        self.calculatorExpression=expression
-        solve()
-      end
+      if expression and expression~="" then self.calculatorExpression=expression;solve() end
     end)
   end
 end
 
-function LinkOS:renderTerminal(target, l)
+function LinkOS:renderTerminal(target,l)
   local t=self:theme()
   local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target,x,y,"Terminal",t.text,t.bg,w)
-  y=y+2
+  fluent.sectionTitle(target,x,y,w,"Terminal","CraftOS dans une session isolee",t.accent)
+  y=y+4
 
-  draw.fill(target,x,y,w,6,colors.black)
-  draw.text(target,x+1,y+1,"> LinkOS Shell",t.accent,colors.black,math.max(1,w-2))
-  draw.text(target,x+1,y+2,"Terminal CraftOS isole",t.text,colors.black,math.max(1,w-2))
-  draw.text(target,x+1,y+3,"exit  -> retour au bureau",t.muted,colors.black,math.max(1,w-2))
+  draw.fill(target,x,y,w,8,t.surface2)
+  draw.text(target,x+1,y+1,"LinkOS Terminal",t.accent,t.surface2,math.max(1,w-2))
+  draw.text(target,x+1,y+3,"> shell",t.text,t.surface2,math.max(1,w-2))
+  draw.text(target,x+1,y+4,"exit  -> retour au bureau",t.muted,t.surface2,math.max(1,w-2))
   if self.active and self.active.kind=="monitor" then
-    draw.text(target,x+1,y+4,"Clavier utilise sur le Computer.",t.warn,colors.black,math.max(1,w-2))
+    draw.text(target,x+1,y+6,"Clavier utilise sur le Computer.",t.warn,t.surface2,math.max(1,w-2))
   end
-  y=y+7
-
-  self:button(target,"terminal:open",x,y,math.min(20,w),"OUVRIR LE TERMINAL",function()
-    self:runNativeProgram("shell")
-  end)
+  y=y+9
+  self:button(target,"terminal:open",x,y,20,"OUVRIR LE TERMINAL",function() self:runNativeProgram("shell") end)
 end
 
 function LinkOS:renderSettings(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
+  self.settingsTab=self.settingsTab or "style"
 
-  self.settingsTab = self.settingsTab or "style"
-  draw.text(target, x, y, "Parametres", t.text, t.bg, w)
-  y = y + 2
+  fluent.sectionTitle(target,x,y,w,"Parametres","Personnalise ton experience LinkOS",t.accent)
+  y=y+4
 
-  local tabs = {
-    {"style","STYLE"},
-    {"display","ECRANS"},
-    {"system","SYSTEME"}
+  local sideW=w>=34 and 12 or 9
+  local cx=x+sideW+1
+  local cw=math.max(10,w-sideW-1)
+  draw.fill(target,x,y,sideW,math.max(18,l.h-y-1),t.surface)
+
+  local tabs={
+    {"style","Style","*"},
+    {"display","Ecrans","D"},
+    {"system","Systeme","I"}
   }
-  local gap = 1
-  local tabW = math.max(6, math.floor((w-2*gap)/3))
-  local tx = x
-  for i,tab in ipairs(tabs) do
-    local width = i==#tabs and math.max(6, x+w-tx) or tabW
-    draw.button(target, tx, y, width, tab[2], colors.white,
-      self.settingsTab==tab[1] and t.accent or colors.black)
+  local sy=y+1
+  for _,tab in ipairs(tabs) do
+    local selected=self.settingsTab==tab[1]
+    local bg=selected and t.selection or t.surface
+    draw.fill(target,x,sy,sideW,2,bg)
+    draw.text(target,x+1,sy,tab[3],selected and t.accent or t.muted,bg,1)
+    draw.text(target,x+3,sy,tab[2],selected and t.text or t.muted,bg,math.max(1,sideW-4))
     local id=tab[1]
-    self:addButton("set:tab:"..id,tx,y,width,1,function() self.settingsTab=id end)
-    tx=tx+width+gap
+    self:addButton("set:tab:"..id,x,sy,sideW,2,function() self.settingsTab=id end)
+    sy=sy+3
   end
-  y = y + 3
 
-  if self.settingsTab == "style" then
-    draw.text(target, x, y, "Couleur d'accent", t.muted, t.bg, w)
-    y = y + 2
+  if self.settingsTab=="style" then
+    draw.text(target,cx,y,"Apparence",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Couleurs, bureau et barre des taches",t.muted,t.bg,cw)
+    local py=y+3
 
-    local accentNames = {"cyan","blue","lime","orange","purple","red"}
-    local cellW = math.max(4, math.floor((w-2)/3))
+    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.accent,title="Couleur d'accent",
+      subtitle="Utilisee dans les selections et actions principales.",muted=t.muted})
+    local accentNames={"blue","cyan","lime","orange","purple","red"}
+    local aw=math.max(4,math.floor((cw-5)/6))
     for i,name in ipairs(accentNames) do
-      local col=(i-1)%3
-      local row=math.floor((i-1)/3)
-      local bx=x+col*(cellW+1)
-      local by=y+row*2
-      local selected=prefs.get("accent","cyan")==name
-      draw.button(target,bx,by,cellW,string.upper(string.sub(name,1,3)),
-        selected and colors.black or colors.white,
-        selected and ACCENTS[name] or colors.black)
-      self:addButton("accent:"..name,bx,by,cellW,1,function()
+      local bx=cx+2+(i-1)*(aw+1)
+      local selected=prefs.get("accent","blue")==name
+      local colour=ACCENTS[name] or colors.lightBlue
+      draw.fill(target,bx,py+3,aw,2,selected and colour or t.surface2)
+      draw.fill(target,bx+1,py+3,math.max(1,aw-2),1,colour)
+      draw.text(target,bx,py+4,string.upper(string.sub(name,1,1)),
+        selected and colors.white or t.muted,selected and colour or t.surface2,aw)
+      self:addButton("accent:"..name,bx,py+3,aw,2,function()
         prefs.set("accent",name)
+        self:refreshDisplays()
       end)
     end
-    y = y + 5
+    py=py+7
 
-    draw.text(target, x, y, "Fond du bureau", t.muted, t.bg, w)
-    y = y + 1
-    local wallpaper=tostring(prefs.get("wallpaper","dots"))
-    self:button(target,"set:wallpaper",x,y,math.min(18,w),
-      string.upper(wallpaper),function()
-        local order={"dots","clean","grid","lines"}
-        local current=prefs.get("wallpaper","dots")
+    fluent.card(target,cx,py,cw,4,{bg=t.surface,accent=t.accent,title="Bureau",
+      subtitle="Fond et densite de la barre des taches.",muted=t.muted})
+    local wallpaper=tostring(prefs.get("wallpaper","fluent"))
+    self:button(target,"set:wallpaper",cx+2,py+2,math.min(15,cw-4),
+      "FOND: "..string.upper(wallpaper),function()
+        local order={"fluent","clean","dots","grid","lines"}
+        local current=prefs.get("wallpaper","fluent")
         local nextValue=order[1]
         for i,value in ipairs(order) do
           if value==current then nextValue=order[(i%#order)+1];break end
         end
         prefs.set("wallpaper",nextValue)
       end)
-    y = y + 2
-
-    if y < l.h-2 then
+    if cw>=30 then
       local labels=prefs.get("taskbar_labels",false)
-      self:button(target,"set:taskbarlabels",x,y,math.min(18,w),
-        labels and "TACHES: TEXTE" or "TACHES: COMPACT",function()
+      self:button(target,"set:taskbarlabels",cx+18,py+2,math.min(16,cw-19),
+        labels and "TACHES: TEXTE" or "TACHES: ICONES",function()
           prefs.set("taskbar_labels",not prefs.get("taskbar_labels",false))
         end)
-      y=y+2
     end
+    py=py+5
 
-    if y < l.h-4 then
-      draw.text(target,x,y,"Apps epinglees",t.muted,t.bg,w)
-      y=y+1
-      local pinCandidates={"messages","files","store","terminal","calculator"}
-      local pins=prefs.get("taskbar_pins",{})
-      local pinned={}
-      for _,id in ipairs(pins) do pinned[id]=true end
-      local cell=math.max(8,math.floor((w-1)/2))
-      for i,id in ipairs(pinCandidates) do
-        local app=shellui.find(id,self:isOperatorUI())
-        if app then
-          local col=(i-1)%2
-          local row=math.floor((i-1)/2)
-          local bx=x+col*(cell+1)
-          local by=y+row*2
-          local label=(pinned[id] and "- " or "+ ")..app.short
-          draw.button(target,bx,by,math.min(cell,w-(bx-x)),label,
-            colors.white,pinned[id] and t.accent or colors.black)
-          self:addButton("set:pin:"..id,bx,by,math.min(cell,w-(bx-x)),1,function()
-            local current=prefs.get("taskbar_pins",{})
-            local nextPins={}
-            local found=false
-            for _,value in ipairs(current) do
-              if value==id then found=true else nextPins[#nextPins+1]=value end
-            end
-            if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
-            prefs.set("taskbar_pins",nextPins)
-          end)
-        end
+    fluent.card(target,cx,py,cw,9,{bg=t.surface,accent=t.accent,title="Applications epinglees",
+      subtitle="Choisis les raccourcis visibles dans la barre des taches.",muted=t.muted})
+    local pinCandidates={"messages","files","store","terminal","calculator"}
+    local pins=prefs.get("taskbar_pins",{})
+    local pinned={}
+    for _,id in ipairs(pins) do pinned[id]=true end
+    local cell=math.max(8,math.floor((cw-3)/2))
+    for i,id in ipairs(pinCandidates) do
+      local app=shellui.find(id,self:isOperatorUI())
+      if app then
+        local col=(i-1)%2
+        local row=math.floor((i-1)/2)
+        local bx=cx+2+col*(cell+1)
+        local by=py+3+row*2
+        local selected=pinned[id]
+        local bg=selected and t.selection or t.surface2
+        draw.fill(target,bx,by,cell,1,bg)
+        fluent.drawMiniIcon(target,id,bx,by,selected,bg)
+        draw.text(target,bx+4,by,app.title,selected and t.text or t.muted,bg,math.max(1,cell-4))
+        self:addButton("set:pin:"..id,bx,by,cell,1,function()
+          local current=prefs.get("taskbar_pins",{})
+          local nextPins={}
+          local found=false
+          for _,value in ipairs(current) do
+            if value==id then found=true else nextPins[#nextPins+1]=value end
+          end
+          if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
+          prefs.set("taskbar_pins",nextPins)
+        end)
       end
     end
 
-  elseif self.settingsTab == "display" then
-    draw.text(target, x, y, "Affichage principal", t.muted, t.bg, w)
-    y = y + 2
-
+  elseif self.settingsTab=="display" then
+    draw.text(target,cx,y,"Affichage",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Computer et Advanced Monitors",t.muted,t.bg,cw)
+    local py=y+3
     for _,d in ipairs(self.displays or {}) do
-      if y>=l.h-2 then break end
+      if py+3>=l.h-1 then break end
       local selected=self.active and d.id==self.active.id
-      local prefix=selected and "* " or "  "
       local size=tostring(d.width).."x"..tostring(d.height)
-      draw.fill(target,x,y,w,2,colors.black)
-      draw.text(target,x+1,y,prefix..d.label,selected and t.accent or t.text,
-        colors.black,math.max(1,w-10))
-      draw.text(target,math.max(x+1,x+w-#size),y,size,t.muted,colors.black,#size)
-      if d.kind=="monitor" and d.scale then
-        draw.text(target,x+3,y+1,"Echelle "..tostring(d.scale),t.muted,colors.black,math.max(1,w-4))
-      else
-        draw.text(target,x+3,y+1,d.kind=="computer" and "Ecran du Computer" or "Moniteur",
-          t.muted,colors.black,math.max(1,w-4))
-      end
+      fluent.card(target,cx,py,cw,4,{
+        bg=selected and t.selection or t.surface,
+        accent=selected and t.accent or t.muted,
+        title=(selected and "Actif - " or "")..d.label,
+        subtitle=(d.kind=="monitor" and ("Advanced Monitor / scale "..tostring(d.scale or "-"))
+          or "Ecran du Computer"),
+        muted=t.muted
+      })
+      draw.text(target,math.max(cx+2,cx+cw-#size-2),py+1,size,t.muted,
+        selected and t.selection or t.surface,#size)
       local displayId=d.id
-      self:addButton("display:"..displayId,x,y,w,2,function()
+      self:addButton("display:"..displayId,cx,py,cw,4,function()
         prefs.set("display_id",displayId)
         self:refreshDisplays()
         self:setNotice("Affichage principal change.",t.good)
       end)
-      y=y+3
+      py=py+5
     end
 
   else
-    draw.text(target, x, y, "LinkOS " .. tostring(config.VERSION), t.accent, t.bg, w)
-    y = y + 1
-    local channel=tostring(config.SOURCE_REF or "main")
-    draw.text(target, x, y, "Canal  " .. channel,
-      channel=="main" and t.muted or t.warn, t.bg, w)
-    y = y + 1
-    draw.text(target, x, y,
-      self.service.updateAvailable
-        and ("Mise a jour disponible: " .. tostring(self.service.remoteVersion))
-        or "Systeme a jour",
-      self.service.updateAvailable and t.warn or t.muted, t.bg, w)
-    y = y + 2
+    draw.text(target,cx,y,"Systeme",t.text,t.bg,cw)
+    draw.text(target,cx,y+1,"Version, session et alimentation",t.muted,t.bg,cw)
+    local py=y+3
 
-    self:button(target,"set:update",x,y,math.min(14,w),
+    local channel=tostring(config.SOURCE_REF or "main")
+    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=self.service.updateAvailable and t.warn or t.good,
+      title="LinkOS "..tostring(config.VERSION),
+      subtitle=self.service.updateAvailable
+        and ("Mise a jour disponible: "..tostring(self.service.remoteVersion))
+        or ("A jour / canal "..channel),
+      muted=t.muted})
+    self:button(target,"set:update",cx+2,py+3,math.min(16,cw-4),
       self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",
       function() self:runUpdateAction() end)
-    y = y + 3
+    py=py+6
 
-    draw.text(target,x,y,"Session",t.muted,t.bg,w)
-    y = y + 1
     local restore=prefs.get("restore_session",true)
-    self:button(target,"set:restore-session",x,y,math.min(18,w),
+    fluent.card(target,cx,py,cw,5,{bg=t.surface,accent=t.accent,title="Session",
+      subtitle="Rouvre les applications apres un redemarrage.",muted=t.muted})
+    self:button(target,"set:restore-session",cx+2,py+3,math.min(18,cw-4),
       restore and "RESTAURATION: OUI" or "RESTAURATION: NON",function()
         prefs.set("restore_session",not prefs.get("restore_session",true))
         self:setNotice(prefs.get("restore_session",true)
           and "Restauration de session activee."
-          or "Restauration de session desactivee.",
-          t.good)
+          or "Restauration de session desactivee.",t.good)
       end)
-    if w>=31 then
-      self:button(target,"set:forget-session",x+20,y,math.min(13,w-20),"OUBLIER SESSION",function()
+    if cw>=32 then
+      self:button(target,"set:forget-session",cx+21,py+3,math.min(13,cw-22),"OUBLIER",function()
         prefs.set("workspace_session",{windows={},active="home"})
         self:setNotice("Session sauvegardee effacee.",t.warn)
       end)
     end
-    y = y + 3
+    py=py+6
 
-    local half=math.max(8,math.floor((w-1)/2))
-    self:button(target,"set:reboot",x,y,half,"REDEMARRER",function() os.reboot() end)
-    if w>=18 then
-      self:button(target,"set:shutdown",x+half+1,y,math.min(half,w-half-1),"ARRETER",
-        function() os.shutdown() end)
-    end
-    y = y + 3
-
-    draw.text(target,x,y,"Maintenance",t.muted,t.bg,w)
-    y = y + 1
-    draw.button(target,x,y,math.min(16,w),"DESINSTALLER",colors.white,colors.red)
-    self:addButton("set:uninstall",x,y,math.min(16,w),1,function()
+    fluent.card(target,cx,py,cw,6,{bg=t.surface,accent=t.warn,title="Alimentation et maintenance",
+      subtitle="Actions systeme. La desinstallation conserve tes documents /user.",muted=t.muted})
+    local half=math.max(8,math.floor((cw-5)/2))
+    self:button(target,"set:reboot",cx+2,py+3,half,"REDEMARRER",function() os.reboot() end)
+    self:button(target,"set:shutdown",cx+3+half,py+3,math.min(half,cw-half-4),"ARRETER",
+      function() os.shutdown() end)
+    fluent.button(target,cx+2,py+4,math.min(16,cw-4),"DESINSTALLER",{danger=true})
+    self:addButton("set:uninstall",cx+2,py+4,math.min(16,cw-4),1,function()
       self:runUninstallAction()
     end)
   end
 end
 
-function LinkOS:renderAbout(target, l)
-  local t = self:theme()
-  local x, y, w = l.contentX, l.contentY, l.contentW
+function LinkOS:renderAbout(target,l)
+  local t=self:theme()
+  local x,y,w=l.contentX,l.contentY,l.contentW
 
-  draw.text(target, x, y, "Computer Link / LinkOS", t.accent, t.bg, w)
-  y = y + 2
+  fluent.sectionTitle(target,x,y,w,"A propos de LinkOS","Computer Link / Astralium",t.accent)
+  y=y+4
+  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="LinkOS "..tostring(config.VERSION),
+    subtitle="Canal "..tostring(config.SOURCE_REF or "main").." / OS reseau pour Astralium",muted=t.muted})
+  y=y+6
 
-  local text = {
-    "Version " .. config.VERSION,
-    "Canal " .. tostring(config.SOURCE_REF or "main"),
-    "",
-    "Un OS reseau construit pour Astralium.",
-    "Identite native par Computer ID.",
-    "Bureau graphique, menu Start, barre des taches, AstralNet et moniteurs.",
-    "LinkSec reste une application interne reservee aux Computer IDs autorises.",
-    "",
-    "Raccourcis :",
-    "F1 Bureau    F2 Messages   F3 Reseau",
-    "F4 Securite  F5 Fichiers   F6 Parametres",
-    "F7 Contacts  F8 LinkSec CMD (autorise)",
-    "F9 App suiv.  F10 Start     F11 Systeme",
-    "F12 Fenetre suiv.  Alt+Tab Switcher",
-    "Ctrl+D Bureau  Ctrl+M Reduire  Ctrl+W Fermer",
-    "ESC Fermer menu / Bureau"
+  fluent.card(target,x,y,w,8,{bg=t.surface,accent=t.accent,title="Navigation",
+    subtitle="Raccourcis principaux du bureau et des fenetres",muted=t.muted})
+  local shortcuts={
+    "F1 Bureau   F2 Messages   F3 Reseau",
+    "F4 Securite F5 Fichiers   F6 Parametres",
+    "F10 Start   F11 Systeme   F12 Fenetre suivante",
+    "Alt+Tab Fenetres   Ctrl+D Bureau",
+    "Ctrl+M Reduire   Ctrl+W Fermer"
   }
-
-  for _, line in ipairs(text) do
-    if y >= l.h - 2 then break end
-    draw.text(target, x, y, line, line == "" and t.muted or t.text, t.bg, w)
-    y = y + 1
+  for i,line in ipairs(shortcuts) do
+    if y+1+i>=l.h-1 then break end
+    draw.text(target,x+2,y+1+i,line,t.text,t.surface,w-4)
   end
-end
+  y=y+9
 
-function LinkOS:renderHackedDisplay(target, state)
-  local w, h = target.getSize()
-  draw.clear(target, colors.black, colors.red)
-
-  local skull
-  if w >= 50 and h >= 22 then
-    skull = {
-      "              .-''''''''''''-.",
-      "           .-'                '-.",
-      "         .'                      '.",
-      "        /      .----------.        \\",
-      "       /     .'            '.       \\",
-      "      |     /   _        _   \\       |",
-      "      |    |   (_)      (_)   |      |",
-      "      |    |                __|      |",
-      "      |    |      .----.   /  \\     |",
-      "       \\    \\    / /\\ \\  |   |    /",
-      "        '.   '. |  \\/  | |  .'  .'",
-      "          \\    \\|      |/    /",
-      "           \\    | .--. |    /",
-      "            '.  | |__| |  .'",
-      "              \\ |______| /",
-      "               '--------'"
-    }
-  elseif w >= 34 and h >= 15 then
-    skull = {
-      "        .-''''''''-.",
-      "      .'            '.",
-      "     /   X        X   \\",
-      "    |                  |",
-      "    |      .----.      |",
-      "    |     / /\\ \\     |",
-      "     \\    \\ \\/ /    /",
-      "      '.   |__|   .'",
-      "        \\ .----. /",
-      "         '|____|'"
-    }
-  else
-    skull = {
-      "   .----.",
-      "  / X  X \\",
-      " |   /\\   |",
-      " |  ____  |",
-      "  \\______/"
-    }
+  if y+3<l.h then
+    fluent.card(target,x,y,w,4,{bg=t.surface,accent=self:isOperatorUI() and t.danger or t.muted,
+      title=self:isOperatorUI() and "LinkSec autorise" or "Poste utilisateur",
+      subtitle=self:isOperatorUI() and "Outils operateur disponibles sur ce Computer ID."
+        or "Les outils operateur restent masques.",muted=t.muted})
   end
-
-  local total = #skull + 5
-  local startY = math.max(1, math.floor((h - total) / 2))
-
-  for i, line in ipairs(skull) do
-    if startY + i - 1 <= h then
-      draw.center(target, startY + i - 1, line, colors.red, colors.black)
-    end
-  end
-
-  local titleY = startY + #skull + 1
-  if titleY <= h then
-    draw.center(target, titleY, "YOU HAVE BEEN HACKED", colors.red, colors.black)
-  end
-
-  if titleY + 1 <= h then
-    draw.center(target, titleY + 1, "SYSTEM LOCKED", colors.white, colors.red)
-  end
-
-  local message = ""
-  if state.flash and state.flash.message and state.flash.message ~= "" then
-    message = state.flash.message
-  elseif state.message then
-    message = state.message
-  end
-
-  if message ~= "" and titleY + 3 <= h then
-    local lines = draw.wrap(message, math.max(10, w - 4))
-    for i = 1, math.min(#lines, math.max(1, h - titleY - 3)) do
-      draw.center(target, titleY + 2 + i, lines[i], colors.white, colors.black)
-    end
-  end
-
-  if h >= 3 then
-    draw.center(target, h, "REMOTE CONTROL ACTIVE", colors.red, colors.black)
-  end
-
-  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
-end
-
-function LinkOS:renderForcedMessageDisplay(target, flash)
-  local w, h = target.getSize()
-  draw.clear(target, colors.black, colors.white)
-
-  draw.center(target, math.max(1, math.floor(h / 2) - 3), "REMOTE TRANSMISSION", colors.red, colors.black)
-  draw.center(target, math.max(2, math.floor(h / 2) - 1), "PC #" .. tostring(flash.source_id or "?"), colors.lightGray, colors.black)
-
-  local lines = draw.wrap(tostring(flash.message or ""), math.max(8, w - 4))
-  local y = math.max(3, math.floor(h / 2) + 1)
-  for i = 1, math.min(#lines, math.max(1, h - y - 2)) do
-    draw.center(target, y + i - 1, lines[i], colors.white, colors.black)
-  end
-
-  if h >= 3 then
-    draw.center(target, h, "Clique ou appuie sur une touche pour fermer", colors.lightGray, colors.black)
-  end
-
-  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
-end
-
-function LinkOS:renderUserLockDisplay(target)
-  local w, h = target.getSize()
-  local t = self:theme()
-  draw.clear(target, colors.black, colors.white)
-
-  local label = os.getComputerLabel() or ("PC-" .. os.getComputerID())
-  local clock = textutils.formatTime(os.time(), true)
-  local centerY = math.max(3, math.floor(h / 2))
-
-  draw.fill(target, 1, 1, w, 1, t.accent)
-  draw.text(target, 2, 1, "LINKOS", colors.white, t.accent, math.max(1,w-8))
-  draw.text(target, math.max(1,w-#clock-1), 1, clock, colors.white, t.accent, #clock)
-
-  if h >= 12 then
-    draw.center(target, centerY-4, label, t.muted, colors.black)
-    draw.center(target, centerY-2, "[  LOCK  ]", colors.white, t.accent)
-    draw.center(target, centerY, "Session verrouillee", colors.white, colors.black)
-    draw.center(target, centerY+2, "Mot de passe LinkOS requis", t.muted, colors.black)
-  else
-    draw.center(target, centerY-2, label, t.muted, colors.black)
-    draw.center(target, centerY, "SESSION VERROUILLEE", colors.white, colors.black)
-    draw.center(target, centerY+1, "Mot de passe requis", t.muted, colors.black)
-  end
-
-  if h >= 7 then
-    draw.fill(target, 1, h, w, 1, colors.gray)
-    draw.center(target, h, "Touche ou clic pour deverrouiller", colors.white, colors.gray)
-  end
-
-  if target.setCursorBlink then pcall(target.setCursorBlink, false) end
-end
-
-function LinkOS:renderUserLock()
-  if not self.sessionLocked or not security.enabled() then return false end
-
-  self.buttons = {}
-  for _, d in ipairs(self.displays or {}) do
-    if d.target then self:renderUserLockDisplay(d.target) end
-  end
-  return true
-end
-
-function LinkOS:renderHijackState()
-  local state = hackedState.get()
-
-  if state.locked then
-    self.buttons = {}
-    for _, d in ipairs(self.displays or {}) do
-      if d.target then self:renderHackedDisplay(d.target, state) end
-    end
-    return true
-  end
-
-  if state.flash and state.flash.message then
-    self.buttons = {}
-    for _, d in ipairs(self.displays or {}) do
-      if d.target then self:renderForcedMessageDisplay(d.target, state.flash) end
-    end
-    return true
-  end
-
-  return false
 end
 
 function LinkOS:renderCompanion(d)
@@ -3751,52 +3438,47 @@ function LinkOS:renderCompanion(d)
   local target=d.target
   local t=self:theme()
   local w,h=target.getSize()
-  draw.clear(target,colors.black,colors.white)
+  fluent.applyPalette(target)
+  draw.clear(target,t.desktop,t.text)
 
   local clock=nowText()
-  draw.fill(target,1,1,w,1,t.accent)
-  draw.text(target,2,1,"LINKOS",colors.white,t.accent,math.max(1,w-9))
-  draw.text(target,math.max(1,w-#clock-1),1,clock,colors.white,t.accent,#clock)
+  local label=(os.getComputerLabel and os.getComputerLabel()) or ("PC-"..tostring(os.getComputerID()))
+  draw.text(target,2,2,clock,t.text,t.desktop,5)
+  draw.text(target,2,3,"LinkOS",t.muted,t.desktop,8)
 
-  local label=os.getComputerLabel() or ("PC-"..os.getComputerID())
-  if h>=5 then
-    draw.text(target,2,3,label,t.text,colors.black,math.max(1,w-3))
-    draw.text(target,2,4,"Computer #"..tostring(os.getComputerID()),t.muted,colors.black,math.max(1,w-3))
+  if h>=7 then
+    fluent.card(target,2,5,math.max(12,w-3),4,{bg=t.surface,accent=t.accent,
+      title=label,subtitle="Computer #"..tostring(os.getComputerID()),muted=t.muted})
   end
 
-  local row=h>=12 and 6 or 5
-  if row<=h-2 then
-    local net=self.service.online and "ONLINE" or "OFFLINE"
-    draw.text(target,2,row,"ASTRALNET",t.muted,colors.black,10)
-    draw.text(target,math.max(12,w-#net-1),row,net,
-      self.service.online and t.good or t.danger,colors.black,#net)
-    row=row+2
+  local row=h>=13 and 10 or 6
+  local function line(title,value,colour)
+    if row>=h-2 then return end
+    draw.text(target,2,row,title,t.muted,t.desktop,10)
+    local text=tostring(value)
+    draw.text(target,math.max(12,w-#text-1),row,text,colour or t.text,t.desktop,#text)
+    row=row+1
   end
-  if row<=h-2 then
-    local unread=tostring(self.service.unread or 0)
-    draw.text(target,2,row,"MESSAGES",t.muted,colors.black,10)
-    draw.text(target,math.max(12,w-#unread-1),row,unread,
-      (self.service.unread or 0)>0 and t.warn or t.text,colors.black,#unread)
-    row=row+2
-  end
-  if row<=h-2 then
-    local app=shellui.find(self.app,self:isOperatorUI())
-    draw.text(target,2,row,"APP",t.muted,colors.black,5)
-    draw.text(target,8,row,app and app.title or tostring(self.app),t.text,colors.black,math.max(1,w-9))
-  end
+
+  line("AstralNet",self.service.online and "Connecte" or "Hors-ligne",
+    self.service.online and t.good or t.danger)
+  line("Messages",tostring(self.service.unread or 0),
+    (self.service.unread or 0)>0 and t.warn or t.text)
+  local app=shellui.find(self.app,self:isOperatorUI())
+  line("Application",app and app.title or tostring(self.app),t.text)
 
   self.companionButtons[d.name]=nil
-  if self.service.updateAvailable and d.touch and h>=13 and w>=14 then
+  if self.service.updateAvailable and d.touch and h>=14 and w>=16 then
     local bw=math.min(16,w-4)
     local by=h-3
-    draw.button(target,2,by,bw,"INSTALLER MAJ",colors.black,colors.yellow)
+    fluent.button(target,2,by,bw,"INSTALLER MAJ",{primary=true,accent=t.warn})
     self.companionButtons[d.name]={x=2,y=by,w=bw,h=1,action="update"}
   end
 
   if h>=2 then
-    draw.fill(target,1,h,w,1,colors.gray)
-    draw.center(target,h,d.touch and "TOUCHER POUR UTILISER CET ECRAN" or "AFFICHAGE SECONDAIRE",
-      d.touch and colors.white or t.muted,colors.gray)
+    draw.fill(target,1,h,w,1,t.taskbar)
+    draw.center(target,h,d.touch and "Toucher pour utiliser cet ecran" or "Affichage secondaire",
+      d.touch and t.text or t.muted,t.taskbar)
   end
 
   if target.setCursorBlink then pcall(target.setCursorBlink,false) end

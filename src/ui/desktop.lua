@@ -1,5 +1,6 @@
 -- LinkOS workspace: one retained window per application, no replacement of MER.
 local draw=dofile('/computer-link/src/ui/draw.lua')
+local fluent=dofile('/computer-link/src/ui/fluent.lua')
 local packages=dofile('/computer-link/src/ui/packages.lua')
 local M={}
 local function clamp(n,lo,hi) return math.max(lo,math.min(hi,n)) end
@@ -199,35 +200,32 @@ function M.install(OS,shellui,prefs)
     if #list==0 then return end
 
     local t=self:theme()
-    local mw=math.min(math.max(26,math.floor(w*0.56)),math.max(20,w-4))
-    local visible=math.min(7,#list)
-    local mh=visible+3
+    local visible=math.min(6,#list)
+    local cardW=w>=58 and 12 or 10
+    local mw=math.min(w-4,visible*(cardW+1)+3)
+    local mh=7
     local x=math.max(1,math.floor((w-mw)/2)+1)
     local y=math.max(1,math.floor((h-mh)/2))
 
-    draw.fill(target,x,y,mw,mh,colors.gray)
-    draw.fill(target,x,y,mw,1,t.accent)
-    draw.text(target,x+2,y,'ALT + TAB',colors.white,t.accent,mw-4)
-    draw.text(target,x+2,y+1,'Applications ouvertes',t.muted,colors.gray,mw-4)
+    draw.fill(target,x,y,mw,mh,t.elevated)
+    draw.fill(target,x,y,mw,1,t.surface)
+    draw.text(target,x+2,y,"Changer de fenetre",t.text,t.surface,mw-4)
 
     local first=math.max(1,#list-visible+1)
-    local row=y+2
+    local col=0
     for i=first,#list do
       local win=list[i]
       local app=shellui.find(win.id,self:isOperatorUI())
       local active=win.id==self.app and not win.minimized
-      local bg=active and colors.black or colors.gray
-      local icon=app and (app.icon or '+') or '+'
-      local title=app and app.title or win.id
-      draw.fill(target,x+1,row,mw-2,1,bg)
-      draw.text(target,x+2,row,icon,active and t.accent or t.text,bg,2)
-      draw.text(target,x+5,row,title,active and colors.white or t.text,bg,math.max(1,mw-14))
-      if win.minimized then
-        draw.text(target,x+mw-6,row,'MIN',t.muted,bg,3)
-      elseif active then
-        draw.text(target,x+mw-6,row,'ACT',t.accent,bg,3)
-      end
-      row=row+1
+      local bx=x+2+col*(cardW+1)
+      local bg=active and t.selection or t.surface2
+      draw.fill(target,bx,y+2,cardW,4,bg)
+      fluent.drawMiniIcon(target,win.id,bx+1,y+2,active,bg)
+      draw.text(target,bx+1,y+4,app and app.title or win.id,
+        active and t.text or t.muted,bg,cardW-2)
+      draw.text(target,bx+1,y+5,win.minimized and "Minimise" or (active and "Active" or "Ouverte"),
+        win.minimized and t.muted or (active and t.accent or t.muted),bg,cardW-2)
+      col=col+1
     end
   end
 
@@ -431,31 +429,29 @@ function M.install(OS,shellui,prefs)
     local menu=self.contextMenu
     if not menu then return end
     local t=self:theme()
-    local mw=18
+    local mw=20
     local options={}
 
-    local function add(label,action)
-      options[#options+1]={label=label,action=action}
+    local function add(label,action,danger)
+      options[#options+1]={label=label,action=action,danger=danger}
     end
 
     if menu.targetId then
       local app=shellui.find(menu.targetId,self:isOperatorUI())
-      add('OUVRIR',function() self:openApp(menu.targetId) end)
-      add(self:isTaskbarPinned(menu.targetId) and 'DESEPINGLER' or 'EPINGLER',function()
+      add("Ouvrir",function() self:openApp(menu.targetId) end)
+      add(self:isTaskbarPinned(menu.targetId) and "Desepingler" or "Epingler",function()
         self:toggleTaskbarPin(menu.targetId)
       end)
-      add(self:isDesktopShortcut(menu.targetId) and 'RETIRER BUREAU' or 'AJOUTER BUREAU',function()
+      add(self:isDesktopShortcut(menu.targetId) and "Retirer du bureau" or "Ajouter au bureau",function()
         self:toggleDesktopShortcut(menu.targetId)
       end)
-      if app and app.id~='store' then
-        add('APPLICATIONS',function() self:openApp('store') end)
-      end
-      add('PARAMETRES',function() self:openApp('settings') end)
+      if app and app.id~="store" then add("Voir dans Applications",function() self:openApp("store") end) end
+      add("Parametres",function() self:openApp("settings") end)
     else
-      add('ACTUALISER',function() self:render() end)
-      add('FICHIERS',function() self:openApp('files') end)
-      add('APPLICATIONS',function() self:openApp('store') end)
-      add('PARAMETRES',function() self:openApp('settings') end)
+      add("Actualiser",function() self:render() end)
+      add("Fichiers",function() self:openApp("files") end)
+      add("Applications",function() self:openApp("store") end)
+      add("Personnaliser",function() self:openApp("settings") end)
     end
 
     local mh=#options+2
@@ -463,159 +459,169 @@ function M.install(OS,shellui,prefs)
     local my=clamp(menu.y,1,math.max(1,h-mh))
     self.shellOverlay={x=mx,y=my,w=mw,h=mh}
 
-    draw.fill(target,mx,my,mw,mh,colors.gray)
-    draw.fill(target,mx,my,mw,1,t.accent)
-    draw.text(target,mx+1,my,menu.targetId and 'APP' or 'BUREAU',colors.white,t.accent,mw-2)
-
+    draw.fill(target,mx,my,mw,mh,t.elevated)
+    draw.text(target,mx+2,my,menu.targetId and "Application" or "Bureau",t.muted,t.elevated,mw-4)
     for i,item in ipairs(options) do
       local by=my+i
-      draw.button(target,mx+1,by,mw-2,item.label,colors.white,colors.black)
-      self:addButton('context:'..i,mx+1,by,mw-2,1,function()
+      local bg=t.surface2
+      draw.fill(target,mx+1,by,mw-2,1,bg)
+      draw.text(target,mx+2,by,item.label,item.danger and t.danger or t.text,bg,mw-4)
+      self:addButton("context:"..i,mx+1,by,mw-2,1,function()
         self.contextMenu=nil
         item.action()
       end)
     end
   end
+
   function OS:renderDesktop(target,w,h)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
-    shellui.wallpaper(target,1,1,w,desktopH,prefs.get('wallpaper','dots'),t.accent)
+    shellui.wallpaper(target,1,1,w,desktopH,prefs.get("wallpaper","fluent"),t.accent)
     self.iconRects={}
+
+    -- Subtle identity mark instead of a permanent information bar.
+    if w>=38 and desktopH>=10 then
+      draw.text(target,w-8,2,"LINKOS",t.muted,t.desktop,6)
+    end
 
     local apps=self:desktopApps()
     local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
-    local tileH=3
-    local cols=math.max(1,math.floor((w-2)/(tileW+1)))
-    local rows=math.max(1,math.floor((desktopH-2)/(tileH+1)))
+    local tileH=5
+    local gapX=1
+    local gapY=1
+    local cols=math.max(1,math.floor((w-2)/(tileW+gapX)))
+    local rows=math.max(1,math.floor((desktopH-1)/(tileH+gapY)))
     local capacity=math.max(1,cols*rows)
     self.desktopPages=math.max(1,math.ceil(#apps/capacity))
     self.desktopPage=clamp(self.desktopPage or 1,1,self.desktopPages)
     self.iconCapacity=capacity
 
-    local palette={
-      messages=colors.cyan,contacts=colors.lightBlue,network=colors.lime,
-      security=colors.purple,files=colors.orange,notes=colors.yellow,
-      calculator=colors.green,terminal=colors.lightGray,store=colors.blue,
-      settings=colors.blue,about=colors.cyan,hacker=colors.red
-    }
-
     local first=(self.desktopPage-1)*capacity+1
     for i=first,math.min(#apps,first+capacity-1) do
       local n=i-first
-      local x=2+(n%cols)*(tileW+1)
-      local y=2+math.floor(n/cols)*(tileH+1)
+      local x=2+(n%cols)*(tileW+gapX)
+      local y=2+math.floor(n/cols)*(tileH+gapY)
       local selected=self.selectedIcon==i
-      local tileBg=selected and colors.gray or colors.black
-      local badge=palette[apps[i].id] or t.accent
+      local tileBg=selected and t.selection or t.desktop
 
       if selected then draw.fill(target,x,y,tileW,tileH,tileBg) end
-      draw.fill(target,x+3,y,3,2,badge)
-      draw.text(target,x+3,y,apps[i].icon or '+',colors.white,badge,3)
-      draw.text(target,x,y+2,apps[i].title,colors.white,tileBg,tileW)
+      local iconX=x+math.max(0,math.floor((tileW-3)/2))
+      fluent.drawIcon(target,apps[i].id,iconX,y,selected,tileBg)
+      draw.text(target,x,y+4,apps[i].title,t.text,tileBg,tileW)
 
       self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,index=i,id=apps[i].id}
     end
 
     if self.desktopPages>1 then
-      local page=tostring(self.desktopPage)..'/'..tostring(self.desktopPages)
-      draw.text(target,math.max(1,w-#page-1),1,page,t.muted,colors.black,#page)
+      local page=tostring(self.desktopPage).." / "..tostring(self.desktopPages)
+      draw.text(target,math.max(1,w-#page-1),desktopH,page,t.muted,t.desktop,#page)
     end
   end
 
   function OS:appContext(win,target,l)
-    return {target=target,w=l.w,h=l.h,data=win.data,draw=draw,
+    local theme=self:theme()
+    return {target=target,w=l.w,h=l.h,data=win.data,draw=draw,ui=fluent,theme=theme,
       prompt=function(title,hint) return self:prompt(title,hint) end,
       button=function(id,x,y,width,label,fn) self:button(target,id,x,y,width,label,fn) end,
-      notice=function(s) self:setNotice(s,colors.cyan) end}
+      notice=function(s) self:setNotice(s,theme.accent) end}
   end
   function OS:renderStore(target,l)
     local t=self:theme()
     local query=tostring(self.storeQuery or "")
     local q=query:lower()
 
-    draw.text(target,2,1,'Applications',t.text,t.bg,math.max(1,l.w-25))
-    self:button(target,'store:search',math.max(2,l.w-21),1,9,'CHERCHER',function()
-      self.storeQuery=self:prompt('Rechercher une app','Nom, ID ou description')
+    fluent.sectionTitle(target,2,1,l.w-3,"Applications","Catalogue officiel LinkOS",t.accent)
+    fluent.searchBox(target,2,4,math.max(12,l.w-15),query,"Rechercher",t.accent)
+    self:addButton("store:search",2,4,math.max(12,l.w-15),1,function()
+      self.storeQuery=self:prompt("Rechercher une app","Nom, ID ou description") or ""
     end)
-    self:button(target,'store:refresh',math.max(2,l.w-11),1,10,'ACTUALISER',function()
+    self:button(target,"store:refresh",math.max(2,l.w-11),4,10,"ACTUALISER",function()
       local ok,result=packages.refreshCatalog()
-      self:setNotice(ok and (tostring(result)..' apps chargees.') or tostring(result),
-        ok and colors.lime or colors.orange)
+      self:setNotice(ok and (tostring(result).." apps chargees.") or tostring(result),
+        ok and t.good or t.warn)
     end)
 
-    if query~='' then
-      draw.text(target,2,2,'Recherche: '..query,t.accent,t.bg,math.max(1,l.w-10))
-      self:button(target,'store:clear',math.max(2,l.w-7),2,6,'TOUS',function()
-        self.storeQuery=''
+    if query~="" then
+      self:button(target,"store:clear",math.max(2,l.w-11),5,10,"TOUT AFFICHER",function()
+        self.storeQuery=""
       end)
     else
-      draw.text(target,2,2,
-        packages.catalogSource=='remote' and 'Catalogue officiel en ligne' or 'Catalogue officiel local',
-        packages.catalogSource=='remote' and t.accent or t.muted,t.bg,l.w-3)
+      draw.text(target,2,5,
+        packages.catalogSource=="remote" and "Catalogue en ligne" or "Catalogue local hors-ligne",
+        packages.catalogSource=="remote" and t.good or t.muted,t.bg,l.w-3)
     end
 
-    local row=4
-    local shown=0
+    local visible={}
     for _,p in ipairs(packages.catalog) do
-      local hay=(p.title..' '..p.id..' '..p.description):lower()
-      if q=='' or hay:find(q,1,true) then
-        shown=shown+1
-        local installed=packages.installed(p.id)
-        local installedVersion=installed and packages.installedVersion(p.id) or nil
-        local outdated=installed and installedVersion and installedVersion~=p.version
-        local stateColour=outdated and t.warn or (installed and colors.lime or t.accent)
-        local stateText
-        if outdated then
-          stateText='MAJ '..p.version
-        elseif installed then
-          stateText='v'..tostring(installedVersion or '?')
-        else
-          stateText='v'..p.version
-        end
-
-        draw.fill(target,2,row,l.w-3,3,colors.black)
-        draw.fill(target,2,row,2,3,stateColour)
-        draw.text(target,5,row,p.title,t.text,colors.black,math.max(1,l.w-16))
-        draw.text(target,5,row+1,p.description,t.muted,colors.black,math.max(1,l.w-7))
-        draw.text(target,math.max(5,l.w-10),row,stateText,stateColour,colors.black,9)
-
-        local installLabel=outdated and 'METTRE A JOUR' or (installed and 'REINSTALL' or 'INSTALLER')
-        local installW=outdated and 12 or (installed and 10 or 9)
-        self:button(target,'store:install:'..p.id,5,row+2,installW,installLabel,function()
-          local verb=outdated and 'Mettre a jour ' or 'Installer '
-          if self:confirm(verb..p.title..' depuis le depot officiel ?') then
-            local ok,msg=packages.install(p.id)
-            self:setNotice(msg,ok and colors.lime or colors.red)
-          end
-        end)
-
-        if installed then
-          local openX=6+installW
-          self:button(target,'store:open:'..p.id,openX,row+2,7,'OUVRIR',function()
-            self:openApp('pkg:'..p.id)
-          end)
-          local removeX=openX+8
-          if removeX+7<=l.w then
-            self:button(target,'store:remove:'..p.id,removeX,row+2,8,'RETIRER',function()
-              if self:confirm('Retirer '..p.title..' ? Donnees conservees.') then
-                local ok,err=packages.remove(p.id)
-                if ok then
-                  for j=#self.windows,1,-1 do
-                    if self.windows[j].id=='pkg:'..p.id then table.remove(self.windows,j) end
-                  end
-                end
-                self:setNotice(ok and 'Application retiree.' or tostring(err),
-                  ok and colors.orange or colors.red)
-              end
-            end)
-          end
-        end
-        row=row+4
-      end
+      local hay=(p.title.." "..p.id.." "..p.description):lower()
+      if q=="" or hay:find(q,1,true) then visible[#visible+1]=p end
     end
 
-    if shown==0 then
-      draw.text(target,3,5,'Aucune application correspondante.',t.muted,t.bg,math.max(1,l.w-5))
+    if #visible==0 then
+      fluent.card(target,2,8,math.max(10,l.w-3),5,{
+        bg=t.surface,accent=t.muted,title="Aucune application",
+        subtitle="Essaie une autre recherche.",muted=t.muted
+      })
+      return
+    end
+
+    local cols=l.w>=40 and 2 or 1
+    local gap=1
+    local cardW=math.max(16,math.floor((l.w-3-(cols-1)*gap)/cols))
+    local cardH=6
+    local top=7
+
+    for i,p in ipairs(visible) do
+      local col=(i-1)%cols
+      local row=math.floor((i-1)/cols)
+      local x=2+col*(cardW+gap)
+      local y=top+row*(cardH+1)
+
+      local installed=packages.installed(p.id)
+      local installedVersion=installed and packages.installedVersion(p.id) or nil
+      local outdated=installed and installedVersion and installedVersion~=p.version
+      local stateColour=outdated and t.warn or (installed and t.good or t.accent)
+      local stateText=outdated and ("MAJ "..p.version)
+        or (installed and ("Installee v"..tostring(installedVersion or "?")) or ("Version "..p.version))
+
+      draw.fill(target,x,y,cardW,cardH,t.surface)
+      fluent.drawIcon(target,p.id,x+1,y+1,false,t.surface)
+      draw.text(target,x+5,y,p.title,t.text,t.surface,math.max(1,cardW-6))
+      draw.text(target,x+5,y+1,stateText,stateColour,t.surface,math.max(1,cardW-6))
+      draw.text(target,x+5,y+2,p.description,t.muted,t.surface,math.max(1,cardW-6))
+
+      local installLabel=outdated and "METTRE A JOUR" or (installed and "REINSTALL" or "INSTALLER")
+      local installW=math.min(12,math.max(8,cardW-10))
+      self:button(target,"store:install:"..p.id,x+1,y+4,installW,installLabel,function()
+        local verb=outdated and "Mettre a jour " or "Installer "
+        if self:confirm(verb..p.title.." depuis le depot officiel ?") then
+          local ok,msg=packages.install(p.id)
+          self:setNotice(msg,ok and t.good or t.danger)
+        end
+      end)
+
+      if installed then
+        local openX=x+2+installW
+        if openX+6<=x+cardW-1 then
+          self:button(target,"store:open:"..p.id,openX,y+4,7,"OUVRIR",function()
+            self:openApp("pkg:"..p.id)
+          end)
+        end
+        if cardW>=28 then
+          self:button(target,"store:remove:"..p.id,x+cardW-8,y+5,7,"RETIRER",function()
+            if self:confirm("Retirer "..p.title.." ? Donnees conservees.") then
+              local ok,err=packages.remove(p.id)
+              if ok then
+                for j=#self.windows,1,-1 do
+                  if self.windows[j].id=="pkg:"..p.id then table.remove(self.windows,j) end
+                end
+              end
+              self:setNotice(ok and "Application retiree." or tostring(err),
+                ok and t.warn or t.danger)
+            end
+          end)
+        end
+      end
     end
   end
   function OS:renderWindow(target,win,w,h)
@@ -630,30 +636,34 @@ function M.install(OS,shellui,prefs)
 
     local app=shellui.find(win.id,self:isOperatorUI())
     local active=self.app==win.id
-    local titleBg=active and t.accent or colors.gray
+    local titleBg=active and t.titleActive or t.titleInactive
     local bodyW=math.max(1,win.w-2)
     local bodyH=math.max(1,win.h-2)
 
-    draw.fill(target,win.x,win.y,win.w,win.h,colors.gray)
+    -- Subtle frame/shadow instead of a saturated title bar.
+    draw.fill(target,win.x,win.y,win.w,win.h,t.border)
     draw.fill(target,win.x,win.y,win.w,1,titleBg)
-    draw.text(target,win.x+1,win.y,(app and (app.icon..'  '..app.title) or win.id),
-      colors.white,titleBg,math.max(1,win.w-11))
-    draw.fill(target,win.x+1,win.y+1,bodyW,bodyH,colors.black)
+    if active then draw.fill(target,win.x,win.y,1,win.h,t.accent) end
+    fluent.drawMiniIcon(target,win.id,win.x+1,win.y,active,titleBg)
+    draw.text(target,win.x+5,win.y,(app and app.title or win.id),
+      active and t.text or t.muted,titleBg,math.max(1,win.w-16))
+    draw.fill(target,win.x+1,win.y+1,bodyW,bodyH,t.bg)
 
-    local function control(offset,label,bg,callback)
-      local x=win.x+win.w-offset
-      draw.fill(target,x,win.y,3,1,bg or titleBg)
-      draw.text(target,x+1,win.y,label,colors.white,bg or titleBg,1)
-      self:addButton('win:'..win.id..':'..label,x,win.y,3,1,callback)
+    local function control(offset,label,danger,callback)
+      local cx=win.x+win.w-offset
+      local bg=danger and t.danger or titleBg
+      draw.fill(target,cx,win.y,3,1,bg)
+      draw.text(target,cx+1,win.y,label,danger and colors.white or t.muted,bg,1)
+      self:addButton("win:"..win.id..":"..label,cx,win.y,3,1,callback)
     end
 
-    control(9,'-',titleBg,function()
+    control(9,"-",false,function()
       win.minimized=true
-      self.app='home'
+      self.app="home"
       self.showDesktopSnapshot=nil
       self:saveWorkspaceSession()
     end)
-    control(6,'O',titleBg,function()
+    control(6,win.maximized and "o" or "O",false,function()
       if win.maximized then
         win.maximized=false
         local r=win.restore
@@ -664,19 +674,20 @@ function M.install(OS,shellui,prefs)
       end
       self:saveWorkspaceSession()
     end)
-    control(3,'X',colors.red,function() self:closeWindow(win) end)
+    control(3,"X",true,function() self:closeWindow(win) end)
 
     local virtualH=math.max(30,bodyH)
-    if win.id=='store' then
-      virtualH=math.max(virtualH,#packages.catalog*4+5)
-    elseif win.id=='settings' then
-      virtualH=math.max(virtualH,34)
+    if win.id=="store" then
+      local storeCols=bodyW>=40 and 2 or 1
+      virtualH=math.max(virtualH,math.ceil(#packages.catalog/storeCols)*7+8)
+    elseif win.id=="settings" then
+      virtualH=math.max(virtualH,38)
     end
     local maxScroll=math.max(0,virtualH-bodyH)
     win.scroll=clamp(win.scroll or 0,0,maxScroll)
 
     local canvas=window.create(target,1,1,bodyW,virtualH,false)
-    local l={w=bodyW,h=virtualH,mode='standard',contentX=2,contentY=2,
+    local l={w=bodyW,h=virtualH,mode="standard",contentX=2,contentY=2,
       contentW=math.max(1,bodyW-3),contentH=math.max(1,virtualH-5)}
 
     local savedButtons=self.buttons
@@ -697,9 +708,10 @@ function M.install(OS,shellui,prefs)
     win.renderError=not ok and tostring(err) or nil
 
     if not ok then
-      draw.clear(canvas,colors.black,colors.white)
-      draw.text(canvas,2,2,'Application interrompue',colors.red,nil,math.max(1,bodyW-3))
-      draw.text(canvas,2,4,tostring(err),colors.lightGray,nil,math.max(1,bodyW-3))
+      draw.clear(canvas,t.bg,t.text)
+      fluent.card(canvas,2,2,math.max(8,bodyW-3),4,{
+        bg=t.surface,accent=t.danger,title="Application interrompue",subtitle=tostring(err),muted=t.muted
+      })
       localButtons={}
     end
 
@@ -709,30 +721,30 @@ function M.install(OS,shellui,prefs)
       target.blit(text,fg,bg)
     end
 
-    for _,b in ipairs(localButtons) do
-      local by=b.y-win.scroll
-      if b.x>=1 and b.x+b.w-1<=bodyW and by>=1 and by+b.h-1<=bodyH then
-        self:addButton(b.id,win.x+b.x,win.y+by,b.w,b.h,b.callback)
+    for _,btn in ipairs(localButtons) do
+      local by=btn.y-win.scroll
+      if btn.x>=1 and btn.x+btn.w-1<=bodyW and by>=1 and by+btn.h-1<=bodyH then
+        self:addButton(btn.id,win.x+btn.x,win.y+by,btn.w,btn.h,btn.callback)
       end
     end
 
     if maxScroll>0 then
       local trackTop=win.y+1
       local trackH=bodyH
-      draw.fill(target,win.x+win.w-1,trackTop,1,trackH,colors.gray)
+      draw.fill(target,win.x+win.w-1,trackTop,1,trackH,t.surface)
       local thumbH=math.max(1,math.floor(trackH*bodyH/virtualH))
       local thumbY=trackTop
-      if maxScroll>0 and trackH>thumbH then
+      if trackH>thumbH then
         thumbY=trackTop+math.floor((trackH-thumbH)*win.scroll/maxScroll)
       end
-      draw.fill(target,win.x+win.w-1,thumbY,1,thumbH,active and t.accent or colors.lightGray)
-      self:addButton('scroll:track:'..win.id,win.x+win.w-1,trackTop,1,trackH,function()
+      draw.fill(target,win.x+win.w-1,thumbY,1,thumbH,active and t.accent or t.muted)
+      self:addButton("scroll:track:"..win.id,win.x+win.w-1,trackTop,1,trackH,function()
         win.scroll=math.min(maxScroll,win.scroll+math.max(1,bodyH-2))
       end)
     end
 
     if not win.maximized then
-      draw.text(target,win.x+win.w-1,win.y+win.h-1,'+',colors.white,colors.gray,1)
+      draw.text(target,win.x+win.w-1,win.y+win.h-1,"+",t.muted,t.border,1)
     end
   end
 
@@ -741,7 +753,8 @@ function M.install(OS,shellui,prefs)
     local t=self:theme()
     self:restoreWorkspaceSession()
     local list=self:workspace()
-    if self:renderHijackState() or self:renderUserLock() then return end
+    if self.renderHijackState and self:renderHijackState() then return end
+    if self.renderUserLock and self:renderUserLock() then return end
 
     local physical=self.active.target
     local w,h=physical.getSize()
@@ -764,16 +777,13 @@ function M.install(OS,shellui,prefs)
       end
     end
 
-    -- One-row Windows-like taskbar. Keep the empty surface visually quiet.
-    draw.fill(target,1,h,w,1,colors.black)
-    draw.button(target,1,h,5,'LINK',colors.white,t.accent)
-    self:addButton('wm:start',1,h,5,1,function() self:toggleStartMenu() end)
+    -- Windows 11-like single-row taskbar: centered app group, system tray right.
+    draw.fill(target,1,h,w,1,t.taskbar)
 
     local statusW=10
-    local rightX=math.max(7,w-statusW+1)
-    local taskX=7
-    local available=math.max(0,rightX-taskX-1)
-    local labels=prefs.get('taskbar_labels',false)
+    local rightX=math.max(8,w-statusW+1)
+    local usableRight=rightX-2
+    local labels=prefs.get("taskbar_labels",false) and w>=70
 
     local openById={}
     for _,win in ipairs(list) do openById[win.id]=win end
@@ -791,25 +801,41 @@ function M.install(OS,shellui,prefs)
       end
     end
 
-    local total=#taskItems
-    local preferred=labels and 9 or 5
-    local taskW=total>0 and math.max(4,math.min(preferred,math.floor(available/math.max(1,total)))) or 0
-    local shown=0
+    local taskW=labels and 8 or 4
+    local maxTasks=math.max(1,math.floor((usableRight-6)/taskW))
+    local visibleTasks=math.min(#taskItems,maxTasks)
+    local groupW=4+visibleTasks*taskW
+    local startX=math.max(1,math.floor((usableRight-groupW)/2)+1)
 
-    for _,item in ipairs(taskItems) do
-      if taskW<=0 or taskX+taskW-1>=rightX then break end
+    -- Start button uses the same icon language as the desktop.
+    local startBg=self.startMenuOpen and t.selection or t.taskbar
+    fluent.drawMiniIcon(target,"home",startX,h,self.startMenuOpen,startBg)
+    self:addButton("wm:start",startX,h,3,1,function() self:toggleStartMenu() end)
+    local taskX=startX+4
+
+    for i=1,visibleTasks do
+      local item=taskItems[i]
       local app=item.app
-      local label=(app and (app.icon or app.short) or item.id)
-      if labels and taskW>=7 and app then label=label..' '..app.short end
       local active=item.win and item.win.id==self.app and not item.win.minimized
-      local bg=active and t.accent or (item.pinned and colors.gray or colors.black)
-      draw.button(target,taskX,h,taskW,label,colors.white,bg)
-      self:addButton('wm:task:'..item.id,taskX,h,taskW,1,function()
+      local minimized=item.win and item.win.minimized
+      local bg=active and t.selection or t.taskbar
+
+      if labels then
+        draw.fill(target,taskX,h,taskW,1,bg)
+        fluent.drawMiniIcon(target,item.id,taskX,h,active,bg)
+        draw.text(target,taskX+3,h,app and app.short or item.id,
+          active and t.text or t.muted,bg,math.max(1,taskW-3))
+      else
+        fluent.drawMiniIcon(target,item.id,taskX,h,active,bg)
+        if minimized then draw.text(target,taskX+3,h,".",t.muted,t.taskbar,1) end
+      end
+
+      self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
         local win=openById[item.id]
         if win then
           if win.id==self.app and not win.minimized then
             win.minimized=true
-            self.app='home'
+            self.app="home"
             self.showDesktopSnapshot=nil
             self:saveWorkspaceSession()
           else
@@ -820,25 +846,31 @@ function M.install(OS,shellui,prefs)
         end
       end)
       taskX=taskX+taskW
-      shown=shown+1
     end
 
-    if shown<total and taskX<rightX then
-      local hidden=total-shown
-      local ow=math.min(4,rightX-taskX)
-      draw.button(target,taskX,h,ow,'+'..tostring(hidden),colors.white,colors.black)
-      self:addButton('wm:overflow',taskX,h,ow,1,function() self:toggleStartMenu() end)
+    if visibleTasks<#taskItems and taskX<usableRight then
+      local hidden=#taskItems-visibleTasks
+      draw.text(target,taskX,h,"+"..tostring(hidden),t.muted,t.taskbar,
+        math.min(3,usableRight-taskX+1))
+      self:addButton("wm:overflow",taskX,h,math.min(3,usableRight-taskX+1),1,
+        function() self:toggleStartMenu() end)
     end
 
-    local netLabel=self.service.online and 'ON' or 'OFF'
-    draw.text(target,rightX,h,netLabel,self.service.online and colors.lime or colors.red,colors.black,3)
-    self:addButton('wm:system',rightX,h,3,1,function() self:toggleQuickPanel() end)
-    draw.text(target,w-5,h,textutils.formatTime(os.time(),true),colors.white,colors.black,5)
-    self:addButton('wm:clock',w-5,h,5,1,function() self:toggleQuickPanel() end)
-    draw.text(target,w,h,'|',t.muted,colors.black,1)
-    self:addButton('wm:desktop',w,h,1,1,function()
-      self:toggleShowDesktop()
-    end)
+    -- System tray.
+    local unread=tonumber(self.service.unread) or 0
+    local netGlyph=self.service.online and "^" or "x"
+    draw.text(target,rightX,h,netGlyph,
+      self.service.online and t.good or t.danger,t.taskbar,1)
+    if unread>0 and rightX+2<w-5 then
+      draw.text(target,rightX+2,h,tostring(math.min(9,unread)),t.warn,t.taskbar,1)
+    end
+    self:addButton("wm:system",rightX,h,3,1,function() self:toggleQuickPanel() end)
+
+    draw.text(target,w-5,h,textutils.formatTime(os.time(),true),t.text,t.taskbar,5)
+    self:addButton("wm:clock",w-5,h,5,1,function() self:toggleQuickPanel() end)
+
+    draw.text(target,w,h,"|",t.muted,t.taskbar,1)
+    self:addButton("wm:desktop",w,h,1,1,function() self:toggleShowDesktop() end)
 
     if self.notice then
       local nw=math.min(w-2,math.max(12,#tostring(self.notice)+2))
@@ -1099,25 +1131,35 @@ function M.install(OS,shellui,prefs)
     self:setNotice(ok and 'Document sauvegarde.' or tostring(err),ok and colors.lime or colors.red)
   end
   function OS:renderNotes(target,l)
-    if not self.noteDocument then self:loadNote('/user/notes.txt') end
+    if not self.noteDocument then self:loadNote("/user/notes.txt") end
     local note=self.noteDocument
     if not note then return end
-    draw.text(target,2,1,(note.dirty and '* ' or '')..note.path,colors.cyan,colors.black,l.w-3)
-    self:button(target,'note:edit',2,3,10,note.editing and 'EDITION' or 'EDITER',function() note.editing=not note.editing end)
-    self:button(target,'note:save',13,3,11,'SAUVEGARDER',function() self:saveNote() end)
-    draw.text(target,2,5,'Entree: ligne | Ctrl+S: sauver | Esc: fin',colors.lightGray,colors.black,l.w-3)
-    local win=self.drawingWindow
-    -- A dedicated text page keeps long notes editable without losing the toolbar.
+    local t=self:theme()
+
+    fluent.sectionTitle(target,2,1,l.w-3,"Notes",
+      (note.dirty and "Modifications non enregistrees" or note.path),t.accent)
+    self:button(target,"note:edit",2,4,10,note.editing and "EDITION" or "EDITER",
+      function() note.editing=not note.editing end)
+    self:button(target,"note:save",13,4,11,"SAUVEGARDER",function() self:saveNote() end)
+
+    draw.fill(target,2,6,l.w-3,1,t.surface)
+    draw.text(target,3,6,"Entree: ligne  |  Ctrl+S: sauver  |  Esc: quitter l'edition",
+      t.muted,t.surface,l.w-5)
+
+    draw.fill(target,2,8,l.w-3,math.max(5,l.h-9),t.surface2)
     local page=math.floor((note.row-1)/18)
     for row=page*18+1,math.min(#note.lines,page*18+18) do
       local text=note.lines[row]
-      if row==note.row and note.editing then
-        local start=math.max(1,note.col-(l.w-6))
-        text=text:sub(start,note.col-1)..'|'..text:sub(note.col)
+      local active=row==note.row
+      if active and note.editing then
+        local start=math.max(1,note.col-(l.w-8))
+        text=text:sub(start,note.col-1).."|"..text:sub(note.col)
       end
-      local y=7+row-page*18-1
-      draw.text(target,2,y,text,colors.white,colors.black,l.w-3)
-      self:addButton('note:line:'..row,2,y,l.w-3,1,function()
+      local y=8+row-page*18-1
+      local bg=active and t.selection or t.surface2
+      if active then draw.fill(target,2,y,l.w-3,1,bg) end
+      draw.text(target,3,y,text,active and t.text or t.muted,bg,l.w-5)
+      self:addButton("note:line:"..row,2,y,l.w-3,1,function()
         note.row=row;note.col=#note.lines[row]+1;note.editing=true
       end)
     end

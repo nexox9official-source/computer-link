@@ -5,10 +5,10 @@ local prefs = {}
 local PATH = config.DATA_DIR .. "/ui.db"
 
 local defaults = {
-  schema = 5,
+  schema = 6,
   display_id = nil,
-  accent = "cyan",
-  wallpaper = "clean",
+  accent = "blue",
+  wallpaper = "fluent",
   taskbar_labels = false,
   taskbar_pins = {"messages", "files", "store"},
   desktop_shortcuts = {"messages", "files", "store", "notes"},
@@ -37,11 +37,21 @@ end
 
 local function normalise(value)
   value = type(value) == "table" and value or {}
+  local oldSchema = tonumber(value.schema) or 0
   for key, default in pairs(defaults) do
     if value[key] == nil then
       value[key] = type(default) == "table" and copyTable(default) or default
     end
   end
+
+  -- One-time migration from the pre-Fluent stable desktop. These were the old
+  -- defaults, so upgrading users immediately see the new Windows-like theme.
+  if oldSchema < 6 then
+    if value.accent == "cyan" then value.accent = "blue" end
+    if value.wallpaper == "clean" then value.wallpaper = "fluent" end
+  end
+
+  value.schema = defaults.schema
   value.aliases = value.aliases or {}
   return value
 end

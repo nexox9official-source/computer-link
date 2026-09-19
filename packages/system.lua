@@ -1,10 +1,12 @@
--- LinkOS package system 1.0
+-- LinkOS package system 1.1
+local ui=dofile('/computer-link/src/ui/fluent.lua')
 local started=os.clock()
 return {draw=function(ctx)
+  local t=ctx.theme or ui.theme('blue')
   local names=peripheral.getNames()
   local free=fs.getFreeSpace('/')
-  local label=os.getComputerLabel() or '-'
-  ctx.draw.text(ctx.target,2,2,'SYSTEME',colors.cyan,colors.black,ctx.w-3)
+  local label=(os.getComputerLabel and os.getComputerLabel()) or '-'
+  ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Infos systeme','Etat local en lecture seule',t.accent)
   local rows={
     {'Computer ID','#'..tostring(os.getComputerID())},
     {'Nom',label},
@@ -12,11 +14,11 @@ return {draw=function(ctx)
     {'Peripheriques',tostring(#names)},
     {'Session',string.format('%.0f s',os.clock()-started)}
   }
-  local y=4
+  local y=6
   for _,row in ipairs(rows) do
-    ctx.draw.text(ctx.target,2,y,row[1],colors.lightGray,colors.black,15)
-    ctx.draw.text(ctx.target,18,y,row[2],colors.white,colors.black,math.max(1,ctx.w-19))
-    y=y+2
+    ctx.draw.fill(ctx.target,2,y,ctx.w-3,3,t.surface)
+    ctx.draw.text(ctx.target,3,y,row[1],t.muted,t.surface,14)
+    ctx.draw.text(ctx.target,3,y+1,row[2],t.text,t.surface,ctx.w-5)
+    y=y+4
   end
-  ctx.draw.text(ctx.target,2,y+1,'Lecture seule.',colors.lightGray,colors.black,ctx.w-3)
 end}
