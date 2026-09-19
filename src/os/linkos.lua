@@ -2804,7 +2804,7 @@ function LinkOS:renderHacker(target, l)
 
   if self.linksecHomeTab=="malcraft" then
     ccui.panel(target,x,y,w,5,t,{accent=t.danger,title="Malcraft",
-      subtitle="Controle les Computers infectes, meme sans LinkOS."})
+      subtitle="Controle les PC infectes."})
     ccui.button(target,x+2,y+3,18,"OUVRIR MALCRAFT",t,{danger=true})
     self:addButton("linksec:malcraft",x+2,y+3,18,1,function()
       self:malcraftOpenHub();self:render()
