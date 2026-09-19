@@ -1,5 +1,17 @@
 # Computer Link — LinkOS / AstralNet
 
+## LinkOS 0.20 — Windows polish
+
+LinkOS 0.20 pousse la refonte Fluent de 0.19 plus loin : Start utilise de vraies
+icones pixel avec pagination souris/tactile, Alt+Tab devient un switcher modal,
+le wallpaper adopte un symbole quatre-panneaux LinkOS, les notifications deviennent
+des cartes toast et les vues Messages/Explorateur gagnent en lisibilite.
+
+Cette release reste purement UI/navigation : AstralNet, MER, Malcraft et les
+formats de donnees restent compatibles avec 0.19.
+
+Voir [le guide Desktop 0.20](docs/DESKTOP-0.20.md).
+
 ## LinkOS 0.19 — Fluent Shell
 
 LinkOS 0.19 reconstruit l'interface complete autour d'un design system Fluent

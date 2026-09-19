@@ -38,6 +38,7 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{58,18},{82,26},{110,38}}) do
       self:addButton(id,x,y,bw,1,callback)
     end
     function o:openApp(id) self.app=id end
+    function o:render() end
     local l={w=w,h=h,mode=h<15 and 'compact' or 'standard'}
     local seen={}
     o:renderHome(target,l)
@@ -56,6 +57,30 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{58,18},{82,26},{110,38}}) do
     for _,app in ipairs(shellui.apps(operator)) do
       assert(app.id=='home' or seen['launcher:'..app.id],'Unreachable launcher '..app.id)
     end
+
+    -- Standard/wide Start uses explicit pager controls so mouse/touch users can
+    -- reach later pages without relying on keyboard navigation.
+    o.launcherQuery=''
+    o.launcherIndex=1
+    o.buttons={}
+    o:renderStartMenu(target,l)
+    local nextButton=nil
+    for _,button in ipairs(o.buttons) do
+      if button.id=='launcher:next' then nextButton=button break end
+    end
+    if nextButton then
+      local before=o.launcherIndex
+      nextButton.callback()
+      assert(o.launcherIndex>before,'Start next-page button did not advance')
+      o.buttons={}
+      o:renderStartMenu(target,l)
+      local previousFound=false
+      for _,button in ipairs(o.buttons) do
+        if button.id=='launcher:prev' then previousFound=true break end
+      end
+      assert(previousFound,'Start previous-page button missing after paging')
+    end
+
     o.launcherQuery='calcul'; o:renderStartMenu(target,l)
     assert(#o.launcherApps==1 and o.launcherApps[1].id=='calculator')
     o:handleKey(keys.enter); assert(o.app=='calculator')

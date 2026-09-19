@@ -79,22 +79,34 @@ function shellui.wallpaper(target, x, y, w, h, mode, accent)
   if w <= 0 or h <= 0 or mode == "clean" then return end
 
   if mode == "fluent" then
-    -- A low-contrast geometric ribbon inspired by Windows wallpapers. It uses
-    -- only background cells, so labels remain readable on CC:Tweaked screens.
-    local cx=x+math.floor(w*0.66)
-    local cy=y+math.floor(h*0.35)
-    local maxW=math.max(4,math.floor(w*0.30))
-    for row=0,math.min(5,h-2) do
-      local width=math.max(2,maxW-row*2)
-      local px=math.max(x,cx-row)
-      local py=cy+row
-      if py<=y+h-1 then
-        draw.fill(target,px,py,math.min(width,x+w-px),1,row%2==0 and colors.blue or colors.gray)
+    -- LinkOS four-pane mark: intentionally simple and readable at ComputerCraft
+    -- resolutions while evoking a modern desktop wallpaper.
+    if w>=30 and h>=10 then
+      local paneW=math.max(3,math.floor(w*0.11))
+      local paneH=math.max(2,math.floor(h*0.18))
+      local gapX=1
+      local gapY=1
+      local logoW=paneW*2+gapX
+      local logoH=paneH*2+gapY
+      local lx=math.min(x+w-logoW-3,x+math.floor(w*0.66))
+      local ly=math.max(y+1,y+math.floor((h-logoH)*0.38))
+
+      -- Quiet shadow/backplate for depth.
+      draw.fill(target,lx-2,ly-1,logoW+4,logoH+2,colors.gray)
+      draw.fill(target,lx,ly,paneW,paneH,colors.lightBlue)
+      draw.fill(target,lx+paneW+gapX,ly,paneW,paneH,colors.blue)
+      draw.fill(target,lx,ly+paneH+gapY,paneW,paneH,colors.blue)
+      draw.fill(target,lx+paneW+gapX,ly+paneH+gapY,paneW,paneH,accent or colors.lightBlue)
+
+      -- A few low-contrast horizontal rays keep the desktop from feeling flat.
+      local rayX=math.max(x,lx-math.floor(w*0.12))
+      local rayY=math.min(y+h-1,ly+logoH+2)
+      for i=0,2 do
+        local rw=math.max(3,logoW-i*3)
+        if rayY+i<=y+h-1 then
+          draw.fill(target,rayX+i*2,rayY+i,rw,1,i==1 and colors.blue or colors.gray)
+        end
       end
-    end
-    if h>=10 and w>=30 then
-      draw.fill(target,x+math.floor(w*0.73),y+math.floor(h*0.18),
-        math.max(3,math.floor(w*0.12)),2,colors.lightBlue)
     end
     return
   end
@@ -117,8 +129,8 @@ function shellui.wallpaper(target, x, y, w, h, mode, accent)
 end
 
 function shellui.startMenuRect(layout)
-  local w = math.min(math.max(32, math.floor(layout.w * 0.78)), math.max(24, layout.w - 4))
-  local h = math.min(math.max(13, math.floor(layout.h * 0.78)), math.max(9, layout.h - 2))
+  local w = math.min(math.max(30, math.floor(layout.w * 0.84)), math.max(22, layout.w - 4))
+  local h = math.min(math.max(12, math.floor(layout.h * 0.88)), math.max(9, layout.h - 2))
   local x = math.max(1, math.floor((layout.w - w) / 2) + 1)
   return x, math.max(1, layout.h - h), w, h
 end
@@ -253,11 +265,15 @@ function shellui.install(OS, prefs)
     local contentTop=y+4
     local footer=y+h-2
     local contentBottom=footer-1
-    local cols=w>=40 and 3 or 2
+    local largeTiles=w>=36 and h>=14
+    local cols=largeTiles and 2 or (w>=40 and 3 or 2)
+    local tileH=largeTiles and 3 or 2
     self.launcherCols=cols
     local gap=1
     local cellW=math.max(9,math.floor((w-4-(cols-1)*gap)/cols))
-    local rows=math.max(1,math.floor((contentBottom-contentTop)/2))
+    local gridTop=contentTop+1
+    local availableRows=math.max(1,contentBottom-gridTop+1)
+    local rows=math.max(1,math.floor(availableRows/tileH))
     local capacity=cols*rows
     local page=math.floor((self.launcherIndex-1)/math.max(1,capacity))
     local first=page*capacity+1
@@ -266,23 +282,51 @@ function shellui.install(OS, prefs)
       q=="" and "EPINGLEES ET RECENTES" or "RESULTATS",
       t.muted,t.elevated,math.max(1,w-4))
 
-    local gridTop=contentTop+1
+    local pages=math.max(1,math.ceil(#apps/math.max(1,capacity)))
+    local pageNumber=math.min(pages,page+1)
+    if pages>1 and w>=28 then
+      local pagerX=x+w-10
+      self:button(target,"launcher:prev",pagerX,contentTop,3,"<",function()
+        local previous=(pageNumber-2+pages)%pages
+        self.launcherIndex=previous*capacity+1
+        self:render()
+      end)
+      draw.text(target,pagerX+3,contentTop,tostring(pageNumber).."/"..tostring(pages),
+        t.muted,t.elevated,4)
+      self:button(target,"launcher:next",pagerX+7,contentTop,3,">",function()
+        local nextPage=pageNumber%pages
+        self.launcherIndex=math.min(#apps,nextPage*capacity+1)
+        self:render()
+      end)
+    end
+
     for i=first,math.min(#apps,first+capacity-1) do
       local app=apps[i]
       local n=i-first
       local col=n%cols
       local row=math.floor(n/cols)
       local bx=x+2+col*(cellW+gap)
-      local by=gridTop+row*2
+      local by=gridTop+row*tileH
       local selected=i==self.launcherIndex
       local bg=selected and t.selection or t.elevated
-      draw.fill(target,bx,by,cellW,2,bg)
-      fluent.drawMiniIcon(target,app.id,bx+1,by,selected,bg)
-      draw.text(target,bx+5,by,app.title,t.text,bg,math.max(1,cellW-5))
+      draw.fill(target,bx,by,cellW,tileH,bg)
       local kind=kinds[app.id]
-      draw.text(target,bx+5,by+1,kind or app.short or "",kind and t.accent or t.muted,bg,
-        math.max(1,cellW-5))
-      self:addButton("launcher:"..app.id,bx,by,cellW,2,function() self:openApp(app.id) end)
+
+      if largeTiles then
+        fluent.drawIcon(target,app.id,bx+1,by,false,bg)
+        draw.text(target,bx+5,by,app.title,t.text,bg,math.max(1,cellW-6))
+        draw.text(target,bx+5,by+1,kind or app.short or "",
+          kind and t.accent or t.muted,bg,math.max(1,cellW-6))
+        draw.text(target,bx+5,by+2,descriptions[app.id] or "Application LinkOS",
+          t.muted,bg,math.max(1,cellW-6))
+      else
+        fluent.drawMiniIcon(target,app.id,bx+1,by,selected,bg)
+        draw.text(target,bx+5,by,app.title,t.text,bg,math.max(1,cellW-5))
+        draw.text(target,bx+5,by+1,kind or app.short or "",
+          kind and t.accent or t.muted,bg,math.max(1,cellW-5))
+      end
+
+      self:addButton("launcher:"..app.id,bx,by,cellW,tileH,function() self:openApp(app.id) end)
     end
 
     if #apps==0 then
