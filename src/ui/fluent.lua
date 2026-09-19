@@ -1,4 +1,5 @@
 local draw = dofile("/computer-link/src/ui/draw.lua")
+local iconAssets = dofile("/computer-link/src/ui/icons.lua")
 
 local fluent = {}
 
@@ -103,21 +104,10 @@ function fluent.iconColour(id, fallback)
   return fluent.icon(id).colour or fallback or colors.lightBlue
 end
 
-function fluent.drawIcon(target, id, x, y, selected, background)
-  local icon = fluent.icon(id)
-  local bg = background or colors.black
-  local pixel = icon.colour
-  local pattern = icon.pixels
-  if selected then
-    draw.fill(target, x-1, y-1, 5, 5, colors.gray)
-  end
-  for row=1,3 do
-    local line = pattern[row] or "..."
-    for col=1,3 do
-      local on = line:sub(col,col) == "#"
-      draw.fill(target, x+col-1, y+row-1, 1, 1, on and pixel or bg)
-    end
-  end
+function fluent.drawIcon(target,id,x,y,selected,background)
+  local bg=background or colors.black
+  if selected then draw.fill(target,x-1,y-1,6,5,colors.gray) end
+  iconAssets.draw(target,id,x,y,bg,selected and colors.gray or bg)
 end
 
 function fluent.drawMiniIcon(target, id, x, y, active, bg)
