@@ -2774,55 +2774,73 @@ function LinkOS:renderHacker(target, l)
     return
   end
 
-  fluent.card(target,x,y,w,4,{bg=t.surface,accent=t.danger,
-    title="Poste operateur PC #"..tostring(os.getComputerID()),
-    subtitle="Malcraft gere les cibles ROM-only; le scan LinkOS reste disponible.",muted=t.muted})
-  y=y+5
+  draw.text(target,x,y,"Poste operateur PC #"..tostring(os.getComputerID()),t.text,t.bg,w)
+  draw.text(target,x,y+1,"Choisis le mode de controle.",t.muted,t.bg,w)
+  y=y+3
 
-  local buttonW=math.min(18,math.max(10,math.floor((w-2)/2)))
-  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.danger,title="Malcraft",
-    subtitle="PC vierges, disques, ROM et controle persistant.",muted=t.muted})
-  fluent.button(target,x+2,y+3,buttonW,"OUVRIR MALCRAFT",{primary=true,accent=t.danger})
-  self:addButton("linksec:malcraft",x+2,y+3,buttonW,1,function()
-    self:malcraftOpenHub();self:render()
-  end)
-  y=y+6
-
-  fluent.card(target,x,y,w,5,{bg=t.surface,accent=t.accent,title="Outils LinkOS",
-    subtitle="Scan clients LinkOS et terminal operateur avance.",muted=t.muted})
-  self:button(target,"linksec:scan",x+2,y+3,buttonW,"SCAN LINKOS",function()
-    self:linksecScan();self:render()
-  end)
-  if w>=buttonW*2+5 then
-    self:button(target,"linksec:terminal",x+3+buttonW,y+3,buttonW,"TERMINAL",function()
-      self:openHackerTerminal()
+  self.linksecHomeTab=self.linksecHomeTab or "malcraft"
+  local tabs=ccui.tabs(target,x,y,w,{
+    {id="malcraft",label="Malcraft"},
+    {id="linkos",label="Outils LinkOS"}
+  },self.linksecHomeTab,t)
+  for _,r in ipairs(tabs) do
+    self:addButton("linksec:home:"..r.id,r.x,r.y,r.w,r.h,function()
+      self.linksecHomeTab=r.id
     end)
   end
-  y=y+6
+  y=y+3
 
-  if self.hackerConsole.target then
-    fluent.card(target,x,y,w,7,{bg=t.surface,accent=t.good,
-      title="Session active / PC #"..tostring(self.hackerConsole.target),
-      subtitle="Outils disponibles pour la cible LinkOS selectionnee.",muted=t.muted})
-    local actionW=math.min(16,math.max(10,math.floor((w-2)/2)))
-    self:button(target,"linksec:conversations",x+2,y+3,actionW,"MESSAGES",function()
-      self:linksecLoadConversationIndex();self:render()
+  if self.linksecHomeTab=="malcraft" then
+    ccui.panel(target,x,y,w,5,t,{accent=t.danger,title="Malcraft",
+      subtitle="Controle les Computers infectes, meme sans LinkOS."})
+    ccui.button(target,x+2,y+3,18,"OUVRIR MALCRAFT",t,{danger=true})
+    self:addButton("linksec:malcraft",x+2,y+3,18,1,function()
+      self:malcraftOpenHub();self:render()
     end)
-    if w>=actionW*2+5 then
-      self:button(target,"linksec:devices",x+3+actionW,y+3,actionW,"PERIPHERIQUES",function()
+    y=y+6
+
+    local infected=#(self.malcraftHosts or {})
+    local loaded=#(self.malcraftLiveHosts or {})
+    ccui.panel(target,x,y,w,4,t,{title="Etat du reseau",
+      subtitle=tostring(infected).." infecte(s) / "..tostring(loaded).." charge(s)"})
+  else
+    ccui.panel(target,x,y,w,5,t,{accent=t.accent,title="Clients LinkOS",
+      subtitle="Scan et outils avances pour les clients LinkOS."})
+    ccui.button(target,x+2,y+3,14,"SCAN",t,{primary=true})
+    self:addButton("linksec:scan",x+2,y+3,14,1,function()
+      self:linksecScan();self:render()
+    end)
+    ccui.button(target,x+17,y+3,14,"TERMINAL",t,{})
+    self:addButton("linksec:terminal",x+17,y+3,14,1,function()
+      self:openHackerTerminal()
+    end)
+    y=y+6
+
+    if self.hackerConsole.target then
+      ccui.panel(target,x,y,w,7,t,{accent=t.good,
+        title="Session PC #"..tostring(self.hackerConsole.target),
+        subtitle="Outils disponibles pour la cible selectionnee."})
+      local bw=math.max(10,math.floor((w-5)/2))
+      ccui.button(target,x+2,y+3,bw,"MESSAGES",t,{})
+      self:addButton("linksec:conversations",x+2,y+3,bw,1,function()
+        self:linksecLoadConversationIndex();self:render()
+      end)
+      ccui.button(target,x+3+bw,y+3,math.min(bw,w-bw-4),"PERIPHERIQUES",t,{})
+      self:addButton("linksec:devices",x+3+bw,y+3,math.min(bw,w-bw-4),1,function()
         self:linksecLoadDevices();self:render()
       end)
-    end
-    self:button(target,"linksec:redstone",x+2,y+5,actionW,"REDSTONE",function()
-      self:linksecLoadRedstone();self:render()
-    end)
-    if w>=actionW*2+5 then
-      self:button(target,"linksec:drives",x+3+actionW,y+5,actionW,"DISQUES",function()
+      ccui.button(target,x+2,y+5,bw,"REDSTONE",t,{})
+      self:addButton("linksec:redstone",x+2,y+5,bw,1,function()
+        self:linksecLoadRedstone();self:render()
+      end)
+      ccui.button(target,x+3+bw,y+5,math.min(bw,w-bw-4),"DISQUES",t,{})
+      self:addButton("linksec:drives",x+3+bw,y+5,math.min(bw,w-bw-4),1,function()
         self:linksecLoadDrives();self:render()
       end)
+    else
+      ccui.panel(target,x,y,w,4,t,{accent=t.muted,title="Aucune session",
+        subtitle="Lance un scan puis selectionne un Computer."})
     end
-  else
-    draw.text(target,x,y,"Aucune session LinkOS active. Malcraft fonctionne sans LinkOS.",t.muted,t.bg,w)
   end
 end
 
