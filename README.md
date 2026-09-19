@@ -1,5 +1,15 @@
 # Computer Link — LinkOS / AstralNet
 
+## Preview 0.21 — interface simplifiee
+
+La branche `ui/linkos-v0.21-simple-windows` teste une navigation plus simple apres
+les retours sur la 0.20 : apps plein ecran sur Computer standard, START explicite,
+vue Epinglees -> TOUTES, taskbar lisible et moins de controles techniques visibles.
+
+Voir [le guide preview 0.21](docs/DESKTOP-0.21.md).
+
+La version stable reste 0.20 tant que cette preview n'a pas ete validee en jeu.
+
 ## LinkOS 0.20 — Windows polish
 
 LinkOS 0.20 pousse la refonte Fluent de 0.19 plus loin : Start utilise de vraies
