@@ -42,9 +42,13 @@ return {
 
   -- Fill this with the real MER Computer ID for absolute MER role enforcement.
   -- Example: [23] = true
-  trusted_mer_ids = {},
+  trusted_mer_ids = {
+    [1] = true
+  },
 
   -- MER installation is intentionally not exposed to players.
   allow_public_mer_install = false,
-  mer_install_ids = {}
+  mer_install_ids = {
+    [1] = true
+  }
 }
