@@ -1396,6 +1396,12 @@ function LinkOS:malcraftSelectHost(computerId)
     return
   end
 
+  local state = data.state or {}
+  if state.infected == true and state.online == true then
+    local agent = self.service:ghostRemote(computerId, "status")
+    if agent then data.agent_status = agent end
+  end
+
   self.ghostState = data
   self.linksecView = "ghost"
 end
@@ -1479,6 +1485,12 @@ function LinkOS:ghostRefresh()
   if not data then
     self:setNotice("Malcraft: " .. tostring(err), self:theme().danger)
     return
+  end
+
+  local state = data.state or {}
+  if state.infected == true and state.online == true then
+    local agent = self.service:ghostRemote(targetId, "status")
+    if agent then data.agent_status = agent end
   end
 
   self.ghostState = data
@@ -2047,11 +2059,15 @@ function LinkOS:renderHacker(target, l)
       for i = 1, math.min(#self.malcraftHosts, math.max(1, l.h - y - 2)) do
         local item = self.malcraftHosts[i]
         local lastSeen = tonumber(item.last_seen) or 0
-        local online = lastSeen > 0 and (epochSeconds() - lastSeen) <= 25
+        local online = item.online == true
+          or (item.online == nil and lastSeen > 0 and (epochSeconds() - lastSeen) <= 25)
+        local source = tostring(item.source or item.last_source or "")
+        if #source > 12 then source = string.sub(source,1,12) end
         local line = "PC #" .. tostring(item.computer_id)
           .. " " .. tostring(item.label or "")
           .. (online and " [ONLINE]" or " [OFFLINE]")
-          .. (item.spread and " [PROP ON]" or " [PROP OFF]")
+          .. (item.spread and " [PROP]" or "")
+          .. (source ~= "" and (" <" .. source .. ">") or "")
 
         draw.text(target, x, y, line,
           online and (item.spread and colors.red or t.good) or t.muted,
@@ -2243,7 +2259,30 @@ function LinkOS:renderHacker(target, l)
         or (infected and "ACTIF" or "ABSENT"),
       immune and t.good or (infected and colors.red or t.muted),
       t.bg, w)
-    y = y + 2
+    y = y + 1
+
+    if infected then
+      local agent = self.ghostState and self.ghostState.agent_status or nil
+      local online = state.online == true
+      local profile = not online and "HORS LIGNE"
+        or (agent and agent.linkos_installed == true and "LINKOS + ROM" or "ROM SEUL")
+      draw.text(target,x,y,
+        "Etat: " .. (online and "ONLINE" or "OFFLINE") .. " | " .. profile,
+        online and t.good or t.muted,t.bg,w)
+      y = y + 1
+
+      local source=tostring((agent and agent.source) or state.source or "-")
+      draw.text(target,x,y,"Source: "..source,t.muted,t.bg,w)
+      y = y + 1
+
+      if state.dimension and state.dimension ~= "" then
+        local pos=tostring(state.dimension).." "
+          ..tostring(state.x or "?")..","..tostring(state.y or "?")..","..tostring(state.z or "?")
+        draw.text(target,x,y,"Pos: "..pos,t.muted,t.bg,w)
+        y = y + 1
+      end
+    end
+    y = y + 1
 
     if immune then
       draw.text(target, x, y, "Ce poste est protege par la politique operateur.", t.muted, t.bg, w)
