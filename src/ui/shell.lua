@@ -265,10 +265,9 @@ function shellui.install(OS, prefs)
       end
     end
 
-    table.sort(apps,function(a,b)
-      if allMode or q~="" then return a.title:lower()<b.title:lower() end
-      return false
-    end)
+    if allMode or q~="" then
+      table.sort(apps,function(a,b) return a.title:lower()<b.title:lower() end)
+    end
 
     self.launcherApps=apps
     self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
