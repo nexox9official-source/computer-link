@@ -23,7 +23,8 @@ return {
   },
 
   -- Propagation physique Minecraft : un poste compromis peut contaminer un
-  -- autre Computer GhostLink visible a tres courte distance via modem.
+  -- autre Computer charge a tres courte distance. Malcraft Bridge est le
+  -- transport principal ; le beacon modem reste un fallback de compatibilite.
   ghostlink_proximity_spread = true,
   ghostlink_proximity_distance = 2.5,
   ghostlink_beacon_seconds = 5,
