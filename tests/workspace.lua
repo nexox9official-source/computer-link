@@ -92,6 +92,14 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   o:hit(size[1],1)
   assert(not o.contextMenu,'Context menu did not close outside')
 
+  local shortcuts=o:desktopApps()
+  assert(#shortcuts==4,'Default desktop should stay intentionally sparse')
+  assert(not o:isDesktopShortcut('calculator'))
+  assert(o:toggleDesktopShortcut('calculator'))
+  assert(o:isDesktopShortcut('calculator'))
+  assert(o:toggleDesktopShortcut('calculator'))
+  assert(not o:isDesktopShortcut('calculator'))
+
   local firstIcon=o:desktopApps()[1].id
   o:moveIcon(1,3);assert(o:desktopApps()[3].id==firstIcon)
   o:openApp('store');assert(#o.windows==1)
@@ -140,7 +148,13 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
 
     o:openApp('store');o:render();native.dump('/tmp/linkos-store.frame')
     o:openApp('calculator');o:render();native.dump('/tmp/linkos-calculator.frame')
+    o:openApp('files');o:render();native.dump('/tmp/linkos-files.frame')
     o:openApp('settings');o.settingsTab='style';o:render();native.dump('/tmp/linkos-settings.frame')
+
+    o:openApp('home');o:render()
+    local icon=o.iconRects[1]
+    o:openDesktopContext(icon.x,icon.y);o:render();native.dump('/tmp/linkos-context.frame')
+    o.contextMenu=nil
 
     o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
   end
