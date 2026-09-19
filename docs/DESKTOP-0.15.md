@@ -83,6 +83,9 @@ Les surfaces grises ont ete fortement reduites dans l'ensemble du theme.
 
 ## Link Store
 
+Le catalogue officiel passe a huit utilitaires : taches, chronometre, convertisseur,
+peripheriques, calendrier, infos systeme, controle redstone local et GPS.
+
 Le catalogue est presente sous forme de lignes compactes avec :
 
 - nom ;
