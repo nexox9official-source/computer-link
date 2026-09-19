@@ -70,50 +70,37 @@ function shellui.nextApp(current, operator, delta)
 end
 
 function shellui.wallpaper(target, x, y, w, h, mode, accent)
-  mode = tostring(mode or "grid")
-  local bg = colors.black
-  draw.fill(target, x, y, w, h, bg)
+  mode = tostring(mode or "dots")
+  draw.fill(target, x, y, w, h, colors.black)
+  if w <= 0 or h <= 0 or mode == "clean" then return end
 
-  if w <= 0 or h <= 0 then return end
+  if mode == "lines" then
+    for py = y + 1, y + h - 1, 4 do
+      draw.hline(target, x, py, w, "-", colors.gray, colors.black)
+    end
+    return
+  end
 
-  if mode == "grid" then
-    local stepX = w >= 55 and 8 or 6
-    local stepY = h >= 20 and 4 or 3
-    for py = y, y + h - 1, stepY do
-      for px = x, x + w - 1, stepX do
-        draw.text(target, px, py, ".", accent or colors.cyan, bg, 1)
-      end
-    end
-  elseif mode == "lines" then
-    for py = y, y + h - 1, 3 do
-      draw.hline(target, x, py, w, "-", colors.gray, bg)
-    end
-  elseif mode == "clean" then
-    -- Deliberately empty.
-  else
-    for py = y, y + h - 1, 2 do
-      local offset = ((py - y) % 4 == 0) and 0 or 2
-      for px = x + offset, x + w - 1, 6 do
-        draw.text(target, px, py, ".", colors.gray, bg, 1)
-      end
+  local stepX = mode == "grid" and 10 or 14
+  local stepY = mode == "grid" and 4 or 5
+  for py = y + 1, y + h - 1, stepY do
+    local offset = ((py - y) % (stepY * 2) == 0) and 2 or math.floor(stepX / 2)
+    for px = x + offset, x + w - 1, stepX do
+      draw.text(target, px, py, mode == "grid" and "." or "'", accent or colors.cyan, colors.black, 1)
     end
   end
 end
 
 function shellui.startMenuRect(layout)
-  local w = math.min(math.max(24, math.floor(layout.w * 0.56)), 44)
-  local h = math.min(math.max(10, math.floor(layout.h * 0.65)), math.max(8, layout.h - 3))
-  local x = 1
-  local y = math.max(3, layout.h - h)
-  return x, y, w, h
+  local w = math.min(math.max(28, math.floor(layout.w * 0.62)), math.max(24, layout.w - 2))
+  local h = math.min(math.max(10, math.floor(layout.h * 0.70)), math.max(8, layout.h - 2))
+  return 2, math.max(1, layout.h - h), w, h
 end
 
 function shellui.quickPanelRect(layout)
-  local w = math.min(math.max(22, math.floor(layout.w * 0.42)), 36)
-  local h = math.min(11, math.max(7, layout.h - 4))
-  local x = math.max(1, layout.w - w + 1)
-  local y = math.max(3, layout.h - h)
-  return x, y, w, h
+  local w = math.min(math.max(22, math.floor(layout.w * 0.42)), math.max(20, layout.w - 2))
+  local h = math.min(10, math.max(7, layout.h - 3))
+  return math.max(1, layout.w - w), math.max(1, layout.h - h), w, h
 end
 
 -- Responsive shell v0.13. Kept separate from the network/application backend.
@@ -155,99 +142,137 @@ function shellui.install(OS, prefs)
 
   function OS:renderHome(target, l)
     local t = self:theme()
-    local x, y, w = 2, 4, math.max(1,l.w-2)
-    local bottom = l.mode == "compact" and l.h-2 or l.h-4
-    shellui.wallpaper(target,1,3,l.w,math.max(0,bottom-2),prefs.get("wallpaper","grid"),t.accent)
-    draw.text(target,x,y,"Votre espace de travail",t.text,t.bg,w)
-    y=y+1
-    draw.text(target,x,y,(self.service.online and "ASTRALNET CONNECTE" or "MODE HORS LIGNE")
-      .. "  /  " .. tostring(self.service.unread or 0) .. " nouveau(x)",
-      self.service.online and t.accent or t.warn,t.bg,w)
-    y=y+2
-    local apps={}
-    for _,app in ipairs(shellui.apps(self:isOperatorUI())) do
-      if app.id~="home" then apps[#apps+1]=app end
+    local bottom = math.max(3, l.h - 1)
+    shellui.wallpaper(target, 1, 1, l.w, bottom, prefs.get("wallpaper","dots"), t.accent)
+
+    draw.text(target, 2, 2, "LINKOS", t.accent, colors.black, math.max(1,l.w-3))
+    draw.text(target, 2, 3,
+      self.service.online and "AstralNet connecte" or "Mode hors-ligne",
+      self.service.online and t.good or t.warn, colors.black, math.max(1,l.w-3))
+
+    local apps = {}
+    for _, app in ipairs(shellui.apps(self:isOperatorUI())) do
+      if app.id ~= "home" then apps[#apps+1] = app end
     end
-    local tileH = bottom-y >= 8 and 3 or 1
-    local p=shellui.page(apps,w,math.max(1,bottom-y),self.desktopPage,tileH)
-    self.desktopPage,self.desktopPages=p.page,p.pages
+
+    local p = shellui.page(apps, math.max(1,l.w-3), math.max(1,l.h-6), self.desktopPage, 2)
+    self.desktopPage, self.desktopPages = p.page, p.pages
+    local x, y = 2, 5
+
     for index=p.first,math.min(#apps,p.first+p.capacity-1) do
       local app=apps[index]
       local n=index-p.first
       local bx=x+(n%p.cols)*(p.cellW+1)
-      local by=y+math.floor(n/p.cols)*(tileH+1)
-      if by+tileH-1<bottom then
-        draw.fill(target,bx,by,p.cellW,tileH,t.panel)
-        draw.fill(target,bx,by,1,tileH,badges[app.id] or t.accent)
-        draw.text(target,bx+2,by,app.title,t.text,t.panel,p.cellW-2)
-        if tileH>1 then
-          draw.text(target,bx+2,by+2,descriptions[app.id],t.muted,t.panel,p.cellW-2)
-        end
-        self:addButton("desktop:"..app.id,bx,by,p.cellW,tileH,function() self:openApp(app.id) end)
+      local by=y+math.floor(n/p.cols)*3
+      if by+1 < bottom then
+        local badge=badges[app.id] or t.accent
+        draw.fill(target,bx,by,p.cellW,2,colors.black)
+        draw.fill(target,bx,by,2,2,badge)
+        draw.text(target,bx,by,app.icon or "+",colors.white,badge,2)
+        draw.text(target,bx+3,by,app.title,t.text,colors.black,math.max(1,p.cellW-3))
+        draw.text(target,bx+3,by+1,descriptions[app.id] or "",t.muted,colors.black,math.max(1,p.cellW-3))
+        self:addButton("desktop:"..app.id,bx,by,p.cellW,2,function() self:openApp(app.id) end)
       end
-    end
-    if bottom>=y then
-      self:button(target,"desktop:prev",x,bottom,3,"<",function()
-        self.desktopPage=math.max(1,p.page-1)
-      end)
-      draw.text(target,x+4,bottom,"Page "..p.page.."/"..p.pages,t.muted,t.bg,math.max(1,w-9))
-      self:button(target,"desktop:next",math.max(x+4,l.w-4),bottom,3,">",function()
-        self.desktopPage=math.min(p.pages,p.page+1)
-      end)
     end
   end
 
   function OS:renderStartMenu(target,l)
     if not self.startMenuOpen then return end
     local t=self:theme()
-    local w=math.min(l.w-2,48)
-    local h=math.min(l.h-3,19)
-    local x,y=2,math.max(1,l.h-h-1)
+    local x,y,w,h=shellui.startMenuRect(l)
     self.shellOverlay={x=x,y=y,w=w,h=h}
-    -- A modal menu must never click through into an underlying application.
     self.buttons={}
-    draw.fill(target,x,y,w,h,t.panel)
+
+    draw.fill(target,x,y,w,h,colors.gray)
     draw.fill(target,x,y,w,1,t.accent)
-    draw.text(target,x+1,y,"APPLICATIONS",t.text,t.accent,math.max(1,w-5))
+    draw.text(target,x+2,y,"LINKOS",colors.white,t.accent,math.max(1,w-8))
     self:button(target,"launcher:close",x+w-3,y,3,"X",function() self.startMenuOpen=false end)
-    draw.text(target,x+1,y+2,"Chercher: "..(self.launcherQuery or ""),t.text,colors.black,w-2)
+
+    local query=self.launcherQuery or ""
+    draw.fill(target,x+2,y+2,w-4,1,colors.black)
+    draw.text(target,x+3,y+2,(query=="" and "Rechercher une application..." or query),
+      query=="" and t.muted or t.text,colors.black,math.max(1,w-6))
+
     local apps={}
-    local query=(self.launcherQuery or ""):lower()
+    local q=query:lower()
     for _,app in ipairs(shellui.apps(self:isOperatorUI())) do
-      if app.title:lower():find(query,1,true) then apps[#apps+1]=app end
+      if q=="" or app.title:lower():find(q,1,true) or app.id:lower():find(q,1,true) then
+        apps[#apps+1]=app
+      end
     end
     self.launcherApps=apps
-    self.launcherIndex=math.max(1,math.min(#apps,self.launcherIndex or 1))
-    local count=math.max(1,h-6)
+    self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
+
+    draw.text(target,x+2,y+4,q=="" and "TOUTES LES APPS" or "RESULTATS",t.muted,colors.gray,w-4)
+    local top=y+5
+    local footer=y+h-2
+    local count=math.max(1,footer-top)
     local page=math.floor((self.launcherIndex-1)/count)
-    for i=page*count+1,math.min(#apps,(page+1)*count) do
+    local first=page*count+1
+
+    for i=first,math.min(#apps,first+count-1) do
       local app=apps[i]
-      local by=y+3+i-page*count
+      local by=top+(i-first)
       local selected=i==self.launcherIndex
-      draw.fill(target,x+1,by,w-2,1,selected and t.accent or t.panel)
-      draw.text(target,x+2,by,(selected and "> " or "  ")..app.title,t.text,
-        selected and t.accent or t.panel,w-4)
-      self:addButton("launcher:"..app.id,x+1,by,w-2,1,function() self:openApp(app.id) end)
+      local bg=selected and colors.black or colors.gray
+      local badge=badges[app.id] or t.accent
+      draw.fill(target,x+2,by,w-4,1,bg)
+      draw.text(target,x+2,by," "..(app.icon or "+").." ",colors.white,badge,3)
+      draw.text(target,x+6,by,app.title,selected and colors.white or t.text,bg,math.max(1,w-11))
+      if w>=38 then draw.text(target,x+w-10,by,app.short or "",t.muted,bg,7) end
+      self:addButton("launcher:"..app.id,x+2,by,w-4,1,function() self:openApp(app.id) end)
     end
-    if #apps==0 then draw.text(target,x+2,y+4,"Aucun resultat",t.muted,t.panel,w-4) end
-    local fy=y+h-1
-    self:button(target,"launcher:prev",x,fy,3,"<",function()
-      self.launcherIndex=math.max(1,self.launcherIndex-count)
+
+    if #apps==0 then draw.text(target,x+3,top+1,"Aucun resultat",t.muted,colors.gray,w-6) end
+
+    draw.fill(target,x,footer,w,2,colors.black)
+    draw.text(target,x+2,footer,"F10 fermer",t.muted,colors.black,12)
+    self:button(target,"launcher:settings",x+w-21,footer,9,"SETTINGS",function() self:openApp("settings") end)
+    self:button(target,"launcher:power",x+w-10,footer,8,"REBOOT",function()
+      if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
-    draw.text(target,x+4,fy,"Recherche / "..#apps.." apps",t.muted,t.panel,w-8)
-    self:button(target,"launcher:next",x+w-3,fy,3,">",function()
-      self.launcherIndex=math.min(#apps,self.launcherIndex+count)
-    end)
+  end
+
+  function OS:renderQuickPanel(target,l)
+    if not self.quickPanelOpen then return end
+    local t=self:theme()
+    local x,y,w,h=shellui.quickPanelRect(l)
+    self.shellOverlay={x=x,y=y,w=w,h=h}
+    self.buttons={}
+
+    draw.fill(target,x,y,w,h,colors.gray)
+    draw.fill(target,x,y,w,1,t.accent)
+    draw.text(target,x+2,y,"SYSTEME",colors.white,t.accent,w-5)
+    self:button(target,"quick:close",x+w-3,y,3,"X",function() self.quickPanelOpen=false end)
+
+    local row=y+2
+    local function line(label,value,colour)
+      if row>=y+h-2 then return end
+      draw.text(target,x+2,row,label,t.muted,colors.gray,math.max(1,w-4))
+      local text=tostring(value or "-")
+      draw.text(target,math.max(x+2,x+w-#text-2),row,text,colour or t.text,colors.gray,math.max(1,w-4))
+      row=row+1
+    end
+
+    line("AstralNet",self.service.online and "ONLINE" or "OFFLINE",self.service.online and t.good or t.danger)
+    line("Messages",tostring(self.service.unread or 0),(self.service.unread or 0)>0 and t.warn or t.text)
+    line("Ecran",self.active and self.active.label or "-",t.text)
+    line("Heure",textutils.formatTime(os.time(),true),t.accent)
+
+    local by=y+h-2
+    self:button(target,"quick:settings",x+2,by,10,"SETTINGS",function() self:openApp("settings") end)
+    self:button(target,"quick:desktop",x+w-11,by,9,"BUREAU",function() self:openApp("home") end)
   end
 
   function OS:renderShellOverlays(target,l)
     self.shellOverlay=nil
-    if self.quickPanelOpen then
-      self.buttons={}
-      local x,y,w,h=shellui.quickPanelRect(l)
-      self.shellOverlay={x=x,y=y,w=w,h=h}
+    if self.startMenuOpen then
+      self:renderStartMenu(target,l)
+    elseif self.quickPanelOpen then
+      self:renderQuickPanel(target,l)
+    else
+      oldOverlays(self,target,l)
     end
-    oldOverlays(self,target,l)
   end
 
   function OS:hit(x,y)
