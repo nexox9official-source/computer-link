@@ -343,7 +343,7 @@ function shellui.install(OS, prefs)
     draw.fill(target,x,y,w,h,t.elevated)
     draw.fill(target,x,y,w,2,t.surface)
     draw.text(target,x+2,y,"Systeme",t.text,t.surface,w-4)
-    draw.text(target,x+2,y+1,"Etat rapide du Computer",t.muted,t.surface,w-4)
+    draw.text(target,x+2,y+1,"Etat du PC",t.muted,t.surface,w-4)
 
     local row=y+3
     local function status(label,value,colour)
