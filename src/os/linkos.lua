@@ -874,7 +874,7 @@ function LinkOS:renderMessages(target, l)
   draw.text(target,x+1,y,"CONVERSATIONS",t.muted,t.surface,math.max(1,sideW-2))
   local row=y+2
   if #peers==0 then
-    draw.text(target,x+1,row,"Aucune discussion",t.muted,t.surface,math.max(1,sideW-2))
+    draw.text(target,x+1,row,"Aucun echange",t.muted,t.surface,math.max(1,sideW-2))
   else
     for _,peer in ipairs(peers) do
       if row+1>=l.h-1 then break end
