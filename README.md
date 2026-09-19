@@ -621,3 +621,23 @@ Fonctions principales :
 - `NETTOYER` pose un état sain persistant côté serveur afin qu'un reboot ou une repose du même Computer ne réactive pas Malcraft tout seul.
 
 Le mod est marqué **serveur uniquement** : les joueurs n'ont pas besoin de l'ajouter dans leur instance client.
+
+
+### Desktop Shell 0.11.0
+
+LinkOS 0.11.0 introduit une nouvelle couche d'interface graphique inspiree des bons principes d'OS ComputerCraft fenetres comme LevelOS, sans remplacer LinkOS ni executer le code distant de LevelOS en production.
+
+Nouveautes :
+
+- menu **START** adaptatif ;
+- barre des taches avec applications epinglees ;
+- panneau **SYS** pour etat AstralNet, securite, stockage, affichage et mises a jour ;
+- fonds de bureau configurables ;
+- mode icones ou labels dans la barre des taches ;
+- raccourcis F9 (application suivante), F10 (Start), F11 (Systeme) ;
+- clic droit sur le Computer pour ouvrir le panneau Systeme ;
+- interface responsive Computer / moniteurs ;
+- registre d'applications centralise ;
+- **LinkSec n'apparait que sur les Computer IDs autorises par la politique ROM serveur**.
+
+Le shell reste entierement natif LinkOS : messagerie, AstralNet, securite, fichiers, Malcraft et moniteurs conservent leur backend actuel.
