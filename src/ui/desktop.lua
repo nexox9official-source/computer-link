@@ -34,6 +34,28 @@ function M.install(OS,shellui,prefs)
     if not self.windows then self.windows={}; self.app='home'; self.selectedIcon=1 end
     return self.windows
   end
+
+  function OS:recordRecentApp(id)
+    if not id or id=='home' then return end
+    local recent=prefs.get('recent_apps',{})
+    local nextRecent={id}
+    for _,value in ipairs(recent) do
+      if value~=id and #nextRecent<6 then nextRecent[#nextRecent+1]=value end
+    end
+    prefs.set('recent_apps',nextRecent)
+  end
+
+  function OS:taskbarPins()
+    local out,seen={},{}
+    for _,id in ipairs(prefs.get('taskbar_pins',{})) do
+      local app=shellui.find(id,self:isOperatorUI())
+      if app and id~='home' and not seen[id] then
+        out[#out+1]=app
+        seen[id]=true
+      end
+    end
+    return out
+  end
   function OS:focusWindow(win)
     local list=self:workspace()
     for i,v in ipairs(list) do if v==win then table.remove(list,i);break end end
@@ -47,6 +69,13 @@ function M.install(OS,shellui,prefs)
       self.app='home'; self:render(); return
     end
     if not shellui.allowed(id,self:isOperatorUI()) then return end
+
+    if id=='store' and not self.storeCatalogTried then
+      self.storeCatalogTried=true
+      pcall(packages.refreshCatalog)
+    end
+
+    self:recordRecentApp(id)
     for _,v in ipairs(list) do if v.id==id then self:focusWindow(v); self:render(); return end end
     local w,h=self.active.target.getSize()
     local offset=#list%4
@@ -356,25 +385,48 @@ function M.install(OS,shellui,prefs)
     local rightX=math.max(7,w-statusW+1)
     local taskX=7
     local available=math.max(0,rightX-taskX-1)
-    local total=#list
     local labels=prefs.get('taskbar_labels',false)
+
+    local openById={}
+    for _,win in ipairs(list) do openById[win.id]=win end
+
+    local taskItems={}
+    local seen={}
+    for _,app in ipairs(self:taskbarPins()) do
+      taskItems[#taskItems+1]={id=app.id,app=app,win=openById[app.id],pinned=true}
+      seen[app.id]=true
+    end
+    for _,win in ipairs(list) do
+      if not seen[win.id] then
+        taskItems[#taskItems+1]={id=win.id,app=shellui.find(win.id,self:isOperatorUI()),win=win}
+        seen[win.id]=true
+      end
+    end
+
+    local total=#taskItems
     local preferred=labels and 9 or 5
     local taskW=total>0 and math.max(4,math.min(preferred,math.floor(available/math.max(1,total)))) or 0
     local shown=0
 
-    for _,win in ipairs(list) do
+    for _,item in ipairs(taskItems) do
       if taskW<=0 or taskX+taskW-1>=rightX then break end
-      local app=shellui.find(win.id,self:isOperatorUI())
-      local label=(app and (app.icon or app.short) or win.id)
+      local app=item.app
+      local label=(app and (app.icon or app.short) or item.id)
       if labels and taskW>=7 and app then label=label..' '..app.short end
-      local active=(win.id==self.app and not win.minimized)
-      draw.button(target,taskX,h,taskW,label,colors.white,active and t.accent or colors.black)
-      self:addButton('wm:task:'..win.id,taskX,h,taskW,1,function()
-        if win.id==self.app and not win.minimized then
-          win.minimized=true
-          self.app='home'
+      local active=item.win and item.win.id==self.app and not item.win.minimized
+      local bg=active and t.accent or (item.pinned and colors.gray or colors.black)
+      draw.button(target,taskX,h,taskW,label,colors.white,bg)
+      self:addButton('wm:task:'..item.id,taskX,h,taskW,1,function()
+        local win=openById[item.id]
+        if win then
+          if win.id==self.app and not win.minimized then
+            win.minimized=true
+            self.app='home'
+          else
+            self:focusWindow(win)
+          end
         else
-          self:focusWindow(win)
+          self:openApp(item.id)
         end
       end)
       taskX=taskX+taskW
