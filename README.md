@@ -1,15 +1,15 @@
 # Computer Link — LinkOS / AstralNet
 
-## Desktop 0.14 — bureau et fenetres
+## Desktop 0.15 — refonte du shell LinkOS
 
-Priorite au Computer 51x19 : icones reorganisables, fenetres deplacables et
-redimensionnables, reduction/agrandissement/fermeture, barre des taches, dialogues
-integres, explorateur et editeur multiligne. Link Store telecharge quatre utilitaires
-officiels (taches, chronometre, conversions, peripheriques).
+Priorite au Computer 51x19 : bureau plus visuel, fond discret, launcher flottant,
+barre des taches sur une seule ligne, fenetres compactes avec scrollbar contextuelle
+et panneau Systeme separe. Les fonctions AstralNet et les applications existantes
+restent conservees derriere cette nouvelle couche graphique.
 
-Voir [le guide 0.14](docs/DESKTOP-0.14.md) pour les commandes, les raccourcis
-clavier du Computer normal, les limites et les tests. Ce n'est pas une copie de
-LevelOS ni un remplacement integral de tous les services reseau existants.
+Voir [le guide 0.15](docs/DESKTOP-0.15.md) pour les changements, les raccourcis,
+le support Advanced Monitor et la validation. La conception s'inspire de bonnes
+idees d'OS ComputerCraft comme LevelOS, OneOS et Opus, sans copier leur code.
 
 ## Interface 0.13.0
 
