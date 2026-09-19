@@ -317,13 +317,15 @@ function M.install(OS,shellui,prefs)
 
   function OS:closeWindow(win)
     if win.id=='notes' and self.noteDocument and self.noteDocument.dirty then
-      local answer=self:prompt('Document modifie','SAUVER / ABANDONNER / Echap')
-      if not answer then return end
-      answer=answer:lower()
-      if answer=='sauver' or answer=='oui' then
+      local answer=self:choiceDialog('Document modifie','Que veux-tu faire ?',{
+        {label='ANNULER',value='cancel'},
+        {label='ABANDONNER',value='discard',danger=true},
+        {label='SAUVER',value='save'}
+      },1)
+      if answer=='save' then
         self:saveNote()
         if self.noteDocument.dirty then return end
-      elseif answer~='abandonner' and answer~='non' then
+      elseif answer~='discard' then
         return
       end
     end
