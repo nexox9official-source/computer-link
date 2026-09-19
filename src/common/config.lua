@@ -1,3 +1,17 @@
+local SOURCE_REF = "main"
+local SOURCE_FILE = "/computer-link/source_ref.txt"
+if fs and fs.exists and fs.exists(SOURCE_FILE) then
+  local handle = fs.open(SOURCE_FILE, "r")
+  if handle then
+    local value = tostring(handle.readAll() or ""):gsub("%s+", "")
+    handle.close()
+    if value ~= "" and not value:find("..", 1, true)
+      and value:match("^[%w%._%-%/]+$") then
+      SOURCE_REF = value
+    end
+  end
+end
+
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
@@ -37,5 +51,6 @@ return {
 
   CRASH_RECOVERY_SECONDS = 10,
 
-  GITHUB_RAW = "https://raw.githubusercontent.com/nexox9official-source/computer-link/main/"
+  SOURCE_REF = SOURCE_REF,
+  GITHUB_RAW = "https://raw.githubusercontent.com/nexox9official-source/computer-link/" .. SOURCE_REF .. "/"
 }
