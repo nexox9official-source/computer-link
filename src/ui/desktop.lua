@@ -539,7 +539,12 @@ function M.install(OS,shellui,prefs)
       if selected then draw.fill(target,x,y,tileW,tileH,tileBg) end
       local iconX=x+math.max(0,math.floor((tileW-3)/2))
       fluent.drawIcon(target,apps[i].id,iconX,y,selected,tileBg)
-      draw.text(target,x,y+4,apps[i].title,t.text,tileBg,tileW)
+      local desktopLabels={store="Apps",settings="Reglages",calculator="Calcul",terminal="Terminal"}
+      local label=apps[i].title
+      if #label>tileW then
+        label=desktopLabels[apps[i].id] or apps[i].short or label
+      end
+      draw.text(target,x,y+4,label,t.text,tileBg,tileW)
 
       self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,index=i,id=apps[i].id}
     end
