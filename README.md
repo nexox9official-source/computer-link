@@ -1,25 +1,26 @@
 # Computer Link — LinkOS / AstralNet
 
-## LinkOS 0.18 — Malcraft / GhostLink rebuild
+## LinkOS 0.19 — Fluent Shell
 
-LinkOS 0.18 reconstruit le gameplay Malcraft autour de l'agent ROM CC:Tweaked et de
-Malcraft Bridge 0.11. Une cible n'a plus besoin d'avoir installe LinkOS ni meme un
-modem pour etre decouverte par le Bridge, contaminee et controlee dans le serveur.
+LinkOS 0.19 reconstruit l'interface complete autour d'un design system Fluent
+inspire des reperes de Windows : barre des taches centree, Start avec recherche,
+apps epinglees/recentes, fenetres coherentes, vraies icones pixel, cartes,
+navigation laterale et dialogues integres.
 
-La contamination par disque persiste apres retrait du disque, l'etat infecte survit
-aux redemarrages, la derniere position est conservee et une machine infectee
-remplacee au meme bloc peut recuperer l'infection avec son nouvel ID.
+Les applications principales ont ete refaites : Messages, Fichiers, Parametres,
+Applications, Contacts, Reseau, Securite, Calculatrice, Terminal, Notes, A propos
+et l'accueil LinkSec. Les huit apps officielles du Store passent aussi en version
+1.1 et heritent de l'accent actif.
 
-Le nettoyage distant hors-ligne utilise maintenant un tombstone serveur applique
-avant le scan des carriers, afin qu'un disque encore insere ne puisse pas annuler
-le nettoyage au prochain boot.
+Le boot, l'ecran de verrouillage, les prompts et les Advanced Monitors utilisent
+maintenant la meme palette et les memes composants.
 
-LinkSec fait de MALCRAFT son chemin principal et garde SCAN LINKOS comme mode
-secondaire. Voir [le guide 0.18](docs/MALCRAFT-0.18.md) pour l'architecture,
-les cas ROM-only, la persistance, le controle distant et l'installation serveur.
+Voir [le guide Desktop 0.19](docs/DESKTOP-0.19.md) pour le design system,
+les icones, la taskbar, Start, les applications et la validation.
 
-Les fonctions de bureau/session de 0.17 restent disponibles ; voir aussi
-[le guide Desktop 0.17](docs/DESKTOP-0.17.md).
+Les fonctions Malcraft/GhostLink de 0.18 restent intactes ; voir
+[le guide Malcraft 0.18](docs/MALCRAFT-0.18.md).
+
 
 ## Interface 0.13.0
 
