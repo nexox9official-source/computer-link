@@ -63,12 +63,17 @@ local function serverPolicy()
 end
 
 local function canInstallMer()
+  local id = os.getComputerID()
+
+  -- Computer #1 is the designated Astralium MER recovery workstation.
+  -- Computer IDs are assigned by CC:Tweaked, so this survives a wiped
+  -- Computer filesystem without exposing MER installation to other PCs.
+  if id == 1 then return true end
+
   local policy = serverPolicy()
   if not policy then return false end
 
   if policy.allow_public_mer_install == true then return true end
-
-  local id = os.getComputerID()
 
   if type(policy.trusted_mer_ids) == "table"
     and policy.trusted_mer_ids[id] == true then
