@@ -125,13 +125,48 @@ function M.install(OS,shellui,prefs)
     local available=shellui.apps(self:isOperatorUI())
     local map={}
     for _,app in ipairs(available) do if app.id~='home' then map[app.id]=app end end
-    for _,id in ipairs(prefs.get('desktop_order',{})) do
-      if map[id] and not seen[id] then items[#items+1]=map[id];seen[id]=true end
+
+    local shortcuts={}
+    for _,id in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if map[id] then shortcuts[id]=true end
     end
-    for _,app in ipairs(available) do
-      if app.id~='home' and not seen[app.id] then items[#items+1]=app;seen[app.id]=true end
+
+    for _,id in ipairs(prefs.get('desktop_order',{})) do
+      if shortcuts[id] and map[id] and not seen[id] then
+        items[#items+1]=map[id]
+        seen[id]=true
+      end
+    end
+
+    for _,id in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if map[id] and not seen[id] then
+        items[#items+1]=map[id]
+        seen[id]=true
+      end
     end
     return items
+  end
+
+  function OS:isDesktopShortcut(id)
+    for _,value in ipairs(prefs.get('desktop_shortcuts',{})) do
+      if value==id then return true end
+    end
+    return false
+  end
+
+  function OS:toggleDesktopShortcut(id)
+    if not shellui.allowed(id,self:isOperatorUI()) or id=='home' then return false end
+    local current=prefs.get('desktop_shortcuts',{})
+    local nextShortcuts={}
+    local found=false
+    for _,value in ipairs(current) do
+      if value==id then found=true else nextShortcuts[#nextShortcuts+1]=value end
+    end
+    if not found and #nextShortcuts<20 then nextShortcuts[#nextShortcuts+1]=id end
+    prefs.set('desktop_shortcuts',nextShortcuts)
+    self:setNotice(found and 'Raccourci retire du bureau.' or 'Raccourci ajoute au bureau.',
+      self:theme().good)
+    return true
   end
   function OS:moveIcon(from,to)
     local apps=self:desktopApps()
@@ -167,10 +202,14 @@ function M.install(OS,shellui,prefs)
     local targetId=nil
 
     for _,button in ipairs(self.buttons or {}) do
-      if inside(x,y,button) and type(button.id)=='string'
-        and button.id:sub(1,8)=='wm:task:' then
-        targetId=button.id:sub(9)
-        break
+      if inside(x,y,button) and type(button.id)=='string' then
+        if button.id:sub(1,8)=='wm:task:' then
+          targetId=button.id:sub(9)
+          break
+        elseif button.id:sub(1,9)=='launcher:' then
+          targetId=button.id:sub(10)
+          break
+        end
       end
     end
 
@@ -201,6 +240,9 @@ function M.install(OS,shellui,prefs)
       add('OUVRIR',function() self:openApp(menu.targetId) end)
       add(self:isTaskbarPinned(menu.targetId) and 'DESEPINGLER' or 'EPINGLER',function()
         self:toggleTaskbarPin(menu.targetId)
+      end)
+      add(self:isDesktopShortcut(menu.targetId) and 'RETIRER BUREAU' or 'AJOUTER BUREAU',function()
+        self:toggleDesktopShortcut(menu.targetId)
       end)
       if app and app.id~='store' then
         add('APPLICATIONS',function() self:openApp('store') end)
