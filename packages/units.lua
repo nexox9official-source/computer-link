@@ -8,7 +8,7 @@ local conversions={
   {'Minutes > secondes',function(n) return n*60 end,'s'}
 }
 return {draw=function(ctx)
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Convertisseur','Distances, temperature et temps',t.accent)
   ui.card(ctx.target,2,6,ctx.w-3,4,{bg=t.surface,accent=t.accent,title='Resultat',
     subtitle=ctx.data.result or 'Choisis une conversion ci-dessous.',muted=t.muted})
