@@ -635,6 +635,8 @@ function M.install(OS,shellui,prefs)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
 
+    local simpleDisplay = w < 70 or h < 22
+    if simpleDisplay then win.maximized=true end
     if win.maximized then win.x,win.y,win.w,win.h=1,1,w,desktopH end
     win.w=clamp(win.w,math.min(24,w),w)
     win.h=clamp(win.h,math.min(8,desktopH),desktopH)
