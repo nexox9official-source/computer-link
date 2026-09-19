@@ -38,7 +38,25 @@ local function version()
   return nil
 end
 
-local function runInstaller()
+local function serverPolicy()
+  local ok, policy = pcall(require, "computer_link_policy")
+  if ok and type(policy) == "table" then return policy end
+  return nil
+end
+
+local function canInstallMer()
+  local id = os.getComputerID()
+  if id == 1 then return true end
+
+  local policy = serverPolicy()
+  if not policy then return false end
+  if policy.allow_public_mer_install == true then return true end
+
+  return (type(policy.trusted_mer_ids) == "table" and policy.trusted_mer_ids[id] == true)
+    or (type(policy.mer_install_ids) == "table" and policy.mer_install_ids[id] == true)
+end
+
+local function runInstaller(role)
   if not http or not http.get then
     colour(colors.red)
     print("HTTP est desactive sur ce serveur.")
@@ -66,7 +84,7 @@ local function runInstaller()
     return false
   end
 
-  local ok, runErr = pcall(loader, "client")
+  local ok, runErr = pcall(loader, role or "client")
   if not ok then
     colour(colors.red)
     print("Installation impossible: " .. tostring(runErr))
@@ -186,11 +204,15 @@ if command == "install" or command == "client" then
 
 elseif command == "server" or command == "mer" then
   title()
-  colour(colors.red)
-  print("ACCES REFUSE")
-  colour(colors.white)
-  print("Le serveur MER est provisionne uniquement")
-  print("par l'administration Astralium.")
+
+  if canInstallMer() then
+    runInstaller("server")
+  else
+    colour(colors.red)
+    print("ACCES REFUSE")
+    colour(colors.white)
+    print("Ce Computer n'est pas autorise a devenir le MER Astralium.")
+  end
 
 elseif command == "update" then
   title()
@@ -224,6 +246,7 @@ elseif command == "help" then
   title()
   print("link            menu")
   print("link install    installer LinkOS")
+  print("link mer        installer/restaurer le MER (PC autorise)")
   print("link update     mise a jour manuelle")
   print("link start      demarrer LinkOS")
   print("link uninstall  desinstaller LinkOS")
