@@ -12,7 +12,12 @@ fs={exists=function(p) return disk[p]~=nil end,makeDir=function(p) disk[p]=true 
   getFreeSpace=function() return 1000000 end,list=function() return {} end,
   getSize=function(p) return #(disk[p] or '') end,
   getName=function(p) return p:match('([^/]+)$') or '' end,
-  combine=function(a,b) return a..'/'..b end,
+  combine=function(a,b)
+    local p=tostring(a or '')..'/'..tostring(b or '')
+    p=p:gsub('/+','/')
+    if p=='' then return '/' end
+    return p
+  end,
   move=function(a,b) assert(disk[a]~=nil and disk[b]==nil);disk[b]=disk[a];disk[a]=nil end,
   delete=function(p) disk[p]=nil end}
 function fs.open(p,mode)
