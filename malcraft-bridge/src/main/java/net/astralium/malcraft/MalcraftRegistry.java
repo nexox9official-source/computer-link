@@ -266,6 +266,39 @@ final class MalcraftRegistry {
         return GSON.toJson(root);
     }
 
+    static String listLiveJson(IComputerSystem caller) {
+        ensureLoaded(caller);
+        if (!isOperator(caller)) return "{\"computers\":[]}";
+
+        var computers = new ArrayList<Map<String, Object>>();
+
+        for (var entry : LIVE.entrySet()) {
+            int targetId = entry.getKey();
+            if (targetId == caller.getID() || isOperatorId(targetId)) continue;
+
+            var target = entry.getValue();
+            var row = new LinkedHashMap<String, Object>();
+            var pos = target.getPosition();
+
+            row.put("computer_id", targetId);
+            row.put("label", safe(target.getLabel()));
+            row.put("online", true);
+            row.put("infected", isInfected(target));
+            row.put("dimension", target.getLevel().dimension().location().toString());
+            row.put("x", pos.getX());
+            row.put("y", pos.getY());
+            row.put("z", pos.getZ());
+            computers.add(row);
+        }
+
+        computers.sort(Comparator.comparingInt(row -> ((Number) row.get("computer_id")).intValue()));
+
+        var root = new LinkedHashMap<String, Object>();
+        root.put("computers", computers);
+        root.put("transport", "malcraft_bridge");
+        return GSON.toJson(root);
+    }
+
     static String nearbyJson(IComputerSystem caller, double radius) {
         ensureLoaded(caller);
 
