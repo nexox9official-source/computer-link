@@ -9,6 +9,9 @@ local APPS = {
   {id="network", title="Reseau", short="NET", icon="::", pinned=true},
   {id="security", title="Securite", short="SEC", icon="##", pinned=true},
   {id="files", title="Fichiers", short="FILES", icon="//", pinned=true},
+  {id="notes", title="Notes", short="NOTE", icon="N", pinned=false},
+  {id="calculator", title="Calculatrice", short="CALC", icon="+", pinned=false},
+  {id="terminal", title="Terminal", short="TERM", icon=">_", pinned=false},
   {id="settings", title="Parametres", short="SET", icon="**", pinned=false},
   {id="about", title="A propos", short="INFO", icon="i", pinned=false},
   {id="hacker", title="LinkSec", short="LSEC", icon="X", pinned=true, operator=true}

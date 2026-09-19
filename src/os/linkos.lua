@@ -97,6 +97,8 @@ function LinkOS.new()
   self.quickPanelOpen = false
   self.appSwitcherOpen = false
   self.previousApp = "home"
+  self.calculatorExpression = ""
+  self.calculatorResult = "Pret"
   return self
 end
 
@@ -738,6 +740,9 @@ function LinkOS:renderHome(target, l)
       {"Contacts", "contacts"},
       {"Reseau", "network"},
       {"Fichiers", "files"},
+      {"Notes", "notes"},
+      {"Calculatrice", "calculator"},
+      {"Terminal", "terminal"},
       {"Securite", "security"}
     }
 
@@ -797,6 +802,9 @@ function LinkOS:renderHome(target, l)
     {"Contacts", "Retrouver rapidement les PC connus", "contacts"},
     {"Reseau", self.service.online and "AstralNet connecte" or "AstralNet hors-ligne", "network"},
     {"Fichiers", humanBytes(fs.getFreeSpace("/")) .. " disponibles", "files"},
+    {"Notes", "Bloc-notes personnel", "notes"},
+    {"Calculatrice", "Calcul rapide et securise", "calculator"},
+    {"Terminal", "Console CraftOS integree", "terminal"},
     {"Securite", security.enabled() and "Mot de passe actif" or "Protection standard", "security"}
   }
 
@@ -2940,6 +2948,116 @@ function LinkOS:renderFiles(target, l)
   end
 end
 
+local function readTextFile(path, limit)
+  if not fs.exists(path) or fs.isDir(path) then return "" end
+  local handle = fs.open(path, "r")
+  if not handle then return "" end
+  local content = handle.read(limit or 8192) or ""
+  handle.close()
+  return content
+end
+
+function LinkOS:runNativeProgram(program, ...)
+  local previous = term.current()
+  term.redirect(self.native)
+  term.setBackgroundColor(colors.black)
+  term.setTextColor(colors.white)
+  term.clear()
+  term.setCursorPos(1, 1)
+  local ok, err = pcall(shell.run, program, ...)
+  term.redirect(previous)
+  if not ok then
+    self:setNotice("Erreur programme: " .. tostring(err), self:theme().danger)
+  end
+  self:refreshDisplays()
+  self:render()
+end
+
+function LinkOS:renderNotes(target, l)
+  local t = self:theme()
+  local x, y, w = l.contentX, l.contentY, l.contentW
+  local path = "/user/notes.txt"
+
+  draw.text(target, x, y, "Notes", t.text, t.bg, w)
+  y = y + 2
+  self:button(target, "notes:edit", x, y, math.min(14, w), "MODIFIER", function()
+    self:runNativeProgram("edit", path)
+  end)
+  if w >= 30 then
+    draw.text(target, x + 16, y, "Sauvegarde: " .. path, t.muted, t.bg, w - 16)
+  end
+  y = y + 2
+
+  local content = readTextFile(path, 8192)
+  if content == "" then
+    draw.text(target, x, y, "Aucune note. Clique sur MODIFIER.", t.muted, t.bg, w)
+    return
+  end
+
+  local lines = draw.wrap(content, math.max(1, w))
+  for i = 1, math.min(#lines, math.max(1, l.h - y - 2)) do
+    draw.text(target, x, y + i - 1, lines[i], t.text, t.bg, w)
+  end
+end
+
+function LinkOS:evaluate(expression)
+  expression = tostring(expression or ""):gsub("%s+", "")
+  if expression == "" then return nil, "Expression vide" end
+  if #expression > 80 or expression:find("[^%d%+%-%*/%%%^%(%)%.]") then
+    return nil, "Caracteres non autorises"
+  end
+
+  local loader, err = load("return (" .. expression .. ")", "@calculator", "t", {})
+  if not loader then return nil, "Expression invalide" end
+  local ok, result = pcall(loader)
+  if not ok or type(result) ~= "number" then return nil, "Calcul impossible" end
+  if result ~= result or result == math.huge or result == -math.huge then
+    return nil, "Resultat non fini"
+  end
+  return result
+end
+
+function LinkOS:renderCalculator(target, l)
+  local t = self:theme()
+  local x, y, w = l.contentX, l.contentY, l.contentW
+
+  draw.text(target, x, y, "Calculatrice", t.text, t.bg, w)
+  y = y + 2
+  draw.box(target, x, y, w, 4, t.panel, t.accent, "Expression")
+  draw.text(target, x + 1, y + 1,
+    self.calculatorExpression ~= "" and self.calculatorExpression or "Ex: (12+8)*3",
+    self.calculatorExpression ~= "" and t.text or t.muted, t.panel, math.max(1, w - 2))
+  draw.text(target, x + 1, y + 2, "= " .. tostring(self.calculatorResult), t.accent, t.panel, math.max(1, w - 2))
+  y = y + 5
+
+  self:button(target, "calc:input", x, y, math.min(16, w), "NOUVEAU CALCUL", function()
+    local expression = self:prompt("Calcul LinkOS", "Operateurs: + - * / % ^ et parentheses")
+    if not expression or expression == "" then return end
+    local result, err = self:evaluate(expression)
+    self.calculatorExpression = expression
+    self.calculatorResult = result and tostring(result) or tostring(err)
+    self:setNotice(result and "Calcul termine." or tostring(err), result and t.good or t.danger)
+  end)
+end
+
+function LinkOS:renderTerminal(target, l)
+  local t = self:theme()
+  local x, y, w = l.contentX, l.contentY, l.contentW
+
+  draw.text(target, x, y, "Terminal", t.text, t.bg, w)
+  y = y + 2
+  draw.box(target, x, y, w, math.min(7, math.max(4, l.contentH - 3)), colors.black, t.accent, "LinkOS Shell")
+  draw.text(target, x + 1, y + 1, "Acces aux commandes CraftOS", t.text, colors.black, math.max(1, w - 2))
+  draw.text(target, x + 1, y + 2, "Tape exit pour revenir au bureau.", t.muted, colors.black, math.max(1, w - 2))
+  if self.active and self.active.kind == "monitor" then
+    draw.text(target, x + 1, y + 3, "La saisie se fera sur le Computer.", t.warn, colors.black, math.max(1, w - 2))
+  end
+  self:button(target, "terminal:open", x, y + math.min(5, math.max(3, l.contentH - 5)),
+    math.min(18, w), "OUVRIR TERMINAL", function()
+      self:runNativeProgram("shell")
+    end)
+end
+
 function LinkOS:renderSettings(target, l)
   local t = self:theme()
   local x, y, w = l.contentX, l.contentY, l.contentW
@@ -3434,6 +3552,12 @@ function LinkOS:render()
     self:renderHacker(target, l)
   elseif self.app == "files" then
     self:renderFiles(target, l)
+  elseif self.app == "notes" then
+    self:renderNotes(target, l)
+  elseif self.app == "calculator" then
+    self:renderCalculator(target, l)
+  elseif self.app == "terminal" then
+    self:renderTerminal(target, l)
   elseif self.app == "settings" then
     self:renderSettings(target, l)
   elseif self.app == "about" then

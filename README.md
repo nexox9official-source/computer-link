@@ -2,7 +2,7 @@
 
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
-## LinkOS 0.10.0
+## LinkOS 0.12.0
 
 Le client n'est plus seulement un terminal de commandes. Il démarre maintenant sur **LinkOS**, un environnement graphique inspiré d'un OS desktop moderne :
 
@@ -17,6 +17,9 @@ Le client n'est plus seulement un terminal de commandes. Il démarre maintenant 
 - changement d'écran principal par simple toucher ;
 - affichages secondaires avec statut temps réel ;
 - mode CLI classique conservé en secours.
+- bloc-notes local avec éditeur intégré ;
+- calculatrice sécurisée ;
+- vrai terminal CraftOS qui revient au bureau avec `exit`.
 
 L'identité réseau reste le **Computer ID**. Il n'existe pas de compte central obligatoire.
 
@@ -112,6 +115,16 @@ Tableau de bord AstralNet :
 ### Sécurité
 
 Centre de sécurité de LinkOS.
+
+### Outils système
+
+LinkOS 0.12 ajoute trois applications de bureau :
+
+- **Notes** enregistre les textes dans `/user/notes.txt` ;
+- **Calculatrice** accepte `+`, `-`, `*`, `/`, `%`, `^` et les parenthèses ;
+- **Terminal** ouvre un shell CraftOS complet sans désactiver LinkOS : `exit` ramène au bureau.
+
+Quand LinkOS est affiché sur un monitor, les saisies clavier des Notes, de la Calculatrice et du Terminal se font automatiquement sur l'écran du Computer, tandis que le monitor reste l'affichage principal.
 
 ### Mot de passe LinkOS
 
@@ -623,9 +636,9 @@ Fonctions principales :
 Le mod est marqué **serveur uniquement** : les joueurs n'ont pas besoin de l'ajouter dans leur instance client.
 
 
-### Desktop Shell 0.11.0
+### Desktop Shell 0.12.0
 
-LinkOS 0.11.0 introduit une nouvelle couche d'interface graphique inspiree des bons principes d'OS ComputerCraft fenetres comme LevelOS, sans remplacer LinkOS ni executer le code distant de LevelOS en production.
+LinkOS 0.12.0 utilise une couche d'interface graphique native inspiree des bons principes d'OS ComputerCraft fenetres comme LevelOS, sans remplacer LinkOS ni executer le code distant de LevelOS en production.
 
 Nouveautes :
 
@@ -639,5 +652,8 @@ Nouveautes :
 - interface responsive Computer / moniteurs ;
 - registre d'applications centralise ;
 - **LinkSec n'apparait que sur les Computer IDs autorises par la politique ROM serveur**.
+- applications Notes, Calculatrice et Terminal integrees au menu Start ;
+- retour automatique au bureau apres fermeture d'un programme natif ;
+- saisie clavier deportee proprement vers le Computer lorsque le bureau est sur un monitor.
 
 Le shell reste entierement natif LinkOS : messagerie, AstralNet, securite, fichiers, Malcraft et moniteurs conservent leur backend actuel.
