@@ -1,7 +1,7 @@
 -- LinkOS package redstone 1.1
 local ui=dofile('/computer-link/src/ui/fluent.lua')
 return {draw=function(ctx)
-  local t=ui.theme('blue')
+  local t=ctx.theme or ui.theme('blue')
   ui.sectionTitle(ctx.target,2,2,ctx.w-3,'Redstone','Entrees et sorties locales',t.accent)
   if not redstone or not redstone.getSides then
     ui.card(ctx.target,2,6,ctx.w-3,5,{bg=t.surface,accent=t.warn,title='API indisponible',
