@@ -450,15 +450,15 @@ function M.install(OS,shellui,prefs)
     local menu=self.contextMenu
     if not menu then return end
     local t=self:theme()
-    local mw=20
     local options={}
 
     local function add(label,action,danger)
       options[#options+1]={label=label,action=action,danger=danger}
     end
 
+    local app=nil
     if menu.targetId then
-      local app=shellui.find(menu.targetId,self:isOperatorUI())
+      app=shellui.find(menu.targetId,self:isOperatorUI())
       add("Ouvrir",function() self:openApp(menu.targetId) end)
       add(self:isTaskbarPinned(menu.targetId) and "Desepingler" or "Epingler",function()
         self:toggleTaskbarPin(menu.targetId)
@@ -466,7 +466,9 @@ function M.install(OS,shellui,prefs)
       add(self:isDesktopShortcut(menu.targetId) and "Retirer bureau" or "Ajouter bureau",function()
         self:toggleDesktopShortcut(menu.targetId)
       end)
-      if app and app.id~="store" then add("Voir dans Apps",function() self:openApp("store") end) end
+      if app and app.id~="store" then
+        add("Voir dans Apps",function() self:openApp("store") end)
+      end
       add("Parametres",function() self:openApp("settings") end)
     else
       add("Actualiser",function() self:render() end)
@@ -475,18 +477,32 @@ function M.install(OS,shellui,prefs)
       add("Personnaliser",function() self:openApp("settings") end)
     end
 
-    local mh=#options+2
+    local longest=menu.targetId and #(app and app.title or "Application") or #"Bureau"
+    for _,item in ipairs(options) do longest=math.max(longest,#item.label) end
+    local mw=math.min(math.max(18,longest+4),math.max(18,w-2))
+    local mh=#options+3
     local mx=clamp(menu.x,1,math.max(1,w-mw+1))
     local my=clamp(menu.y,1,math.max(1,h-mh))
     self.shellOverlay={x=mx,y=my,w=mw,h=mh}
 
     draw.fill(target,mx,my,mw,mh,t.elevated)
-    draw.text(target,mx+2,my,menu.targetId and "Application" or "Bureau",t.muted,t.elevated,mw-4)
+    local headerBg=t.surface
+    draw.fill(target,mx,my,mw,2,headerBg)
+
+    if menu.targetId then
+      fluent.drawMiniIcon(target,menu.targetId,mx+1,my,false,headerBg)
+      draw.text(target,mx+5,my,app and app.title or "Application",t.text,headerBg,math.max(1,mw-6))
+      draw.text(target,mx+5,my+1,"Application",t.muted,headerBg,math.max(1,mw-6))
+    else
+      draw.text(target,mx+2,my,"Bureau",t.text,headerBg,mw-4)
+      draw.text(target,mx+2,my+1,"Actions rapides",t.muted,headerBg,mw-4)
+    end
+
     for i,item in ipairs(options) do
-      local by=my+i
-      local bg=t.surface2
-      draw.fill(target,mx+1,by,mw-2,1,bg)
-      draw.text(target,mx+2,by,item.label,item.danger and t.danger or t.text,bg,mw-4)
+      local by=my+1+i
+      ccui.button(target,mx+1,by,mw-2,item.label,t,{
+        danger=item.danger==true,compact=true
+      })
       self:addButton("context:"..i,mx+1,by,mw-2,1,function()
         self.contextMenu=nil
         item.action()
