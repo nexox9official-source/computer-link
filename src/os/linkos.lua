@@ -900,8 +900,8 @@ function LinkOS:renderMessages(target, l)
   draw.fill(target,chatX,y,chatW,math.max(5,h-5),t.bg)
   if not self.selectedPeer then
     fluent.card(target,chatX+1,y+2,math.max(8,chatW-2),5,{
-      bg=t.surface,accent=t.accent,title="Selectionne une conversation",
-      subtitle="Ou utilise + NOUVEAU pour contacter un Computer.",muted=t.muted
+      bg=t.surface,accent=t.accent,title="Choisis une conversation",
+      subtitle="+ NOUVEAU pour ecrire a un Computer.",muted=t.muted
     })
     return
   end
