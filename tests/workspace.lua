@@ -4,7 +4,8 @@ for i,name in ipairs({'white','orange','magenta','lightBlue','yellow','lime','pi
   'lightGray','cyan','purple','blue','brown','green','red','black'}) do colors[name]=2^(i-1) end
 keys={}
 for i,name in ipairs({'up','down','left','right','tab','backspace','enter','escape','pageUp','pageDown',
-  'f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','m','s','w','leftCtrl','rightCtrl'}) do keys[name]=i end
+  'f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12','m','s','w','d',
+  'leftCtrl','rightCtrl','leftAlt','rightAlt'}) do keys[name]=i end
 local disk={}
 fs={exists=function(p) return disk[p]~=nil end,makeDir=function(p) disk[p]=true end,
   isDir=function(p) return disk[p]==true end,getDir=function(p) return p:match('^(.*)/') or '' end,
@@ -74,6 +75,8 @@ local total=0
 for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   native=terminal(size[1],size[2])
   local o=OS.new()
+  -- Ordinary layout cases are isolated; session restoration has its own test below.
+  o.sessionRestored=true
   o:refreshDisplays();o:render()
 
   local taskButtons={}
@@ -128,7 +131,15 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   end
   store.maximized=true;o:render();assert(store.w==size[1])
   o:openApp('home');assert(store.minimized and notes.minimized)
+  o:openApp('home');assert(not store.minimized or not notes.minimized)
+  o:openApp('home');assert(store.minimized and notes.minimized)
   o:handleKey(keys.f12);assert(o.app~='home')
+
+  local beforeAlt=o.app
+  o:workspaceEvent('key',keys.leftAlt)
+  o:handleKey(keys.tab)
+  o:workspaceEvent('key_up',keys.leftAlt)
+  assert(o.app~=beforeAlt or #o.windows==1,'Alt+Tab did not cycle the workspace')
   queue={{'char','O'},{'char','K'},{'key',keys.enter}}
   assert(o:prompt('Test','Integrated dialog')=='OK' and not o.dialogOpen)
   for _,app in ipairs({'network','messages','contacts','files','security','settings','calculator','terminal','about'}) do
@@ -157,6 +168,32 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o.contextMenu=nil
 
     o:renderUserLockDisplay(native);native.dump('/tmp/linkos-lock.frame')
+
+    -- Persist a controlled session, create a fresh LinkOS instance and restore it.
+    local sourceOS=OS.new()
+    sourceOS.sessionRestored=true
+    sourceOS:refreshDisplays();sourceOS:render()
+    sourceOS.windows={}
+    sourceOS.app='home'
+    sourceOS:openApp('messages')
+    sourceOS:openApp('files')
+    sourceOS.windows[1].minimized=true
+    sourceOS.windows[2].maximized=true
+    sourceOS.app='files'
+    sourceOS:saveWorkspaceSession()
+
+    local restored=OS.new()
+    restored:refreshDisplays();restored:render()
+    assert(#restored.windows==2,'Workspace session did not restore both apps')
+    local restoredById={}
+    for _,win in ipairs(restored.windows) do restoredById[win.id]=win end
+    assert(restoredById.messages and restoredById.messages.minimized)
+    assert(restoredById.files and restoredById.files.maximized)
+    assert(restored.app=='files')
+
+    restored.windows={}
+    restored.app='home'
+    restored:saveWorkspaceSession()
   end
   total=total+1
   disk['/user/notes.txt']=nil
