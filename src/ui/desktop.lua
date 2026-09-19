@@ -884,11 +884,15 @@ function M.install(OS,shellui,prefs)
     self:addButton("wm:desktop",w,h,1,1,function() self:toggleShowDesktop() end)
 
     if self.notice then
-      local nw=math.min(w-2,math.max(12,#tostring(self.notice)+2))
+      local message=tostring(self.notice)
+      local nw=math.min(math.max(22,math.floor(w*0.46)),math.max(18,w-2))
       local nx=math.max(1,w-nw)
-      local ny=math.max(1,h-2)
-      draw.fill(target,nx,ny,nw,1,colors.black)
-      draw.text(target,nx+1,ny,self.notice,self.noticeColour,colors.black,nw-2)
+      local ny=math.max(1,h-4)
+      draw.fill(target,nx,ny,nw,3,t.elevated)
+      draw.fill(target,nx,ny,1,3,self.noticeColour or t.accent)
+      draw.text(target,nx+2,ny,"LinkOS",t.text,t.elevated,math.max(1,nw-3))
+      draw.text(target,nx+2,ny+1,message,self.noticeColour or t.text,t.elevated,math.max(1,nw-3))
+      draw.text(target,nx+2,ny+2,"Notification",t.muted,t.elevated,math.max(1,nw-3))
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
