@@ -1,5 +1,18 @@
 # Computer Link — LinkOS / AstralNet
 
+## Interface 0.13.0
+
+- Bureau en cartes avec pagination : toutes les applications restent accessibles.
+- Menu d'applications avec recherche au clavier, selection haut/bas et Entree.
+- Navigation des pages du bureau par fleches gauche/droite, molette ou boutons tactiles.
+- Menus modaux : un clic exterieur ferme le menu sans activer un bouton situe dessous.
+- Barre superieure simplifiee, titres et zones de dessin limites aux dimensions de l'ecran.
+- Ecran compagnon sur le Computer lorsque le bureau est sur monitor ; un clic sur le Computer reprend le bureau.
+- Echelle des monitors mise en cache pour eviter les changements repetes lors des rafraichissements.
+
+Tests simules : `texlua tests/shell_layout.lua` (ou Lua 5.3). Six tailles de 26x12 a
+110x38, avec et sans permissions operateur. Ces tests ne remplacent pas une verification en jeu.
+
 Computer Link transforme les Computers **CC:Tweaked** d'Astralium en véritables postes réseau avec une interface graphique adaptative.
 
 ## LinkOS 0.12.0

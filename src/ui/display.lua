@@ -1,6 +1,7 @@
 local display = {}
 
 local SCALE_STEPS = {0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5}
+local scaleCache = {}
 
 local function isMonitor(name)
   return peripheral.getType(name) == "monitor"
@@ -61,7 +62,7 @@ end
 function display.list()
   local out = {}
 
-  local native = term.current()
+  local native = term.native and term.native() or term.current()
   local nw, nh = native.getSize()
   out[#out + 1] = {
     id = "computer",
@@ -82,8 +83,16 @@ function display.list()
     if isMonitor(name) then
       local monitor = peripheral.wrap(name)
       if monitor then
-        local scale = display.autoScaleMonitor(monitor)
+        local beforeW, beforeH = monitor.getSize()
+        local cached = scaleCache[name]
+        local scale
+        if cached and cached.w == beforeW and cached.h == beforeH then
+          scale = cached.scale
+        else
+          scale = display.autoScaleMonitor(monitor)
+        end
         local w, h = monitor.getSize()
+        scaleCache[name] = {w=w, h=h, scale=scale}
         out[#out + 1] = {
           id = "monitor:" .. name,
           name = name,

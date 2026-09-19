@@ -1,7 +1,7 @@
 return {
   NAME = "Computer Link",
   NETWORK_NAME = "AstralNet",
-  VERSION = "0.12.0",
+  VERSION = "0.13.0",
   PROTOCOL_VERSION = 2,
 
   MAGIC = "COMPUTER_LINK",

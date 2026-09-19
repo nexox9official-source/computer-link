@@ -3441,7 +3441,7 @@ function LinkOS:renderHijackState()
 end
 
 function LinkOS:renderCompanion(d)
-  if not d or d.kind ~= "monitor" or not d.target then return end
+  if not d or not d.target then return end
   if self.active and d.id == self.active.id then return end
 
   local target = d.target
@@ -3496,7 +3496,7 @@ end
 function LinkOS:renderCompanions()
   self.companionButtons = {}
   for _, d in ipairs(self.displays or {}) do
-    if d.kind == "monitor" and (not self.active or d.id ~= self.active.id) then
+    if not self.active or d.id ~= self.active.id then
       self:renderCompanion(d)
     end
   end
@@ -3683,6 +3683,17 @@ function LinkOS:uiLoop()
         self:render()
       end
 
+    elseif event == "mouse_click" and self.active and self.active.kind ~= "computer" then
+      for _, screen in ipairs(self.displays) do
+        if screen.kind == "computer" then
+          self.active = screen
+          prefs.set("display_id", screen.id)
+          break
+        end
+      end
+      self.lastActivity = os.clock()
+      self:render()
+
     elseif event == "mouse_click" and self.active and self.active.kind == "computer" then
       self.lastActivity = os.clock()
 
@@ -3718,6 +3729,20 @@ function LinkOS:uiLoop()
         end
       end
 
+      self:render()
+
+    elseif (event == "char" or event == "paste") and self.startMenuOpen then
+      self.launcherQuery = ((self.launcherQuery or "") .. tostring(a)):sub(1,40)
+      self.launcherIndex = 1
+      self.lastActivity = os.clock()
+      self:render()
+
+    elseif event == "mouse_scroll" and self.active and self.active.kind == "computer" then
+      if self.startMenuOpen then
+        self:handleKey(a > 0 and keys.down or keys.up)
+      elseif self.app == "home" then
+        self:handleKey(a > 0 and keys.right or keys.left)
+      end
       self:render()
 
     elseif event == "key" then
@@ -3787,5 +3812,6 @@ function LinkOS:run()
 
 end
 
+shellui.install(LinkOS, prefs)
 local instance = LinkOS.new()
 instance:run()

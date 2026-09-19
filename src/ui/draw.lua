@@ -18,6 +18,10 @@ function draw.clear(target, bg, fg)
 end
 
 function draw.fill(target, x, y, w, h, bg, char)
+  local tw, th = target.getSize()
+  local right, bottom = math.min(tw, x + w - 1), math.min(th, y + h - 1)
+  x, y = math.max(1, x), math.max(1, y)
+  w, h = right - x + 1, bottom - y + 1
   if w <= 0 or h <= 0 then return end
   char = char or " "
   safeColour(target, "setBackgroundColor", bg or colors.black)
@@ -30,6 +34,11 @@ end
 
 function draw.text(target, x, y, text, fg, bg, maxWidth)
   text = tostring(text or "")
+  local tw, th = target.getSize()
+  if y < 1 or y > th or x > tw then return end
+  if x < 1 then text = text:sub(2 - x); x = 1 end
+  maxWidth = math.max(0, math.min(maxWidth or tw, tw - x + 1))
+  if maxWidth == 0 then return end
   if maxWidth and #text > maxWidth then
     if maxWidth <= 1 then
       text = string.sub(text, 1, maxWidth)
