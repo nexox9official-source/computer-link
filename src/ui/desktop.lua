@@ -1,6 +1,7 @@
 -- LinkOS workspace: one retained window per application, no replacement of MER.
 local draw=dofile('/computer-link/src/ui/draw.lua')
 local fluent=dofile('/computer-link/src/ui/fluent.lua')
+local ccui=dofile('/computer-link/src/ui/ccui.lua')
 local packages=dofile('/computer-link/src/ui/packages.lua')
 local M={}
 local function clamp(n,lo,hi) return math.max(lo,math.min(hi,n)) end
@@ -537,26 +538,20 @@ function M.install(OS,shellui,prefs)
     local query=tostring(self.storeQuery or "")
     local q=query:lower()
 
-    fluent.sectionTitle(target,2,1,l.w-3,"Applications","Catalogue officiel LinkOS",t.accent)
-    fluent.searchBox(target,2,4,math.max(12,l.w-15),query,"Rechercher",t.accent)
-    self:addButton("store:search",2,4,math.max(12,l.w-15),1,function()
-      self.storeQuery=self:prompt("Rechercher une app","Nom, ID ou description") or ""
+    draw.text(target,2,1,"Applications",t.text,t.bg,l.w-3)
+    draw.text(target,2,2,"Installe et gere les applications LinkOS",t.muted,t.bg,l.w-3)
+
+    fluent.searchBox(target,2,4,math.max(12,l.w-14),query,"Rechercher",t.accent)
+    self:addButton("store:search",2,4,math.max(12,l.w-14),1,function()
+      self.storeQuery=self:prompt("Rechercher","Nom de l'application") or ""
     end)
-    self:button(target,"store:refresh",math.max(2,l.w-11),4,10,"ACTUALISER",function()
+
+    ccui.button(target,l.w-10,4,9,"ACTUALISER",t,{})
+    self:addButton("store:refresh",l.w-10,4,9,1,function()
       local ok,result=packages.refreshCatalog()
       self:setNotice(ok and (tostring(result).." apps chargees.") or tostring(result),
         ok and t.good or t.warn)
     end)
-
-    if query~="" then
-      self:button(target,"store:clear",math.max(2,l.w-11),5,10,"TOUT AFFICHER",function()
-        self.storeQuery=""
-      end)
-    else
-      draw.text(target,2,5,
-        packages.catalogSource=="remote" and "Catalogue en ligne" or "Catalogue local hors-ligne",
-        packages.catalogSource=="remote" and t.good or t.muted,t.bg,l.w-3)
-    end
 
     local visible={}
     for _,p in ipairs(packages.catalog) do
@@ -565,70 +560,76 @@ function M.install(OS,shellui,prefs)
     end
 
     if #visible==0 then
-      fluent.card(target,2,8,math.max(10,l.w-3),5,{
-        bg=t.surface,accent=t.muted,title="Aucune application",
-        subtitle="Essaie une autre recherche.",muted=t.muted
+      ccui.panel(target,2,7,l.w-3,4,t,{
+        accent=t.muted,title="Aucune application",
+        subtitle="Essaie une autre recherche."
       })
       return
     end
 
-    local cols=l.w>=60 and 2 or 1
-    local gap=1
-    local cardW=math.max(16,math.floor((l.w-3-(cols-1)*gap)/cols))
-    local cardH=6
-    local top=7
+    local top=6
+    local bottom=l.h-2
+    local rowH=5
+    local pageSize=math.max(1,math.floor((bottom-top+1)/rowH))
+    self.storeOffset=self.storeOffset or 0
+    local page=ccui.page(#visible,pageSize,self.storeOffset)
+    self.storeOffset=page.offset
 
-    for i,p in ipairs(visible) do
-      local col=(i-1)%cols
-      local row=math.floor((i-1)/cols)
-      local x=2+col*(cardW+gap)
-      local y=top+row*(cardH+1)
-
+    for i=page.first,page.last do
+      local p=visible[i]
+      local y=top+(i-page.first)*rowH
       local installed=packages.installed(p.id)
       local installedVersion=installed and packages.installedVersion(p.id) or nil
       local outdated=installed and installedVersion and installedVersion~=p.version
-      local stateColour=outdated and t.warn or (installed and t.good or t.accent)
-      local stateText=outdated and ("MAJ "..p.version)
-        or (installed and ("Installee v"..tostring(installedVersion or "?")) or ("Version "..p.version))
 
-      draw.fill(target,x,y,cardW,cardH,t.surface)
-      fluent.drawIcon(target,p.id,x+1,y+1,false,t.surface)
-      draw.text(target,x+5,y,p.title,t.text,t.surface,math.max(1,cardW-6))
-      draw.text(target,x+5,y+1,stateText,stateColour,t.surface,math.max(1,cardW-6))
-      draw.text(target,x+5,y+2,p.description,t.muted,t.surface,math.max(1,cardW-6))
+      local action=outdated and "MAJ" or (installed and "OUVRIR" or "INSTALLER")
+      local meta=outdated and ("Mise a jour "..p.version)
+        or (installed and ("Installee v"..tostring(installedVersion or "?"))
+          or ("Version "..tostring(p.version)))
 
-      local installLabel=outdated and "METTRE A JOUR" or (installed and "REINSTALL" or "INSTALLER")
-      local installW=math.min(12,math.max(8,cardW-10))
-      self:button(target,"store:install:"..p.id,x+1,y+4,installW,installLabel,function()
-        local verb=outdated and "Mettre a jour " or "Installer "
-        if self:confirm(verb..p.title.." depuis le depot officiel ?") then
-          local ok,msg=packages.install(p.id)
-          self:setNotice(msg,ok and t.good or t.danger)
+      local rect=ccui.appRow(target,2,y,l.w-4,{
+        id=p.id,title=p.title,meta=meta,description=p.description,action=action
+      },t,function(id,ix,iy,selected,bg)
+        fluent.drawIcon(target,id,ix,iy,selected,bg)
+      end,{primary=not installed or outdated})
+
+      self:addButton("store:row:"..p.id,rect.x,rect.y,rect.w,rect.h,function()
+        if installed and not outdated then
+          self:openApp("pkg:"..p.id)
+        else
+          local verb=outdated and "Mettre a jour " or "Installer "
+          if self:confirm(verb..p.title.." ?") then
+            local ok,msg=packages.install(p.id)
+            self:setNotice(msg,ok and t.good or t.danger)
+          end
         end
       end)
 
       if installed then
-        local openX=x+2+installW
-        if openX+6<=x+cardW-1 then
-          self:button(target,"store:open:"..p.id,openX,y+4,7,"OUVRIR",function()
+        self:addButton("store:action:"..p.id,rect.action.x,rect.action.y,rect.action.w,1,function()
+          if outdated then
+            local ok,msg=packages.install(p.id)
+            self:setNotice(msg,ok and t.good or t.danger)
+          else
             self:openApp("pkg:"..p.id)
-          end)
-        end
-        if cardW>=28 then
-          self:button(target,"store:remove:"..p.id,x+cardW-8,y+5,7,"RETIRER",function()
-            if self:confirm("Retirer "..p.title.." ? Donnees conservees.") then
-              local ok,err=packages.remove(p.id)
-              if ok then
-                for j=#self.windows,1,-1 do
-                  if self.windows[j].id=="pkg:"..p.id then table.remove(self.windows,j) end
-                end
-              end
-              self:setNotice(ok and "Application retiree." or tostring(err),
-                ok and t.warn or t.danger)
-            end
-          end)
-        end
+          end
+        end)
       end
+    end
+
+    ccui.scrollbar(target,l.w-1,top,math.max(1,bottom-top+1),page,t)
+
+    if page.canUp then
+      ccui.button(target,2,bottom+1,5,"< PREV",t,{compact=true})
+      self:addButton("store:prev",2,bottom+1,5,1,function()
+        self.storeOffset=math.max(0,self.storeOffset-pageSize)
+      end)
+    end
+    if page.canDown then
+      ccui.button(target,l.w-7,bottom+1,6,"NEXT >",t,{compact=true})
+      self:addButton("store:next",l.w-7,bottom+1,6,1,function()
+        self.storeOffset=self.storeOffset+pageSize
+      end)
     end
   end
   function OS:renderWindow(target,win,w,h)
