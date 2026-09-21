@@ -99,15 +99,7 @@ function shellui.wallpaper(target, x, y, w, h, mode, accent)
       draw.fill(target,lx,ly+paneH+gapY,paneW,paneH,colors.blue)
       draw.fill(target,lx+paneW+gapX,ly+paneH+gapY,paneW,paneH,accent or colors.lightBlue)
 
-      -- A few low-contrast horizontal rays keep the desktop from feeling flat.
-      local rayX=math.max(x,lx-math.floor(w*0.12))
-      local rayY=math.min(y+h-1,ly+logoH+2)
-      for i=0,2 do
-        local rw=math.max(3,logoW-i*3)
-        if rayY+i<=y+h-1 then
-          draw.fill(target,rayX+i*2,rayY+i,rw,1,i==1 and colors.blue or colors.gray)
-        end
-      end
+
     end
     return
   end
@@ -218,10 +210,10 @@ function shellui.install(OS, prefs)
   function OS:renderStartMenu(target,l)
     if not self.startMenuOpen then return end
     local t=self:theme()
-    local panelW=math.min(math.max(30,math.floor(l.w*0.72)),l.w-3)
+    local panelW=math.min(48,l.w-2)
     local x=2
     local y=2
-    local h=math.max(10,l.h-3)
+    local h=math.max(9,l.h-2)
     self.shellOverlay={x=x,y=y,w=panelW,h=h}
     self.buttons={}
 
@@ -231,11 +223,11 @@ function shellui.install(OS, prefs)
     draw.text(target,x+2,y,"Demarrer",t.text,t.elevated,panelW-4)
 
     local query=self.launcherQuery or ""
-    fluent.searchBox(target,x+2,y+2,panelW-4,query,"Rechercher une application",t.accent)
+    fluent.searchBox(target,x+2,y+2,panelW-4,query,"Rechercher...",t.accent)
     self:addButton("launcher:search",x+2,y+2,panelW-4,1,function() end)
 
     local mode=self.startAllApps and "all" or "pinned"
-    local tabRects=ccui.tabs(target,x+2,y+4,panelW-4,{
+    local tabRects=ccui.tabs(target,x+2,y+3,panelW-4,{
       {id="pinned",label="Epinglees"},
       {id="all",label="Toutes"}
     },mode,t)
@@ -280,9 +272,10 @@ function shellui.install(OS, prefs)
     self.launcherApps=apps
     self.launcherIndex=math.max(1,math.min(math.max(1,#apps),self.launcherIndex or 1))
 
-    local listY=y+7
+    local listY=y+5
     local footer=y+h-2
     local pageSize=math.max(1,footer-listY-1)
+    self.launcherCols=1
     local page=math.floor((self.launcherIndex-1)/pageSize)
     local first=page*pageSize+1
     local last=math.min(#apps,first+pageSize-1)
@@ -294,6 +287,7 @@ function shellui.install(OS, prefs)
       local selected=i==self.launcherIndex
       local bg=selected and t.selection or t.elevated
       draw.fill(target,x+2,by,panelW-4,1,bg)
+      if selected then draw.text(target,x+2,by,">",t.accent,bg,1) end
       fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
       draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
       self:addButton("launcher:"..app.id,x+2,by,panelW-4,1,function() self:openApp(app.id) end)
@@ -322,14 +316,10 @@ function shellui.install(OS, prefs)
     end
 
     draw.fill(target,x,footer,panelW,2,t.surface)
-    local identity="PC #"..tostring(os.getComputerID and os.getComputerID() or "?")
-    draw.text(target,x+2,footer,"@",t.accent,t.surface,1)
-    draw.text(target,x+4,footer,identity,t.text,t.surface,math.max(1,panelW-25))
-
-    ccui.button(target,x+panelW-19,footer,10,"REGLAGES",t,{compact=true})
-    self:addButton("launcher:settings",x+panelW-19,footer,10,1,function() self:openApp("settings") end)
-    ccui.button(target,x+panelW-8,footer,7,"POWER",t,{danger=true})
-    self:addButton("launcher:power",x+panelW-8,footer,7,1,function()
+    ccui.button(target,x+2,footer,10,"Reglages",t,{compact=true})
+    self:addButton("launcher:settings",x+2,footer,10,1,function() self:openApp("settings") end)
+    ccui.button(target,x+panelW-12,footer,11,"Redemarrer",t,{compact=true})
+    self:addButton("launcher:power",x+panelW-12,footer,11,1,function()
       if self:confirm("Redemarrer ce PC ?") then os.reboot() end
     end)
   end
