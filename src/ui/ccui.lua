@@ -72,7 +72,7 @@ end
 -- OneOS-style compact application card: icon area, title/meta, action.
 function C.appRow(target,x,y,w,app,theme,iconDrawer,state)
   state=state or {}
-  local h=4
+  local h=5
   local bg=state.selected and theme.selection or theme.surface
   draw.fill(target,x,y,w,h,bg)
   if iconDrawer then iconDrawer(app.id,x+1,y,false,bg) end
@@ -83,17 +83,20 @@ function C.appRow(target,x,y,w,app,theme,iconDrawer,state)
   draw.text(target,x+6,y+1,meta,theme.muted,bg,math.max(1,w-7))
 
   if app.description then
-    draw.text(target,x+6,y+2,tostring(app.description),theme.muted,bg,math.max(1,w-7))
+    local lines=draw.wrap(tostring(app.description),math.max(1,w-7))
+    for i=1,math.min(2,#lines) do
+      draw.text(target,x+6,y+1+i,lines[i],theme.muted,bg,math.max(1,w-7))
+    end
   end
 
   local action=tostring(app.action or "OUVRIR")
   local actionW=math.min(math.max(7,#action+2),math.max(7,w-8))
   local ax=x+w-actionW
-  draw.fill(target,ax,y+3,actionW,1,state.primary and theme.accent or theme.surface2)
-  draw.text(target,ax+1,y+3,action,theme.text,
+  draw.fill(target,ax,y+4,actionW,1,state.primary and theme.accent or theme.surface2)
+  draw.text(target,ax+1,y+4,action,theme.text,
     state.primary and theme.accent or theme.surface2,math.max(1,actionW-2))
 
-  return {x=x,y=y,w=w,h=h,action={x=ax,y=y+3,w=actionW,h=1}}
+  return {x=x,y=y,w=w,h=h,action={x=ax,y=y+4,w=actionW,h=1}}
 end
 
 -- Scrolling-list state modeled after Opus ScrollingGrid.

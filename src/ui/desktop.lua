@@ -210,39 +210,42 @@ function M.install(OS,shellui,prefs)
     -- switcher on top of every open window.
     draw.fill(target,1,1,w,math.max(1,h-1),t.desktop)
 
-    local visible=math.min(5,#list)
-    local cardW=w>=48 and 12 or 10
-    local mw=math.min(w-4,visible*(cardW+1)+3)
-    local mh=8
-    local x=math.max(1,math.floor((w-mw)/2)+1)
+    local mw=math.min(42,w-4)
+    local pageSize=math.max(1,math.min(8,h-7))
+    local pages=math.max(1,math.ceil(#list/pageSize))
+    local page=clamp(self.taskSwitcherPage or 1,1,pages)
+    self.taskSwitcherPage=page
+    local mh=math.min(#list,pageSize)+4
+    local x=math.floor((w-mw)/2)+1
     local y=math.max(1,math.floor((h-mh)/2))
-
+    self.buttons={}
+    self.shellOverlay={x=x,y=y,w=mw,h=mh}
     draw.fill(target,x,y,mw,mh,t.elevated)
-    draw.fill(target,x,y,mw,1,t.surface)
-    draw.text(target,x+2,y,"ALT + TAB",t.accent,t.surface,9)
-    draw.text(target,x+13,y,"Changer de fenetre",t.text,t.surface,math.max(1,mw-15))
-
-    local first=math.max(1,#list-visible+1)
-    local col=0
-    for i=first,#list do
+    draw.text(target,x+2,y,"Fenetres ouvertes",t.text,t.elevated,mw-6)
+    draw.text(target,x+mw-2,y,"X",t.muted,t.elevated,1)
+    self:addButton("switch:close",x+mw-3,y,3,1,function() self.taskSwitcherOpen=false end)
+    local first=(page-1)*pageSize+1
+    for i=first,math.min(#list,first+pageSize-1) do
       local win=list[i]
       local app=shellui.find(win.id,self:isOperatorUI())
       local active=win.id==self.app and not win.minimized
-      local bx=x+2+col*(cardW+1)
-      local bg=active and t.selection or t.surface2
-      draw.fill(target,bx,y+2,cardW,5,bg)
-      fluent.drawIcon(target,win.id,bx+1,y+3,false,bg)
-      local switchLabel=app and (app.short or app.title) or win.id
-      draw.text(target,bx+5,y+2,switchLabel,
-        active and t.text or t.muted,bg,math.max(1,cardW-6))
-      draw.text(target,bx+5,y+3,
-        win.minimized and "Minim." or (active and "Active" or "Ouvert"),
-        win.minimized and t.muted or (active and t.accent or t.muted),
-        bg,math.max(1,cardW-6))
-      if active then
-        draw.fill(target,bx,y+6,cardW,1,t.accent)
-      end
-      col=col+1
+      local by=y+2+i-first
+      local bg=active and t.accent or t.elevated
+      draw.fill(target,x+1,by,mw-2,1,bg)
+      draw.text(target,x+2,by,active and ">" or (win.minimized and "-" or " "),t.text,bg,1)
+      draw.text(target,x+4,by,app and app.title or win.id,t.text,bg,mw-5)
+      self:addButton("switch:"..win.id,x+1,by,mw-2,1,function()
+        self:focusWindow(win)
+        self.taskSwitcherOpen=false
+      end)
+    end
+    if pages>1 then
+      local by=y+mh-1
+      draw.text(target,x+mw-7,by,page.."/"..pages,t.muted,t.elevated,6)
+      self:addButton("switch:prev",x+1,by,5,1,function() self.taskSwitcherPage=math.max(1,page-1) end)
+      self:addButton("switch:next",x+7,by,5,1,function() self.taskSwitcherPage=math.min(pages,page+1) end)
+      draw.text(target,x+2,by,"<",t.text,t.elevated,1)
+      draw.text(target,x+8,by,">",t.text,t.elevated,1)
     end
   end
 
@@ -531,20 +534,20 @@ function M.install(OS,shellui,prefs)
     local first=(self.desktopPage-1)*capacity+1
     for i=first,math.min(#apps,first+capacity-1) do
       local n=i-first
-      local x=2+(n%cols)*(tileW+gapX)
-      local y=2+math.floor(n/cols)*(tileH+gapY)
+      local x=2+math.floor(n/rows)*(tileW+gapX)
+      local y=2+(n%rows)*(tileH+gapY)
       local selected=self.selectedIcon==i
       local tileBg=selected and t.selection or t.desktop
 
       if selected then draw.fill(target,x,y,tileW,tileH,tileBg) end
-      local iconX=x+math.max(0,math.floor((tileW-3)/2))
+      local iconX=x+math.max(0,math.floor((tileW-5)/2))
       fluent.drawIcon(target,apps[i].id,iconX,y,selected,tileBg)
       local desktopLabels={store="Apps",settings="Reglages",calculator="Calcul",terminal="Terminal"}
       local label=apps[i].title
       if #label>tileW then
         label=desktopLabels[apps[i].id] or apps[i].short or label
       end
-      draw.text(target,x,y+4,label,t.text,tileBg,tileW)
+      draw.text(target,x+math.max(0,math.floor((tileW-#label)/2)),y+4,label,t.text,tileBg,tileW)
 
       self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,index=i,id=apps[i].id}
     end
@@ -598,8 +601,8 @@ function M.install(OS,shellui,prefs)
 
     local top=6
     local bottom=l.h-2
-    local rowH=5
-    local pageSize=math.max(1,math.floor((bottom-top+1)/rowH))
+    local rowH=6
+    local pageSize=math.max(1,math.floor((bottom-top+2)/rowH))
     self.storeOffset=self.storeOffset or 0
     local page=ccui.page(#visible,pageSize,self.storeOffset)
     self.storeOffset=page.offset
@@ -649,13 +652,13 @@ function M.install(OS,shellui,prefs)
     ccui.scrollbar(target,l.w-1,top,math.max(1,bottom-top+1),page,t)
 
     if page.canUp then
-      ccui.button(target,2,bottom+1,5,"< PREV",t,{compact=true})
+      ccui.button(target,2,bottom+1,5,"<",t,{compact=true})
       self:addButton("store:prev",2,bottom+1,5,1,function()
         self.storeOffset=math.max(0,self.storeOffset-pageSize)
       end)
     end
     if page.canDown then
-      ccui.button(target,l.w-7,bottom+1,6,"NEXT >",t,{compact=true})
+      ccui.button(target,l.w-7,bottom+1,6,">",t,{compact=true})
       self:addButton("store:next",l.w-7,bottom+1,6,1,function()
         self.storeOffset=self.storeOffset+pageSize
       end)
@@ -680,7 +683,7 @@ function M.install(OS,shellui,prefs)
     local bodyH=math.max(1,win.h-2)
 
     -- Subtle frame/shadow instead of a saturated title bar.
-    draw.fill(target,win.x,win.y,win.w,win.h,t.border)
+    draw.fill(target,win.x,win.y,win.w,win.h,t.surface)
     draw.fill(target,win.x,win.y,win.w,1,titleBg)
     if active then draw.fill(target,win.x,win.y,1,win.h,t.accent) end
     fluent.drawMiniIcon(target,win.id,win.x+1,win.y,active,titleBg)
@@ -697,6 +700,12 @@ function M.install(OS,shellui,prefs)
     end
 
     if simpleDisplay then
+      control(6,"-",false,function()
+        win.minimized=true
+        self.app="home"
+        self.showDesktopSnapshot=nil
+        self:saveWorkspaceSession()
+      end)
       control(3,"X",true,function() self:closeWindow(win) end)
     else
       control(9,"-",false,function()
@@ -719,13 +728,14 @@ function M.install(OS,shellui,prefs)
       control(3,"X",true,function() self:closeWindow(win) end)
     end
 
-    local virtualH=math.max(30,bodyH)
-    if win.id=="store" then
-      local storeCols=bodyW>=60 and 2 or 1
-      virtualH=math.max(virtualH,math.ceil(#packages.catalog/storeCols)*7+8)
-    elseif win.id=="settings" then
+    -- Paginated apps must lay out their footer in the visible viewport.
+    local viewportApps={store=true,messages=true,contacts=true,files=true,notes=true}
+    local minHeight=viewportApps[win.id] and 12 or ((win.id=="calculator" or win.id=="terminal") and 18 or 30)
+    local virtualH=math.max(minHeight,bodyH)
+    if win.id=="settings" then
       virtualH=math.max(virtualH,38)
     end
+    win.contentHeight=virtualH
     local maxScroll=math.max(0,virtualH-bodyH)
     win.scroll=clamp(win.scroll or 0,0,maxScroll)
 
@@ -861,9 +871,20 @@ function M.install(OS,shellui,prefs)
 
     local taskX=startW+1
     local available=math.max(0,trayX-taskX-2)
-    local taskW=w>=51 and 7 or 6
+    local taskW=w>=51 and 10 or 6
     local maxTasks=math.max(0,math.floor(available/taskW))
+    -- Reserve a real button when there are more tasks than fit.
+    if #taskItems>maxTasks then
+      maxTasks=math.max(1,math.floor(math.max(0,available-3)/taskW))
+    end
     local visible=math.min(#taskItems,maxTasks)
+    -- Keep the foreground app reachable even when pinned apps fill the bar.
+    for i=visible+1,#taskItems do
+      if visible>0 and taskItems[i].id==self.app then
+        taskItems[visible],taskItems[i]=taskItems[i],taskItems[visible]
+        break
+      end
+    end
 
     for i=1,visible do
       local item=taskItems[i]
@@ -871,14 +892,14 @@ function M.install(OS,shellui,prefs)
       local active=item.win and item.win.id==self.app and not item.win.minimized
       local minimized=item.win and item.win.minimized
       local bg=active and t.selection or t.taskbar
-      local label=(app and (app.short or app.title) or item.id):upper()
+      local taskLabels={messages="Messages",files="Fichiers",store="Apps",settings="Reglages",calculator="Calcul"}
+      local label=taskLabels[item.id] or (app and app.title or item.id)
       local glyph=fluent.glyph(item.id)
-      local iconColour=fluent.iconColour(item.id,t.accent)
-      local labelW=math.max(1,taskW-3)
+      local labelW=math.max(1,taskW-1)
 
       draw.fill(target,taskX,h,taskW,1,bg)
-      draw.text(target,taskX+1,h,glyph,minimized and t.muted or iconColour,bg,1)
-      draw.text(target,taskX+3,h,label:sub(1,labelW),
+      if w<51 then label=glyph.." "..(app and app.short or label) end
+      draw.text(target,taskX+1,h,label:sub(1,labelW),
         active and t.text or t.muted,bg,labelW)
 
       self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
@@ -904,7 +925,7 @@ function M.install(OS,shellui,prefs)
       draw.text(target,taskX,h,"+"..tostring(hidden),t.muted,t.taskbar,
         math.min(3,trayX-taskX-1))
       self:addButton("wm:overflow",taskX,h,math.min(3,trayX-taskX-1),1,
-        function() self.startAllApps=true;self:toggleStartMenu() end)
+        function() self.taskSwitcherOpen=true;self.taskSwitcherPage=1 end)
     end
 
     if self.notice then
@@ -953,6 +974,7 @@ function M.install(OS,shellui,prefs)
       if not inside(x,y,modal) then
         self.startMenuOpen,self.quickPanelOpen=false,false
         self.contextMenu=nil
+        self.taskSwitcherOpen=false
         return true
       end
     else
@@ -1052,7 +1074,7 @@ function M.install(OS,shellui,prefs)
       if handled then
         for _,win in ipairs(self:workspace()) do
           if win.id=='notes' then
-            local row=7+(note.row-1)%18
+            local row=8+(note.row-1)%(note.pageSize or 18)
             if row>(win.scroll or 0)+win.h-2 then win.scroll=row-win.h+2
             elseif row<=(win.scroll or 0) then win.scroll=row-1 end
           end
@@ -1173,15 +1195,17 @@ function M.install(OS,shellui,prefs)
       t.muted,t.surface,l.w-5)
 
     draw.fill(target,2,8,l.w-3,math.max(5,l.h-9),t.surface2)
-    local page=math.floor((note.row-1)/18)
-    for row=page*18+1,math.min(#note.lines,page*18+18) do
+    local pageSize=math.max(1,l.h-8)
+    note.pageSize=pageSize
+    local page=math.floor((note.row-1)/pageSize)
+    for row=page*pageSize+1,math.min(#note.lines,page*pageSize+pageSize) do
       local text=note.lines[row]
       local active=row==note.row
       if active and note.editing then
         local start=math.max(1,note.col-(l.w-8))
         text=text:sub(start,note.col-1).."|"..text:sub(note.col)
       end
-      local yy=8+row-page*18-1
+      local yy=8+row-page*pageSize-1
       local bg=active and t.selection or t.surface2
       if active then draw.fill(target,2,yy,l.w-3,1,bg) end
       draw.text(target,3,yy,text,active and t.text or t.muted,bg,l.w-5)
@@ -1194,6 +1218,15 @@ function M.install(OS,shellui,prefs)
   end
   function OS:handleKey(key)
     if self.startMenuOpen then return originalKey(self,key) end
+    if self.taskSwitcherOpen and not self.altHeld then
+      if key==keys.escape then self.taskSwitcherOpen=false
+      elseif key==keys.left or key==keys.pageUp then
+        self.taskSwitcherPage=math.max(1,(self.taskSwitcherPage or 1)-1)
+      elseif key==keys.right or key==keys.pageDown then
+        self.taskSwitcherPage=(self.taskSwitcherPage or 1)+1
+      end
+      return
+    end
     local list=self:workspace()
     local focused
     for _,win in ipairs(list) do if win.id==self.app and not win.minimized then focused=win end end

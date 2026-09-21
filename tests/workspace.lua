@@ -215,6 +215,45 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     assert(not win.renderError,app..': '..tostring(win.renderError))
     o:closeWindow(win)
   end
+  -- Regression: app actions and list navigation must remain in the 51x19 viewport.
+  if size[1]>=51 then
+    local function button(id)
+      for _,b in ipairs(o.buttons) do if b.id==id then return b end end
+    end
+    o:openApp('store')
+    assert(button('store:next'),'Store pagination hidden below the viewport')
+    button('store:next').callback();o:render()
+    assert(button('store:prev'),'Store previous page missing')
+    o:openApp('messages');o.selectedPeer=7;o:render()
+    assert(button('msg:reply'),'Reply hidden below the viewport')
+    assert(button('win:messages:-'),'Minimize missing on Computer')
+    o.selectedPeer=nil
+    -- Overflow contains clickable, bounded entries for every open window.
+    for _,id in ipairs({'notes','files','calculator','settings','network','contacts','about','terminal'}) do o:openApp(id) end
+    assert(button('wm:task:terminal'),'Active app lost behind pinned apps')
+    o.taskSwitcherOpen=true;o.taskSwitcherPage=1;o:render()
+    local seen={}
+    for page=1,4 do
+      for _,b in ipairs(o.buttons) do
+        assert(b.x>=1 and b.y>=1 and b.x+b.w-1<=size[1] and b.y+b.h-1<=size[2],b.id..' outside screen')
+        seen[b.id]=true
+      end
+      local nextPage=button('switch:next')
+      if not nextPage then break end
+      nextPage.callback();o:render()
+    end
+    for _,win in ipairs(o.windows) do assert(seen['switch:'..win.id],'Unreachable window '..win.id) end
+    local entry=button('switch:terminal')
+    assert(entry,'Terminal switcher entry missing')
+    o:hit(entry.x,entry.y);o:render()
+    assert(o.app=='terminal' and not o.taskSwitcherOpen,'Switcher click failed')
+    o.taskSwitcherOpen=true;o:render();o:hit(1,1)
+    assert(not o.taskSwitcherOpen,'Outside click did not dismiss switcher')
+    o:openApp('notes');o.noteDocument.editing=true
+    for i=1,20 do o:workspaceEvent('key',keys.enter) end
+    assert(button('note:line:'..o.noteDocument.row),'Notes caret moved outside visible page')
+    o.noteDocument.editing=false
+  end
   if size[1]==51 then
     o.notice=nil;o.noticeExpires=nil
     o:openApp('home');o:render();native.dump('/tmp/linkos-desktop.frame')
