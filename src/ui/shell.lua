@@ -80,26 +80,16 @@ function shellui.wallpaper(target, x, y, w, h, mode, accent)
   if w <= 0 or h <= 0 or mode == "clean" then return end
 
   if mode == "fluent" then
-    -- LinkOS four-pane mark: intentionally simple and readable at ComputerCraft
-    -- resolutions while evoking a modern desktop wallpaper.
+    -- Quiet geometric wallpaper. The icon area stays clear on a 51x19 PC.
+    draw.fill(target,x,y,w,h,colors.blue)
     if w>=30 and h>=10 then
-      local paneW=math.max(3,math.floor(w*0.11))
-      local paneH=math.max(2,math.floor(h*0.18))
-      local gapX=1
-      local gapY=1
-      local logoW=paneW*2+gapX
-      local logoH=paneH*2+gapY
-      local lx=math.min(x+w-logoW-3,x+math.floor(w*0.66))
-      local ly=math.max(y+1,y+math.floor((h-logoH)*0.38))
-
-      -- Quiet shadow/backplate for depth.
-      draw.fill(target,lx-2,ly-1,logoW+4,logoH+2,colors.gray)
-      draw.fill(target,lx,ly,paneW,paneH,colors.lightBlue)
-      draw.fill(target,lx+paneW+gapX,ly,paneW,paneH,colors.blue)
-      draw.fill(target,lx,ly+paneH+gapY,paneW,paneH,colors.blue)
-      draw.fill(target,lx+paneW+gapX,ly+paneH+gapY,paneW,paneH,accent or colors.lightBlue)
-
-
+      for row=0,h-1 do
+        local edge=math.floor(w*0.70)+math.floor((row-h*0.45)*0.8)
+        edge=math.max(0,math.min(w,edge))
+        draw.fill(target,x+edge,y+row,w-edge,1,colors.brown)
+        local second=edge+math.max(3,math.floor(w*0.12))
+        if second<w then draw.fill(target,x+second,y+row,w-second,1,colors.blue) end
+      end
     end
     return
   end
@@ -274,8 +264,9 @@ function shellui.install(OS, prefs)
 
     local listY=y+5
     local footer=y+h-2
-    local pageSize=math.max(1,footer-listY-1)
-    self.launcherCols=1
+    local gridMode=not self.startAllApps and query=="" and h>=16 and panelW>=40
+    local pageSize=gridMode and 6 or math.max(1,footer-listY-1)
+    self.launcherCols=gridMode and 3 or 1
     local page=math.floor((self.launcherIndex-1)/pageSize)
     local first=page*pageSize+1
     local last=math.min(#apps,first+pageSize-1)
@@ -283,14 +274,26 @@ function shellui.install(OS, prefs)
     for i=first,last do
       local app=apps[i]
       local row=i-first
-      local by=listY+row
       local selected=i==self.launcherIndex
       local bg=selected and t.selection or t.elevated
-      draw.fill(target,x+2,by,panelW-4,1,bg)
-      if selected then draw.text(target,x+2,by,">",t.accent,bg,1) end
-      fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
-      draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
-      self:addButton("launcher:"..app.id,x+2,by,panelW-4,1,function() self:openApp(app.id) end)
+      if gridMode then
+        local cw=math.floor((panelW-4)/3)
+        local bx=x+2+(row%3)*cw
+        local by=listY+math.floor(row/3)*4
+        draw.fill(target,bx,by,cw-1,4,bg)
+        fluent.drawIcon(target,app.id,bx+math.floor((cw-5)/2),by,false,bg)
+        local labels={store="Apps",settings="Reglages",calculator="Calcul"}
+        local label=labels[app.id] or app.title
+        draw.text(target,bx+math.max(0,math.floor((cw-1-#label)/2)),by+3,label,t.text,bg,cw-1)
+        self:addButton("launcher:"..app.id,bx,by,cw-1,4,function() self:openApp(app.id) end)
+      else
+        local by=listY+row
+        draw.fill(target,x+2,by,panelW-4,1,bg)
+        if selected then draw.text(target,x+2,by,">",t.accent,bg,1) end
+        fluent.drawMiniIcon(target,app.id,x+3,by,selected,bg)
+        draw.text(target,x+7,by,app.title,selected and t.text or t.muted,bg,panelW-12)
+        self:addButton("launcher:"..app.id,x+2,by,panelW-4,1,function() self:openApp(app.id) end)
+      end
     end
 
     if #apps==0 then

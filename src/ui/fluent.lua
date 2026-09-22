@@ -8,7 +8,7 @@ local PALETTE = {
   [colors.gray] = 0x202832,
   [colors.lightGray] = 0x7d8996,
   [colors.white] = 0xf3f7fb,
-  [colors.blue] = 0x0f6cbd,
+  [colors.blue] = 0x14345c,
   [colors.lightBlue] = 0x4cc2ff,
   [colors.cyan] = 0x47c5fb,
   [colors.lime] = 0x6ccb5f,
@@ -18,13 +18,13 @@ local PALETTE = {
   [colors.red] = 0xf85149,
   [colors.purple] = 0xa371f7,
   [colors.magenta] = 0xd65db1,
-  [colors.brown] = 0x8b6f47,
+  [colors.brown] = 0x20518a,
   [colors.pink] = 0xff7eb6
 }
 
 local ACCENTS = {
   cyan = colors.cyan,
-  blue = colors.blue,
+  blue = colors.lightBlue,
   lime = colors.lime,
   orange = colors.orange,
   purple = colors.purple,
@@ -81,10 +81,10 @@ function fluent.theme(accentName)
     good = colors.lime,
     warn = colors.orange,
     danger = colors.red,
-    taskbar = colors.black,
+    taskbar = colors.gray,
     titleActive = colors.gray,
     titleInactive = colors.black,
-    selection = colors.gray,
+    selection = colors.blue,
     button = colors.gray,
     buttonQuiet = colors.black
   }
@@ -105,16 +105,13 @@ function fluent.iconColour(id, fallback)
 end
 
 function fluent.drawIcon(target,id,x,y,selected,background)
-  local bg=background or colors.black
-  if selected then draw.fill(target,x-1,y-1,6,5,colors.gray) end
-  iconAssets.draw(target,id,x,y,bg,selected and colors.gray or bg)
+  -- The desktop paints its own selection; no oversized box around the icon.
+  local bg=background==false and nil or background
+  iconAssets.draw(target,id,x,y,bg,selected and colors.gray or nil)
 end
 
 function fluent.drawMiniIcon(target, id, x, y, active, bg)
-  local icon = fluent.icon(id)
-  draw.fill(target, x, y, 3, 1, active and icon.colour or (bg or colors.black))
-  draw.text(target, x+1, y, icon.glyph, colors.white,
-    active and icon.colour or (bg or colors.black), 1)
+  iconAssets.drawMini(target,id,x,y,bg or colors.black)
 end
 
 function fluent.surface(target, x, y, w, h, elevated)

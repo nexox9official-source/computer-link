@@ -83,6 +83,37 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
   -- Ordinary layout cases are isolated; session restoration has its own test below.
   o.sessionRestored=true
   o:refreshDisplays();o:render()
+  if size[1]==51 then native.dump("/tmp/linkos-desktop-clean.frame") end
+
+  if size[1]==51 then
+    local source=o.iconRects[1]
+    local grid=o.desktopGrid
+    local col,row=grid.cols-1,grid.rows-1
+    local dx,dy=grid.x+col*grid.stepX,grid.y+row*grid.stepY
+    o.lastIcon=nil
+    o:hit(source.x,source.y)
+    assert(o.app=='home' and o.selectedIcon==source.index,'Single click must select')
+    o:workspaceEvent('mouse_drag',1,dx,dy)
+    assert(o.iconDrop,'Missing desktop drop preview')
+    o:workspaceEvent('mouse_up',1,dx,dy)
+    local moved
+    for _,r in ipairs(o.iconRects) do if r.id==source.id then moved=r end end
+    assert(moved and moved.col==col and moved.row==row,'Drop into empty cell failed')
+    local restored=OS.new();restored.sessionRestored=true;restored:refreshDisplays();restored:render()
+    local saved
+    for _,r in ipairs(restored.iconRects) do if r.id==source.id then saved=r end end
+    assert(saved and saved.col==col and saved.row==row,'Desktop position was not saved')
+    -- Return it to its starting cell; other integration cases retain their order.
+    o.lastIcon=nil;o:hit(moved.x,moved.y)
+    o:workspaceEvent('mouse_drag',1,source.x,source.y)
+    o:workspaceEvent('mouse_up',1,source.x,source.y)
+    o:hit(size[1],size[2]-2)
+    assert(o.selectedIcon==nil,'Blank desktop click must clear selection')
+    o.active.kind='monitor';o:render()
+    local icon=o.iconRects[1];o:hit(icon.x,icon.y)
+    assert(o.app==icon.id,'Monitor touch must open in one tap')
+    o.active.kind='computer';o:closeWindow(o.windows[#o.windows]);o:render()
+  end
 
   local taskButtons={}
   for _,button in ipairs(o.buttons) do taskButtons[button.id]=button end
@@ -227,7 +258,17 @@ for _,size in ipairs({{26,12},{39,13},{51,19},{82,26}}) do
     o:openApp('messages');o.selectedPeer=7;o:render()
     assert(button('msg:reply'),'Reply hidden below the viewport')
     assert(button('win:messages:-'),'Minimize missing on Computer')
+    o.windows[#o.windows].maximized=true;o:render()
+    assert(button('win:messages:o'),'Restore missing on Computer')
+    button('win:messages:o').callback();o:render()
+    assert(not o.windows[#o.windows].maximized,'Computer window forced back to fullscreen')
+    button('win:messages:O').callback();o:render()
     o.selectedPeer=nil
+    o:openApp('settings');o.windows[#o.windows].maximized=true;o.settingsTab='style';o:render()
+    assert(button('set:wallpaper') and button('set:pin:calculator'),'Style controls hidden')
+    o.settingsTab='system';o:render()
+    assert(button('set:update') and button('set:shutdown') and button('set:uninstall'),'System controls hidden')
+    o.settingsTab='style'
     -- Overflow contains clickable, bounded entries for every open window.
     for _,id in ipairs({'notes','files','calculator','settings','network','contacts','about','terminal'}) do o:openApp(id) end
     assert(button('wm:task:terminal'),'Active app lost behind pinned apps')

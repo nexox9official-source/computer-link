@@ -3416,140 +3416,90 @@ end
 
 function LinkOS:renderSettings(target,l)
   local t=self:theme()
-  local x,y,w=l.contentX,l.contentY,l.contentW
+  local x,w=2,l.w-3
   self.settingsTab=self.settingsTab or "style"
-
-  draw.text(target,x,y,"Parametres",t.text,t.bg,w)
-  draw.text(target,x,y+1,"Personnalise LinkOS sans menus techniques.",t.muted,t.bg,w)
-  y=y+3
-
-  local tabItems={
-    {id="style",label="Apparence"},
-    {id="display",label="Ecrans"},
-    {id="system",label="Systeme"}
-  }
-  local rects=ccui.tabs(target,x,y,w,tabItems,self.settingsTab,t)
-  for _,r in ipairs(rects) do
-    self:addButton("set:tab:"..r.id,r.x,r.y,r.w,r.h,function() self.settingsTab=r.id end)
+  local tabs={{id="style",label="Style"},{id="display",label="Ecran"},{id="system",label="Systeme"}}
+  for _,r in ipairs(ccui.tabs(target,x,1,w,tabs,self.settingsTab,t)) do
+    self:addButton("set:tab:"..r.id,r.x,r.y,r.w,r.h,function()
+      self.settingsTab=r.id
+      if self.drawingWindow then self.drawingWindow.scroll=0 end
+      for _,win in ipairs(self.windows or {}) do if win.id=="settings" then win.scroll=0 end end
+    end)
   end
-  y=y+3
-
+  local function button(id,y,label,fn,primary)
+    ccui.button(target,x,y,w,label,t,{primary=primary,compact=true})
+    self:addButton(id,x,y,w,1,fn)
+  end
   if self.settingsTab=="style" then
-    local accentOrder={"blue","cyan","lime","orange","purple","red"}
-    local accentLabels={blue="BLEU",cyan="CYAN",lime="VERT",orange="ORANGE",purple="VIOLET",red="ROUGE"}
-    local currentAccent=prefs.get("accent","blue")
-
-    ccui.panel(target,x,y,w,4,t,{accent=t.accent,title="Couleur",
-      subtitle="Couleur principale des boutons."})
-    ccui.button(target,x+2,y+2,math.min(20,w-4),
-      "COULEUR: "..(accentLabels[currentAccent] or "BLEU"),t,{primary=true})
-    self:addButton("set:accent",x+2,y+2,math.min(20,w-4),1,function()
-      local nextAccent=accentOrder[1]
-      for i,name in ipairs(accentOrder) do
-        if name==prefs.get("accent","blue") then
-          nextAccent=accentOrder[(i%#accentOrder)+1];break
-        end
-      end
-      prefs.set("accent",nextAccent)
-      self:refreshDisplays()
+    draw.text(target,x,4,"Couleur d'accent",t.text,t.bg,w)
+    local accents={{"blue","Bleu",colors.lightBlue},{"cyan","Cyan",colors.cyan},
+      {"lime","Vert",colors.lime},{"orange","Orange",colors.orange},
+      {"purple","Violet",colors.purple},{"red","Rouge",colors.red}}
+    local cell=math.max(3,math.floor(w/#accents))
+    for i,a in ipairs(accents) do
+      local bx=x+(i-1)*cell
+      draw.fill(target,bx,5,cell-1,1,a[3])
+      draw.text(target,bx,5,prefs.get("accent","blue")==a[1] and " *" or " ",colors.black,a[3],cell-1)
+      self:addButton("set:accent:"..a[1],bx,5,cell-1,1,function()
+        prefs.set("accent",a[1]);self:refreshDisplays()
+      end)
+    end
+    draw.text(target,x,7,"Fond du bureau",t.text,t.bg,w)
+    local names={fluent="Bleu",clean="Uni",dots="Points",grid="Grille",lines="Lignes"}
+    local wallpaper=prefs.get("wallpaper","fluent")
+    button("set:wallpaper",8,(names[wallpaper] or wallpaper).."  >",function()
+      local value=self:choiceDialog("Fond du bureau","Choisir un style",{
+        {label="Bleu",value="fluent"},{label="Uni",value="clean"},
+        {label="Points",value="dots"},{label="Grille",value="grid"},{label="Lignes",value="lines"}},1)
+      if value then prefs.set("wallpaper",value) end
     end)
-    y=y+5
-
-    ccui.panel(target,x,y,w,4,t,{title="Fond du bureau",
-      subtitle="Choisis un fond simple et lisible."})
-    local wallpaper=tostring(prefs.get("wallpaper","fluent"))
-    ccui.button(target,x+2,y+2,math.min(18,w-4),"FOND: "..string.upper(wallpaper),t,{})
-    self:addButton("set:wallpaper",x+2,y+2,math.min(18,w-4),1,function()
-      local order={"fluent","clean","dots","grid","lines"}
-      local current=prefs.get("wallpaper","fluent")
-      local nextValue=order[1]
-      for i,value in ipairs(order) do
-        if value==current then nextValue=order[(i%#order)+1];break end
-      end
-      prefs.set("wallpaper",nextValue)
-    end)
-    y=y+5
-
-    ccui.panel(target,x,y,w,7,t,{title="Barre des taches",
-      subtitle="Clique une application pour l'epingler ou la retirer."})
-    local pinCandidates={"messages","files","store","terminal","calculator"}
-    local pins=prefs.get("taskbar_pins",{})
-    local pinned={}
-    for _,id in ipairs(pins) do pinned[id]=true end
-    local by=y+3
-    local bw=math.max(8,math.floor((w-2)/2))
-    for i,id in ipairs(pinCandidates) do
+    draw.text(target,x,10,"Epingler dans la barre",t.text,t.bg,w)
+    local ids={"messages","files","store","terminal","calculator"}
+    local width=math.floor((w-1)/2)
+    for i,id in ipairs(ids) do
       local app=shellui.find(id,self:isOperatorUI())
       if app then
-        local col=(i-1)%2
-        local row=math.floor((i-1)/2)
-        local bx=x+1+col*(bw+1)
-        local yy=by+row
-        ccui.button(target,bx,yy,math.min(bw,w-(bx-x)),app.title,t,{selected=pinned[id],compact=true})
-        self:addButton("set:pin:"..id,bx,yy,math.min(bw,w-(bx-x)),1,function()
-          local current=prefs.get("taskbar_pins",{})
-          local nextPins={}
-          local found=false
-          for _,value in ipairs(current) do
-            if value==id then found=true else nextPins[#nextPins+1]=value end
-          end
-          if not found and #nextPins<8 then nextPins[#nextPins+1]=id end
-          prefs.set("taskbar_pins",nextPins)
-        end)
+        local bx=x+((i-1)%2)*(width+1)
+        local by=11+math.floor((i-1)/2)
+        local labels={store="Apps",calculator="Calcul"}
+        local pinned=self:isTaskbarPinned(id)
+        ccui.button(target,bx,by,width,(pinned and "+ " or "  ")..(labels[id] or app.title),t,{selected=pinned,compact=true})
+        self:addButton("set:pin:"..id,bx,by,width,1,function() self:toggleTaskbarPin(id) end)
       end
     end
-
   elseif self.settingsTab=="display" then
-    draw.text(target,x,y,"Choisir l'ecran principal",t.text,t.bg,w)
-    y=y+2
-    for _,d in ipairs(self.displays or {}) do
-      if y+3>=l.h-1 then break end
+    draw.text(target,x,4,"Ecran principal",t.text,t.bg,w)
+    local displays=self.displays or {}
+    local count=math.max(1,math.floor((l.h-7)/3))
+    local pages=math.max(1,math.ceil(#displays/count))
+    self.displayPage=math.max(1,math.min(pages,self.displayPage or 1))
+    local first=(self.displayPage-1)*count+1
+    for i=first,math.min(#displays,first+count-1) do
+      local d=displays[i]
+      local by=6+(i-first)*3
       local selected=self.active and d.id==self.active.id
-      local rect=ccui.panel(target,x,y,w,4,t,{
-        accent=selected and t.accent or t.muted,
-        title=(selected and "ACTIF - " or "")..d.label,
-        subtitle=(d.kind=="monitor" and "Advanced Monitor" or "Ecran du Computer")
-      })
-      local size=tostring(d.width).."x"..tostring(d.height)
-      draw.text(target,x+w-#size-2,y+1,size,t.muted,selected and t.selection or t.surface,#size)
-      local displayId=d.id
-      self:addButton("display:"..displayId,rect.x,rect.y,rect.w,rect.h,function()
-        prefs.set("display_id",displayId)
-        self:refreshDisplays()
-        self:setNotice("Affichage principal change.",t.good)
+      ccui.panel(target,x,by,w,2,t,{title=(selected and "> " or "  ")..d.label,
+        subtitle=tostring(d.width).." x "..tostring(d.height),accent=selected and t.accent or t.muted})
+      self:addButton("display:"..d.id,x,by,w,2,function()
+        prefs.set("display_id",d.id);self:refreshDisplays()
       end)
-      y=y+5
     end
-
+    if pages>1 then
+      button("set:display:next",l.h-1,"Ecrans "..self.displayPage.."/"..pages.."  >",function()
+        self.displayPage=self.displayPage%pages+1
+      end)
+    end
   else
-    ccui.panel(target,x,y,w,5,t,{accent=self.service.updateAvailable and t.warn or t.good,
-      title="LinkOS "..tostring(config.VERSION),
-      subtitle=self.service.updateAvailable and ("Mise a jour "..tostring(self.service.remoteVersion))
-        or "Le systeme est a jour."})
-    ccui.button(target,x+2,y+3,math.min(18,w-4),
-      self.service.updateAvailable and "INSTALLER MAJ" or "VERIFIER MAJ",t,
-      {primary=self.service.updateAvailable})
-    self:addButton("set:update",x+2,y+3,math.min(18,w-4),1,function() self:runUpdateAction() end)
-    y=y+6
-
-    local restore=prefs.get("restore_session",true)
-    ccui.panel(target,x,y,w,4,t,{title="Reouverture des apps",
-      subtitle="Rouvre les apps utilisees apres redemarrage."})
-    ccui.button(target,x+2,y+2,math.min(20,w-4),restore and "ACTIVE" or "DESACTIVE",t,
-      {selected=restore})
-    self:addButton("set:restore-session",x+2,y+2,math.min(20,w-4),1,function()
+    draw.text(target,x,4,"LinkOS "..tostring(config.VERSION),t.text,t.bg,w)
+    button("set:update",5,self.service.updateAvailable and "Installer la mise a jour" or "Verifier les mises a jour",function() self:runUpdateAction() end,true)
+    draw.text(target,x,7,"Reouvrir les apps au demarrage",t.text,t.bg,w)
+    button("set:restore-session",8,prefs.get("restore_session",true) and "Active  >" or "Desactive  >",function()
       prefs.set("restore_session",not prefs.get("restore_session",true))
     end)
-    y=y+5
-
-    ccui.panel(target,x,y,w,5,t,{title="Alimentation",subtitle="Actions du Computer."})
-    local half=math.max(8,math.floor((w-5)/2))
-    ccui.button(target,x+2,y+2,half,"REDEMARRER",t,{})
-    self:addButton("set:reboot",x+2,y+2,half,1,function() os.reboot() end)
-    ccui.button(target,x+3+half,y+2,math.min(half,w-half-4),"ARRETER",t,{})
-    self:addButton("set:shutdown",x+3+half,y+2,math.min(half,w-half-4),1,function() os.shutdown() end)
-    ccui.button(target,x+2,y+3,math.min(16,w-4),"DESINSTALLER",t,{danger=true})
-    self:addButton("set:uninstall",x+2,y+3,math.min(16,w-4),1,function() self:runUninstallAction() end)
+    draw.text(target,x,10,"Alimentation",t.text,t.bg,w)
+    button("set:reboot",11,"Redemarrer",function() if self:confirm("Redemarrer le PC ?") then os.reboot() end end)
+    button("set:shutdown",12,"Arreter",function() if self:confirm("Arreter le PC ?") then os.shutdown() end end)
+    button("set:uninstall",14,"Desinstaller LinkOS",function() self:runUninstallAction() end)
   end
 end
 

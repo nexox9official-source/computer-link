@@ -36,7 +36,7 @@ function M.install(OS,shellui,prefs)
     notes='renderNotes',calculator='renderCalculator',terminal='renderTerminal',hacker='renderHacker',store='renderStore'}
 
   function OS:workspace()
-    if not self.windows then self.windows={}; self.app='home'; self.selectedIcon=1 end
+    if not self.windows then self.windows={}; self.app='home'; self.selectedIcon=nil end
     return self.windows
   end
 
@@ -475,6 +475,7 @@ function M.install(OS,shellui,prefs)
       add("Parametres",function() self:openApp("settings") end)
     else
       add("Actualiser",function() self:render() end)
+      add("Ranger les icones",function() prefs.set("desktop_positions",{});self.selectedIcon=nil end)
       add("Fichiers",function() self:openApp("files") end)
       add("Applications",function() self:openApp("store") end)
       add("Personnaliser",function() self:openApp("settings") end)
@@ -520,7 +521,7 @@ function M.install(OS,shellui,prefs)
     self.iconRects={}
 
     local apps=self:desktopApps()
-    local tileW=w>=50 and 12 or (w>=38 and 10 or 8)
+    local tileW=w>=50 and 10 or (w>=38 and 10 or 8)
     local tileH=5
     local gapX=1
     local gapY=1
@@ -531,30 +532,64 @@ function M.install(OS,shellui,prefs)
     self.desktopPage=clamp(self.desktopPage or 1,1,self.desktopPages)
     self.iconCapacity=capacity
 
+    self.desktopGrid={x=2,y=2,cols=cols,rows=rows,tileW=tileW,tileH=tileH,
+      stepX=tileW+gapX,stepY=tileH+gapY}
+    local positions=prefs.get("desktop_positions",{})
     local first=(self.desktopPage-1)*capacity+1
-    for i=first,math.min(#apps,first+capacity-1) do
-      local n=i-first
-      local x=2+math.floor(n/rows)*(tileW+gapX)
-      local y=2+(n%rows)*(tileH+gapY)
-      local selected=self.selectedIcon==i
-      local tileBg=selected and t.selection or t.desktop
-
-      if selected then draw.fill(target,x,y,tileW,tileH,tileBg) end
-      local iconX=x+math.max(0,math.floor((tileW-5)/2))
-      fluent.drawIcon(target,apps[i].id,iconX,y,selected,tileBg)
-      local desktopLabels={store="Apps",settings="Reglages",calculator="Calcul",terminal="Terminal"}
-      local label=apps[i].title
-      if #label>tileW then
-        label=desktopLabels[apps[i].id] or apps[i].short or label
+    local last=math.min(#apps,first+capacity-1)
+    local slots,used={},{}
+    -- Reserve saved cells first, then place other icons in the remaining cells.
+    for i=first,last do
+      local p=positions[apps[i].id]
+      if type(p)=="table" and type(p.col)=="number" and type(p.row)=="number"
+        and p.col>=0 and p.col<cols and p.row>=0 and p.row<rows
+        and p.col%1==0 and p.row%1==0 then
+        local slot=p.col*rows+p.row
+        if not used[slot] then slots[i]=slot;used[slot]=true end
       end
-      draw.text(target,x+math.max(0,math.floor((tileW-#label)/2)),y+4,label,t.text,tileBg,tileW)
+    end
+    for i=first,last do
+      if slots[i]==nil then
+        for slot=0,capacity-1 do
+          if not used[slot] then slots[i]=slot;used[slot]=true;break end
+        end
+      end
+      local n=slots[i]
+      local col,row=math.floor(n/rows),n%rows
+      local x=2+col*(tileW+gapX)
+      local y=2+row*(tileH+gapY)
+      local selected=self.selectedIcon==i
+      if selected then draw.fill(target,x,y,tileW,tileH,t.selection) end
+      local iconX=x+math.floor((tileW-4)/2)
+      fluent.drawIcon(target,apps[i].id,iconX,y,false,selected and t.selection or false)
+      local desktopLabels={store="Apps",settings="Reglages",calculator="Calcul",terminal="Terminal"}
+      local label=desktopLabels[apps[i].id] or apps[i].title
+      if #label>tileW then label=apps[i].short or label end
+      label=label:sub(1,tileW)
+      local lx=x+math.max(0,math.floor((tileW-#label)/2))
+      -- Preserve the wallpaper behind the label instead of a black rectangle.
+      local _,_,back=target.getLine(y+4)
+      target.setCursorPos(lx,y+4)
+      target.blit(label,string.rep("0",#label),back:sub(lx,lx+#label-1))
+      self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,
+        col=col,row=row,index=i,id=apps[i].id}
+    end
 
-      self.iconRects[#self.iconRects+1]={x=x,y=y,w=tileW,h=tileH,index=i,id=apps[i].id}
+    if self.iconMoved and self.iconDrop then
+      local r=self.iconDrop
+      draw.hline(target,r.x,r.y,tileW,"-",t.text,t.selection)
+      draw.hline(target,r.x,r.y+tileH-1,tileW,"-",t.text,t.selection)
     end
 
     if self.desktopPages>1 then
       local page=tostring(self.desktopPage).." / "..tostring(self.desktopPages)
-      draw.text(target,math.max(1,w-#page-1),desktopH,page,t.muted,t.desktop,#page)
+      draw.text(target,math.max(1,w-#page-4),desktopH,"< "..page.." >",t.text,t.taskbar,#page+4)
+      self:addButton("desktop:prev",math.max(1,w-#page-4),desktopH,2,1,function()
+        self.desktopPage=math.max(1,self.desktopPage-1)
+      end)
+      self:addButton("desktop:next",w-2,desktopH,2,1,function()
+        self.desktopPage=math.min(self.desktopPages,self.desktopPage+1)
+      end)
     end
   end
 
@@ -668,9 +703,12 @@ function M.install(OS,shellui,prefs)
     local t=self:theme()
     local desktopH=math.max(1,h-1)
 
-    local simpleDisplay = w < 70 or h < 22
+    local simpleDisplay = w < 39 or h < 15
     if simpleDisplay then win.maximized=true end
-    if win.maximized then win.x,win.y,win.w,win.h=1,1,w,desktopH end
+    if win.maximized then
+      if not win.restore then win.restore={win.x,win.y,win.w,win.h} end
+      win.x,win.y,win.w,win.h=1,1,w,desktopH
+    end
     win.w=clamp(win.w,math.min(24,w),w)
     win.h=clamp(win.h,math.min(8,desktopH),desktopH)
     win.x=clamp(win.x,1,w-win.w+1)
@@ -729,12 +767,10 @@ function M.install(OS,shellui,prefs)
     end
 
     -- Paginated apps must lay out their footer in the visible viewport.
-    local viewportApps={store=true,messages=true,contacts=true,files=true,notes=true}
+    local viewportApps={store=true,messages=true,contacts=true,files=true,notes=true,settings=true}
     local minHeight=viewportApps[win.id] and 12 or ((win.id=="calculator" or win.id=="terminal") and 18 or 30)
-    local virtualH=math.max(minHeight,bodyH)
-    if win.id=="settings" then
-      virtualH=math.max(virtualH,38)
-    end
+    local virtualH=math.max(win.id=="settings" and 15 or minHeight,bodyH)
+
     win.contentHeight=virtualH
     local maxScroll=math.max(0,virtualH-bodyH)
     win.scroll=clamp(win.scroll or 0,0,maxScroll)
@@ -794,6 +830,14 @@ function M.install(OS,shellui,prefs)
       self:addButton("scroll:track:"..win.id,win.x+win.w-1,trackTop,1,trackH,function()
         win.scroll=math.min(maxScroll,win.scroll+math.max(1,bodyH-2))
       end)
+      draw.text(target,win.x+win.w-1,trackTop,"^",t.text,t.surface,1)
+      draw.text(target,win.x+win.w-1,trackTop+trackH-1,"v",t.text,t.surface,1)
+      self:addButton("scroll:up:"..win.id,win.x+win.w-1,trackTop,1,1,function()
+        win.scroll=math.max(0,win.scroll-3)
+      end)
+      self:addButton("scroll:down:"..win.id,win.x+win.w-1,trackTop+trackH-1,1,1,function()
+        win.scroll=math.min(maxScroll,win.scroll+3)
+      end)
     end
 
     if not win.maximized then
@@ -836,7 +880,7 @@ function M.install(OS,shellui,prefs)
     local startW=7
     local startBg=self.startMenuOpen and t.selection or t.taskbar
     draw.fill(target,1,h,startW,1,startBg)
-    draw.text(target,2,h,"START",self.startMenuOpen and t.accent or t.text,startBg,5)
+    draw.text(target,2,h,"Menu",self.startMenuOpen and t.accent or t.text,startBg,5)
     self:addButton("wm:start",1,h,startW,1,function() self:toggleStartMenu() end)
 
     local clock=textutils.formatTime(os.time(),true)
@@ -894,12 +938,12 @@ function M.install(OS,shellui,prefs)
       local bg=active and t.selection or t.taskbar
       local taskLabels={messages="Messages",files="Fichiers",store="Apps",settings="Reglages",calculator="Calcul"}
       local label=taskLabels[item.id] or (app and app.title or item.id)
-      local glyph=fluent.glyph(item.id)
-      local labelW=math.max(1,taskW-1)
+      local labelW=math.max(1,taskW-2)
 
       draw.fill(target,taskX,h,taskW,1,bg)
-      if w<51 then label=glyph.." "..(app and app.short or label) end
-      draw.text(target,taskX+1,h,label:sub(1,labelW),
+      if w<51 then label=app and app.short or label end
+      fluent.drawMiniIcon(target,item.id,taskX,h,active,bg)
+      draw.text(target,taskX+2,h,label:sub(1,labelW),
         active and t.text or t.muted,bg,labelW)
 
       self:addButton("wm:task:"..item.id,taskX,h,taskW,1,function()
@@ -950,6 +994,15 @@ function M.install(OS,shellui,prefs)
         self.notice=nil
         self.noticeExpires=nil
       end)
+    end
+
+    if self.keyboardFocusId and not self.startMenuOpen and not self.quickPanelOpen then
+      for _,button in ipairs(self.buttons) do
+        if button.id==self.keyboardFocusId then
+          draw.text(target,button.x,button.y,">",t.accent,t.selection,1)
+          break
+        end
+      end
     end
 
     self:renderShellOverlays(target,{w=w,h=h,mode='standard'})
@@ -1022,13 +1075,15 @@ function M.install(OS,shellui,prefs)
     for _,icon in ipairs(self.iconRects or {}) do
       if inside(x,y,icon) then
         self.selectedIcon=icon.index
-        if self.lastIcon==icon.id and os.clock()-(self.lastIconTime or 0)<0.45 then
+        if self.active.kind=="monitor" or (self.lastIcon==icon.id and os.clock()-(self.lastIconTime or 0)<0.45) then
           self.iconDrag=nil;self:openApp(icon.id)
         else self.iconDrag=icon.index;self.lastIcon=icon.id;self.lastIconTime=os.clock() end
         return true
       end
     end
-    return false
+    self.selectedIcon=nil
+    self.lastIcon=nil
+    return true
   end
   function OS:workspaceEvent(event,a,b,c)
     if (event=='mouse_drag' or event=='mouse_up' or event=='mouse_scroll')
@@ -1087,11 +1142,41 @@ function M.install(OS,shellui,prefs)
       if drag then
         local win=drag.win;win.maximized=false
         if drag.resize then win.w=b-win.x+1;win.h=c-win.y+1 else win.x=b-drag.dx;win.y=c-drag.dy end
-      elseif self.iconDrag then self.iconMoved=true end
+      elseif self.iconDrag then
+        local grid=self.desktopGrid
+        self.iconMoved=true
+        self.lastIcon=nil
+        if grid then
+          local col=math.floor((b-grid.x)/grid.stepX)
+          local row=math.floor((c-grid.y)/grid.stepY)
+          self.iconDrop=nil
+          if col>=0 and col<grid.cols and row>=0 and row<grid.rows then
+            self.iconDrop={col=col,row=row,x=grid.x+col*grid.stepX,y=grid.y+row*grid.stepY}
+          end
+        end
+      end
       self:render();return true
     elseif event=='mouse_up' then
-      if self.iconDrag and self.iconMoved then
-        for _,icon in ipairs(self.iconRects or {}) do if inside(b,c,icon) then self:moveIcon(self.iconDrag,icon.index);break end end
+      if self.iconDrag and self.iconMoved and self.iconDrop
+        and b>=self.iconDrop.x and b<self.iconDrop.x+self.desktopGrid.stepX
+        and c>=self.iconDrop.y and c<self.iconDrop.y+self.desktopGrid.stepY then
+        local source
+        for _,icon in ipairs(self.iconRects or {}) do
+          if icon.index==self.iconDrag then source=icon;break end
+        end
+        if source then
+          local positions=prefs.get("desktop_positions",{})
+          local drop=self.iconDrop
+          -- Persist actual occupied cells as well, so swapping is deterministic.
+          for _,icon in ipairs(self.iconRects or {}) do
+            positions[icon.id]={col=icon.col,row=icon.row}
+            if icon.id~=source.id and icon.col==drop.col and icon.row==drop.row then
+              positions[icon.id]={col=source.col,row=source.row}
+            end
+          end
+          positions[source.id]={col=drop.col,row=drop.row}
+          prefs.set("desktop_positions",positions)
+        end
       end
       if self.windowDrag then
         local drag=self.windowDrag
@@ -1124,7 +1209,7 @@ function M.install(OS,shellui,prefs)
         self:persistWindowGeometry(win)
         self:saveWorkspaceSession()
       end
-      self.iconDrag,self.iconMoved,self.windowDrag=nil,nil,nil
+      self.iconDrag,self.iconMoved,self.windowDrag,self.iconDrop=nil,nil,nil,nil
       self:render();return true
     elseif event=='mouse_scroll' and not self.startMenuOpen and not self.quickPanelOpen then
       if self.app~='home' then
@@ -1276,7 +1361,7 @@ function M.install(OS,shellui,prefs)
     if focused and key==keys.tab then
       self.focusIndex=(self.focusIndex or 0)%math.max(1,#self.buttons)+1
       self.keyboardFocusId=self.buttons[self.focusIndex] and self.buttons[self.focusIndex].id
-      self:setNotice('Selection: '..tostring(self.keyboardFocusId)..' / Entree')
+      -- Focus is painted on the actual control by render(), not as a technical toast.
       return
     elseif focused and key==keys.enter and self.keyboardFocusId then
       for _,b in ipairs(self.buttons) do if b.id==self.keyboardFocusId then b.callback();break end end
@@ -1289,7 +1374,7 @@ function M.install(OS,shellui,prefs)
     elseif self.app=='home' and (key==keys.tab or key==keys.enter or key==keys.m) then
       local apps=self:desktopApps()
       if key==keys.tab then
-        self.selectedIcon=(self.selectedIcon or 1)%#apps+1
+        self.selectedIcon=(self.selectedIcon or 0)%math.max(1,#apps)+1
         self.desktopPage=math.floor((self.selectedIcon-1)/(self.iconCapacity or 1))+1
       elseif key==keys.m then
         self.movingIcon=not self.movingIcon
